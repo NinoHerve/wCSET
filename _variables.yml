@@ -1,0 +1,40 @@
+freesurfer:
+  version: 7.4.1
+
+mne:
+  version: 1.11.0
+
+bem:
+  unit: S/m
+  brain: 0.3
+  skull: 0.006
+  skin: 0.3
+
+eeg:
+  template:
+    name: BioSemi
+    unit: V
+    m: 204
+
+simulation:
+  headmodel:
+    axonal_velocity:
+    - unit: mm/s
+    - value: 1e5
+    synaptic_delay:
+    - unit: 0.01
+    - value: s
+  noise:
+    - eeg:
+      - unit: µV
+      - scale: 1
+    - dipole:
+      - unit: nA
+      - scale: 1
+
+  simulator:
+    - snr:
+      - value: 15
+      - unit: dB
+
+test: hupy

@@ -1,0 +1,56 @@
+CMP_DIR: /media/nino/DATA/SIMF/derivatives/cmp-v3.0.3
+CONN: /media/nino/DATA/atlas/probconnatlas/wm.connatlas.scale4.h5
+DS_DIR: /media/nino/DATA/SIMF
+FS_DIR: /media/nino/DATA/SIMF/derivatives/freesurfer
+FS_HOME: /home/nino/Softwares/freesurfer
+LAUSL: /media/nino/DATA/atlas/laus2018/lh.atlas-laus2018_desc-scale4.annot
+LAUSR: /media/nino/DATA/atlas/laus2018/rh.atlas-laus2018_desc-scale4.annot
+MM_DIR: /media/nino/DATA/SIMF/derivatives/mindmap
+MNI: /media/nino/DATA/templates/mni_icbm152_nlin_asym_09c_nifti/mni_icbm152_nlin_asym_09c/mni_icbm152_t1_tal_nlin_asym_09c.nii
+MONTAGE: /media/nino/DATA/SPIKE/derivatives/cartool-v3.80/sub-pat44/ses-preop/eeg/
+NAME: simf
+SUBS:
+- 10
+TASKS:
+- spike
+RUNS:
+- '000'
+- '001'
+- '002'
+- '003'
+- '004'
+- '005'
+- '006'
+- '007'
+- '008'
+- '009'
+- '010'
+SAMP:
+- sample001
+- sample002
+- sample003
+- sample004
+- sample005
+- sample006
+- sample007
+- sample008
+- sample009
+- sample010
+- sample011
+- sample012
+- sample013
+- sample014
+- sample015
+- sample016
+- sample017
+- sample018
+- sample019
+- sample020
+- sample021
+- sample022
+- sample023
+- sample024
+- sample025
+SIM_DIR: /media/nino/DATA/SIMF/derivatives/simulations/
+THAL: /media/nino/DATA/atlas/Thalamic_Nuclei/Thalamus_Nuclei-HCP-4DSPAMs.nii.gz
+THAL_CLUT: /media/nino/DATA/atlas/Thalamic_Nuclei/Thalamic_Nuclei-ColorLUT.txt
