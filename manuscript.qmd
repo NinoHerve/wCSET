@@ -17,6 +17,7 @@ format:
 
 execute:
   echo: false
+  freeze: true
 
 abstract: >
   In recent years, numerous source imaging methods have been developed, primarily aiming to improve the estimation of source extent in brain activity. However, most of these approaches assume that brain activity arises from focal sources, overlooking the complex network structure of the brain and the intricate pathways along which neural information is transmitted. Connectome Spectrum Electromagnetic Tomography (CSET) is one of the first methods to incorporate neural connectivity into source imaging. In this work, we present an enhanced version of CSET, termed weighted CSET (wCSET), and introduce a novel evaluation paradigm that assesses source imaging not merely as a localization tool, but as a method for reconstructing full activity patterns across the brain.
@@ -63,6 +64,201 @@ You should now be ready to run anything that comes ahead.
 
 This project is divided into two studies. In the first study we evaluate connectivity-informed source imaging methods using simulations. This helps us comprehend the advantages and disadvantages of the mehod versus state of the art methods. In the second study we evaluate these methods using simultaneous EEG/iEEG recordings. This helps us see whether these method can actually help in practice with real noise condition and misinformation situations.
 
+
+```{python filename="freesurfer_intra.py"}
+%%bash
+bash scripts/fsrecon.sh wcset_intra.config.yml
+```
+
+
+```{python filename="source_space_intra.py"}
+import logging
+import traceback
+import mne
+import mindmap as mm
+from scripts.dataset_readers import IntraReader
+
+# --------------
+# configuration
+# --------------
+logging.basicConfig(level=logging.INFO, force=True)
+reader = IntraReader("wcset_intra.config.yml")
+
+# -------------------------
+# Iterate through subjects
+# -------------------------
+
+for sub in reader.config["SUBS"]:
+  
+  # Define paths
+  fsrc = mm.io.get_bidspath(
+    root     = reader.config["MM_DIR"],
+    subject  = sub,
+    datatype = "src",
+  )
+  output_dir = fsrc.parent
+  sub_id     = f"sub-{sub}"
+
+  # 1. Skip if already processed
+  if fsrc.exists():
+    logging.info(f"SKIPPING {sub_id}: Source space already exists.")
+    continue
+
+  try:
+    # 2. Load data
+    data = reader(str(sub), "vertex-ctx")
+
+    # 3. Setup source space
+    source_space = mne.setup_source_space(
+      subject      = sub_id,
+      spacing      = "oct6",
+      surface      = "white",
+      add_dist     = True,
+      subjects_dir = reader.config["FS_DIR"],
+      n_jobs       = 10,
+      verbose      = "warning"
+    )
+
+    source_space = mm.head.filter_dipoles_by_id_list(source_space, data["vertex-ctx"])
+
+    # 4. Save output
+    output_dir.mkdir(parents=True, exist_ok=True)
+    source_space.save(fsrc, verbose="warning")
+
+    logging.info(f"SUCCESS: Created source space for sub-{sub}.")
+
+  except Exception as e:
+    logging.error(f"FAILED: sub-{sub}")
+    logging.error(traceback.format_exc())   # captures full error for debug
+```
+
+```{python filename="bem_intra.py"}
+import logging
+import traceback
+import mne
+import mindmap as mm
+from scripts.dataset_readers import IntraReader
+
+# --------------
+# configuration
+# --------------
+logging.basicConfig(level=logging.INFO, force=True)
+config = mm.io.read_config("wcset_intra.config.yml")
+
+# -------------------------
+# Iterate through subjects
+# -------------------------
+
+for sub in config["SUBS"]:
+  
+  # Define paths
+  fbem = mm.io.get_bidspath(
+    root        = config["MM_DIR"],
+    subject     = sub,
+    datatype    = "bem",
+  )
+  output_dir = fbem.parent
+  sub_id     = f"sub-{sub}"
+
+  # 1. Skip if already processed
+  if fbem.exists():
+    logging.info(f"SKIPPING {sub_id}: BEM already exists.")
+    continue
+
+  try:
+    # 2. Extract surfaces
+    mne.bem.make_watershed_bem(
+      subject      = sub_id,
+      subjects_dir = config["FS_DIR"],
+      volume       = "T1",
+      overwrite    = True,
+      verbose      = "warning",
+    )
+
+    # 3. Correct surfaces
+    mm.head.correct_skull(
+      subject     = sub_id,
+      offset      = 2,          # minimum skull thickness
+      fs_dir      = config["FS_DIR"],
+      save_arrows = True,
+    )
+
+    # 4. Mount BEM
+    model = mne.make_bem_model(
+      subject      = sub_id,
+      subjects_dir = config["FS_DIR"],
+      conductivity = [0.3, 0.006, 0.3],       # electrical conductivities (brain, skull, skin)
+      ico          = 4,
+      verbose      = "warning",
+    )
+    bem = mne.make_bem_solution(model, verbose="warning")
+
+    # 5. Save output
+    output_dir.mkdir(parents=True, exist_ok=True)
+    mne.write_bem_solution(fbem, bem, verbose="warning")
+
+    logging.info(f"SUCCESS: Created BEM for sub-{sub}.")
+
+  except Exception as e:
+    logging.error(f"FAILED: sub-{sub}")
+    logging.error(traceback.format_exc())   # captures full error for debug
+```
+
+
+```{python clean_eeg_intra.py}
+import logging
+import traceback
+import mne
+import mindmap as mm
+from script.dataset_readers import IntraReader
+
+# --------------
+# configuration
+# --------------
+logging.basicConfig(level=logging.INFO, force=True)
+config = mm.io.read_config("wcset_intra.config.yml")
+
+# -------------------------
+# Iterate through subjects
+# -------------------------
+
+for sub in config["SUBS"]:
+  
+  # Define paths
+  feeg = mm.io.get_bidspath(
+    root        = config["MM_DIR"],
+    subject     = sub,
+    datatype    = "ave",
+    task        = "spk",
+  )
+  output_dir = feeg.parent
+  sub_id     = f"sub-{sub}"
+
+  # 1. Skip if already processed
+  if feeg.exists():
+    logging.info(f"SKIPPING {sub_id}: BEM already exists.")
+    continue
+
+  try:
+    # 1. Average referencing
+
+    # 2. Average epochs
+
+    # 3. Save outputs
+    eeg_output_dir.mkdir(parents=True, exist_ok=True)
+    evoked.save(feeg)
+
+    cov_output_dir.mkdir(parents=True, exist_ok=True)
+    noise_cov.save(fcov)
+
+    logging.info(f"SUCCESS: Averaged EEG and computed noise covariance for sub-{sub}.")
+
+  except Exception as e:
+    logging.error(f"FAILED: sub-{sub}")
+    logging.error(traceback.format_exc())   # captures full error for debug
+
+```
+
 ### Simulations - dataset
 
 For simulations we use a sample subject (sub-10) from the Vepcon dataset (REFERENCE THIS PROPERLY). The sample contains a T1 weighted MRI (MORE INFO) and the tractograms processed from diffusion MRI (MORE INFO).
@@ -77,7 +273,7 @@ from scripts.dataset_readers import SimfReader
 # -------------
 
 subject = 10
-reader  = SimfReader(wcset_simf.config.yml)
+reader  = SimfReader("wcset_simf.config.yml")
 data    = reader(subject, "src", "tkras2ras", "parc")
 
 # ------------
@@ -134,10 +330,6 @@ To solve the forward problem of source reconstruction we implement a Boundary El
 
 ## Head model
 
-```{python}
-%%bash
-bash scripts/fsrecon.sh wcset_intra.config.yml
-```
 
 ### Boundary Element Method
 

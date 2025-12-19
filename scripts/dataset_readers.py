@@ -363,8 +363,8 @@ class IntraReader(DatasetReader):
             # raw EEG
             if key.lower() == "eeg":
                 # read epochs
-                if task is None:
-                    files   = glob.glob(str(spk_dir/f"sub-{subject}"/"eeg"/f"sub-{subject}_task-spk*_desc-cleaned_eeg.vhdr"))
+                if run is None:
+                    files   = glob.glob(str(spk_dir/f"sub-{subject}"/"eeg"/f"sub-{subject}_task-spk_*_eeg.vhdr"))
                     montage = spk_dir/f"sub-{subject}"/"eeg"/f"sub-{subject}_electrodes.tsv"
 
                     # extract data
@@ -380,23 +380,24 @@ class IntraReader(DatasetReader):
                     montage = mne.channels.read_custom_montage(montage)
 
                     # store in Epoch object
-                    epochs = mne.EpochsArray(dat, info)
-                    epochs = epochs.set_montage(montage)
+                    epochs = mne.EpochsArray(dat, info, verbose="warning")
+                    epochs = epochs.set_montage(montage, verbose="warning")
 
                     data[key] = epochs
 
                 # read single spike
                 else:
                     file = get_bidspath(
-                        root        = ds_dir,
-                        datatype    = "anat",
+                        root        = spk_dir,
+                        datatype    = "eeg",
                         subject     = subject,
                         task        = task,
-                        description = "cleaned",
+                        run         = run,
                     )
-                    montage = file.fpath.parent/f"sub-{subject}_electrodes.tsv"
+                    #montage = file.fpath.parent/f"sub-{subject}_electrodes.tsv"
+                    montage = file.parent/f"sub-{subject}_electrodes.tsv"
 
-                    raw     = mne.io.read_raw_brainvision(file.fpath)
+                    raw     = mne.io.read_raw_brainvision(file)
                     montage = mne.channels.read_custom_montage(montage)
                     raw     = raw.set_montage(montage)
 

@@ -1,7 +1,8 @@
 # data directories
-DS_DIR: /media/nino/DATA/INTRA                           # Dataset directory (raw)
-FS_DIR: /media/nino/DATA/INTRA/derivatives/freesurfer    # freesurfer directory
-MM_DIR: /media/nino/DATA/INTRA/derivatives/mindmap   # mindmap directory
+DS_DIR: /media/nino/DATA/INTRA                            # Dataset directory (raw)
+FS_DIR: /media/nino/DATA/INTRA/derivatives/freesurfer     # freesurfer directory
+MM_DIR: /media/nino/DATA/INTRA/derivatives/mindmap        # mindmap directory
+SPK_DIR: /media/nino/DATA/INTRA/derivatives/spike_trials  # EEG spike directory
 
 # templates
 MNI: /media/nino/DATA/templates/mni_icbm152_nlin_asym_09c_nifti/mni_icbm152_nlin_asym_09c/mni_icbm152_t1_tal_nlin_asym_09c.nii    # MNI template
@@ -15,3 +16,10 @@ FS_HOME: /home/nino/Softwares/freesurfer  # Freesurfer home directory
 
 # dataset infos
 NAME: intra
+SUBS:
+- 12
+- 34
+- 48
+- 50
+TASKS:
+- spk

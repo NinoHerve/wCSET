@@ -19,22 +19,20 @@ eeg:
 simulation:
   headmodel:
     axonal_velocity:
-    - unit: mm/s
-    - value: 1e5
+      unit: m/s
+      value: 120
     synaptic_delay:
-    - unit: 0.01
-    - value: s
+      unit: ms
+      value: 10
   noise:
-    - eeg:
-      - unit: µV
-      - scale: 1
-    - dipole:
-      - unit: nA
-      - scale: 1
+    eeg:
+      unit: µV
+      scale: 1
+    dipole:
+      unit: nA
+      scale: 1
 
   simulator:
-    - snr:
-      - value: 15
-      - unit: dB
-
-test: hupy
+    snr:
+      value: 15
+      unit: dB
