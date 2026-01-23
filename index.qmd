@@ -1,12 +1,498 @@
 ---
 title: wCSET
-authors:
-  - name: Norah Jones
-    affiliation: The University
+
+author:
+  - name: Nino Herve
+    affiliation: Université de Lausanne (UNIL)
     roles: writing
-    corresponding: true
+  - name: Nicolas Roehri
+    affiliation: Epilepsy
+  - name: Yasser Alemán-Goméz
+    affiliation: Connectomics
+  - name: Patric Hagmann
+
+number-sections: true
+format: 
+  html:
+    code-fold: true
+
+execute:
+  echo: false
+  freeze: true
+
+abstract:
+  In recent years, numerous source imaging methods have been developed, primarily aiming to improve the estimation of source extent in brain activity. However, most of these approaches assume that brain activity arises from focal sources, overlooking the complex network structure of the brain and the intricate pathways along which neural information is transmitted. Connectome Spectrum Electromagnetic Tomography (CSET) is one of the first methods to incorporate neural connectivity into source imaging. In this work, we present an enhanced version of CSET, termed weighted CSET (wCSET), and introduce a novel evaluation paradigm that assesses source imaging not merely as a localization tool, but as a method for reconstructing full activity patterns across the brain.
+
+keywords:
+  - Source Imaging
+  - Source Reconstruction
+  - Connectomics
+  - Brain Graph Signal Processing
+
 bibliography: references.bib
 ---
 
-## Section
-This is a simple placeholder for the manuscript's main document [@knuth84].
+# Introduction
+
+Neural processes in the brain generate electric and magnetic fields that can be measured extracranially using electroencephalography (EEG) and/or magnetoencephalography (MEG) (@jackson_neurophysiological_2014). These techniques provide access to brain activity with high temporal resolution, but because the measurements are acquired outside the head, their spatial resolution is limited. To address this limitation, mathematical methods collectively referred to as source reconstruction aim to estimate whole-brain neural activity from the recorded signals (@knosche_eegmeg_2022). In a distributed source model, the brain activity is divided into sufficiently small areas such that neural sources can be modeled as current dipoles (@nunez_multi-scale_2019). If constraining the activity only to cortical areas, this typically requires dividing the gray matter into 5,000 or more dipoles. Because the number of sources vastly exceeds the number of sensors (typically 64-128), reconstruncting brain activity constitutes an ill-posed inverse problem that requires the incorporation of prior information to steer the solution toward the most probable estimate (@knosche_eegmeg_2022). Most widely used source reconstruction methods aim to select the solution with the lowest overall energy and assume independence between sources, in accordance with Occam’s razor. This is the case for approaches such as sLORETA, eLORETA, ~dSPM~, and beamformers. Since the introduction of these methods, numerous approaches have sought to incorporate more informative priors in order to obtain more physiologically realistic solutions.
+
+For example, LORETA assumes that neighboring sources are correlated, motivated by the notion that neurons operate in spatially organized populations. PatchLORETA adopts a similar assumption but further posits that these populations form spatially contiguous patches, leading to abrupt transitions between active and inactive regions. Other methods assume that relationships between sources are dynamic and data-driven; in these approaches, source correlations are treated as unknown parameters and jointly estimated with source activity, at the cost of increased model complexity (e.g., BC-VARETA).
+
+Recent advances in connectomics—the study of whole-brain networks—have provided new perspectives on incorporating fast brain activity into regularization schemes. Progress in diffusion MRI has enabled the reconstruction of white-matter fiber tracts through tractography, which can be represented as a graph in which nodes correspond to brain regions and edges encode properties such as fiber length or density; this graph representation is referred to as the structural connectome.
+
+@rue-queralt_connectome_2021 showed that fast brain activity can be represented compactly in the basis of the connectome’s harmonics, obtained via the graph Fourier transform. This property can be exploited to constrain and improve EEG source reconstruction.
+# Materials and Methods
+
+::::: {.content-visible when="output"}
+
+::: {.callout-info}
+**Prerequisits**
+To run all the code in this manuscript, you will need the following softwares:
+- FreeSurfer
+- Simnibs
+- python
+- git
+- yq
+We recommend you build a virtual environment for the python framework using conda. It is important that you use python version 3.10 as it is the newest python version that let's all the used dependencies coexist. The virtual environment should then contain the mindmap package, specificaly designed to hold any functions related to this project.
+```bash
+cd ~/location/for/mindmap/package
+git clone githublink
+
+cd ~/location/for/manuscript/project
+git clone githublink
+
+conda create -n <env-name> python=3.11
+conda activate <env-name>
+pip install .
+```
+You should now be ready to run anything that comes ahead.
+:::
+
+:::::
+
+## Datasets
+
+This project is divided into two studies. In the first study we evaluate connectivity-informed source imaging methods using simulations. This helps us comprehend the advantages and disadvantages of the mehod versus state of the art methods. In the second study we evaluate these methods using simultaneous EEG/iEEG recordings. This helps us see whether these method can actually help in practice with real noise condition and misinformation situations.
+
+
+## Methods
+
+We did not apply any additional EEG cleaning protocol as they were already processed in the dataset. We simply averaged the EEGs and cropped (cropping values?) around the spike to reduce the amount of computations.
+
+```{python clean_eeg_intra.py}
+import logging
+import traceback
+import mne
+import mindmap as mm
+from scripts.dataset_readers import IntraReader
+
+# --------------
+# configuration
+# --------------
+logging.basicConfig(level=logging.INFO, force=True)
+reader = IntraReader("wcset_intra.config.yml")
+
+task     = "spk"      # Name of EEG task
+baseline = [0., 1.]   # Baseline for baseline correction (in [s])
+tmax     = 1.0        # Maximum timepoint (in [s]) for noise covariance.
+
+# -------------------------
+# Iterate through subjects
+# -------------------------
+
+for sub in reader.config["SUBS"]:
+  
+  # file paths
+  feeg = mm.io.get_bidspath(
+    root     = reader.config["MM_DIR"],
+    subject  = sub,
+    datatype = "ave",
+    task     = task,
+  )
+  fcov = mm.io.get_bidspath(
+    root     = reader.config["MM_DIR"],
+    subject  = sub,
+    datatype = "cov",
+    task     = task,
+  )
+
+  # Skip if already processed
+  if feeg.exists():
+    logging.info(f"SKIPPING sub-{sub}: AVE already exists.")
+    continue
+
+  try:
+    # 0. Load data
+    data = reader(str(sub), "eeg", task=task)
+
+    # 1. Average referencing
+    data["eeg"] = data["eeg"].set_eeg_reference(ref_channels="average", projection=True)
+
+    # 2. Baseline correction
+    data["eeg"] = data["eeg"].apply_baseline(baseline=baseline)
+
+    # 3. Compute noise covariance
+    noise_cov = mne.compute_covariance(data["eeg"], tmax=tmax, method="empirical")
+
+    # 4. Average epochs
+    evoked = data["eeg"].average()
+
+    # 5. Save outputs
+    feeg.parent.mkdir(parents=True, exist_ok=True)
+    fcov.parent.mkdir(parents=True, exist_ok=True)
+    
+    evoked.save(feeg)
+    noise_cov.save(fcov, overwrite=True)
+
+    logging.info(f"SUCCESS: Averaged EEG and computed noise covariance for sub-{sub}.")
+
+  except Exception as e:
+    logging.error(f"FAILED: sub-{sub}")
+    logging.error(traceback.format_exc())   # captures full error for debug
+
+```
+
+
+For every subject, we use FreeSurfer's recon-all to reconstruct the inner cortical surface on which we uniformly distribute ~6000 dipoles using MNE-Python. Still using FreeSurfer, the inner skull, outer skull and outer skin surfaces are extracted and assembled together into a Boundary Element Model. The conductivities applied correspond to the default MNE-Python conductivities of {{ var bem.brain}} {{ var bem.unit }} {{ var bem.skull }}, {{ var bem.unit }}, {{ var bem.skin }} {{ var bem.unit }} for the brain, skull and skin respectively.
+
+```{python filename="freesurfer_intra.py"}
+%%bash
+bash scripts/fsrecon.sh wcset_intra.config.yml
+```
+
+
+```{python filename="source_space_intra.py"}
+import logging
+import traceback
+import mne
+import mindmap as mm
+from scripts.dataset_readers import IntraReader
+
+# --------------
+# configuration
+# --------------
+logging.basicConfig(level=logging.INFO, force=True)
+reader = IntraReader("wcset_intra.config.yml")
+
+# -------------------------
+# Iterate through subjects
+# -------------------------
+
+for sub in reader.config["SUBS"]:
+  
+  # Define paths
+  fsrc = mm.io.get_bidspath(
+    root     = reader.config["MM_DIR"],
+    subject  = sub,
+    datatype = "src",
+  )
+  output_dir = fsrc.parent
+  sub_id     = f"sub-{sub}"
+
+  # 1. Skip if already processed
+  if fsrc.exists():
+    logging.info(f"SKIPPING {sub_id}: Source space already exists.")
+    continue
+
+  try:
+    # 2. Load data
+    data = reader(str(sub), "vertex-ctx")
+
+    # 3. Setup source space
+    source_space = mne.setup_source_space(
+      subject      = sub_id,
+      spacing      = "oct6",
+      surface      = "white",
+      add_dist     = True,
+      subjects_dir = reader.config["FS_DIR"],
+      n_jobs       = 10,
+      verbose      = "warning"
+    )
+
+    source_space = mm.head.filter_dipoles_by_id_list(source_space, data["vertex-ctx"])
+
+    # 4. Save output
+    output_dir.mkdir(parents=True, exist_ok=True)
+    source_space.save(fsrc, verbose="warning")
+
+    logging.info(f"SUCCESS: Created source space for sub-{sub}.")
+
+  except Exception as e:
+    logging.error(f"FAILED: sub-{sub}")
+    logging.error(traceback.format_exc())   # captures full error for debug
+```
+
+```{python filename="bem_intra.py"}
+import logging
+import traceback
+import mne
+import mindmap as mm
+from scripts.dataset_readers import IntraReader
+
+# --------------
+# configuration
+# --------------
+logging.basicConfig(level=logging.INFO, force=True)
+config = mm.io.read_config("wcset_intra.config.yml")
+
+# -------------------------
+# Iterate through subjects
+# -------------------------
+
+for sub in config["SUBS"]:
+  
+  # Define paths
+  fbem = mm.io.get_bidspath(
+    root        = config["MM_DIR"],
+    subject     = sub,
+    datatype    = "bem",
+  )
+  output_dir = fbem.parent
+  sub_id     = f"sub-{sub}"
+
+  # 1. Skip if already processed
+  if fbem.exists():
+    logging.info(f"SKIPPING {sub_id}: BEM already exists.")
+    continue
+
+  try:
+    # 2. Extract surfaces
+    mne.bem.make_watershed_bem(
+      subject      = sub_id,
+      subjects_dir = config["FS_DIR"],
+      volume       = "T1",
+      overwrite    = True,
+      verbose      = "warning",
+    )
+
+    # 3. Correct surfaces
+    mm.head.correct_skull(
+      subject     = sub_id,
+      offset      = 2,          # minimum skull thickness
+      fs_dir      = config["FS_DIR"],
+      save_arrows = True,
+    )
+
+    # 4. Mount BEM
+    model = mne.make_bem_model(
+      subject      = sub_id,
+      subjects_dir = config["FS_DIR"],
+      conductivity = [0.3, 0.006, 0.3],       # electrical conductivities (brain, skull, skin)
+      ico          = 4,
+      verbose      = "warning",
+    )
+    bem = mne.make_bem_solution(model, verbose="warning")
+
+    # 5. Save output
+    output_dir.mkdir(parents=True, exist_ok=True)
+    mne.write_bem_solution(fbem, bem, verbose="warning")
+
+    logging.info(f"SUCCESS: Created BEM for sub-{sub}.")
+
+  except Exception as e:
+    logging.error(f"FAILED: sub-{sub}")
+    logging.error(traceback.format_exc())   # captures full error for debug
+```
+
+
+After checking for the alignment between electrodes and skin surface, we compute the forward operator using MNE-Pyhton.
+
+```{python filename="fwd_intra.py"}
+import logging
+import traceback
+import mne
+import mindmap as mm
+from scripts.dataset_readers import IntraReader
+
+# --------------
+# configuration
+# --------------
+logging.basicConfig(level=logging.INFO, force=True)
+reader = IntraReader("wcset_intra.config.yml")
+
+# -------------------------
+# Iterate through subjects
+# -------------------------
+
+for sub in reader.config["SUBS"]:
+  
+  # Define paths
+  ffwd = mm.io.get_bidspath(
+    root     = reader.config["MM_DIR"],
+    subject  = sub,
+    datatype = "fwd",
+  )
+
+  # Skip if already processed
+  if ffwd.exists():
+    logging.info(f"SKIPPING {sub_id}: forward solution already exists.")
+    continue
+
+  try:
+    # 0. Load data
+    data = reader(sub, "bem", "src-raw", "ave", "trans", task="spk")
+
+    # 1. Make forward solution
+    forward = mne.make_forward_solution(
+      info    = data["ave"].info,
+      trans   = data["trans"],
+      src     = data["src-raw"],
+      bem     = data["bem"],
+      meg     = False,
+      eeg     = True,
+      verbose = "warning",
+    )
+
+    # 2. Save output
+    ffwd.parent.mkdir(parents=True, exist_ok=True)
+    mne.write_forward_solution(ffwd, forward, verbose="warning")
+
+    logging.info(f"SUCCESS: Computed forward solution for sub-{sub}.")
+
+  except Exception as e:
+    logging.error(f"FAILED: sub-{sub}")
+    logging.error(traceback.format_exc())   # captures full error for debug
+```
+
+### Simulations - dataset
+
+For simulations we use a sample subject (sub-10) from the Vepcon dataset (REFERENCE THIS PROPERLY). The sample contains a T1 weighted MRI (MORE INFO) and the tractograms processed from diffusion MRI (MORE INFO).
+
+```{python}
+#| echo: false
+import mindmap as mm
+from scripts.dataset_readers import SimfReader
+
+# -------------
+# Load data
+# -------------
+
+subject = 10
+reader  = SimfReader("wcset_simf.config.yml")
+data    = reader(subject, "src", "tkras2ras", "parc")
+
+# ------------
+# Parameters
+# ------------
+
+# brain regions
+dipoles = mm.get_dipole_positions(data["src"])*1000
+dipoles = mm.align_freesurfer2subject(dipoles, data["tkras2ras"])
+
+labels = data["parc"].label_points(dipoles)
+labels = np.unique(labels)
+
+# simulation parameters
+params = {
+    "duration":20,
+    "frequency":250,
+    "source":{
+        "waveform_width":0.1,
+        "onset":0.5,
+        "offset":None,
+        "repeat":1,
+    },
+    "headmodel":{
+        "synaptic_delay":0.01,
+        "axonal_speed":1e5,
+    },
+    "simulator":{
+        "w":0.5,
+        "snr":10,
+    }
+}
+
+# ----------------
+# Run simulations
+# ----------------
+
+root = reader.config["DS_DIR"]/"eeg"
+if root.exist():
+    raise FileExistsError("There is already an eeg directory in your dataset.")
+
+mm.simulation.make_sim_datset(reader, subject, labels, params, repetition=30)
+```
+
+
+### Simultaneous EEG iEEG
+
+To evaluate the wCSET *in vivo* we have a simulataneous EEG iEEG dataset containing 20 subjects with temporal lobe epilepsy. (DESCRIPTION OF DATASET).
+
+## Head model
+
+To solve the forward problem of source reconstruction we implement a Boundary Element Method (BEM) through the MNE-Python pipeline. This consists in first reconstructing the brain surfaces (pial and white) using the recon-all pipeline from FreeSurfer. We use MNE-Python to generate a cortical constrained source space consisting in uniformily distributing sources accross the white surface and remove the sources on the medial walls as they do not belong to gray matter which causes problems when adding white matter tracts later on. The BEM surfaces (inner-skull, outer-skull, outer-skin) are extracted from the MRI using MNE-python which essentialy implements a wrapper of the Watershed algorithm implemented in FreeSurfer. The layers are associated into a BEM model with MNE-Python's default electrical conductivitie: 0.3 for the csf, 0.06 for the skull and 0.06 for the skin. For the subject of the simulation, a biosemi-256 montage template where we removed the electrodes on the cheecks is coregistered then projected to the skin surface. For the simulataneous EEG iEEG data, the electrodes were loclized  
+
+
+## Head model
+
+
+### Boundary Element Method
+
+### Connectome
+
+## Inverse problem
+
+## EEG processing
+
+```{python}
+#| echo: false
+
+import glob
+import mne
+import mindmap as mm
+
+reader = mm.io.dataset_reader("wcset_simf.config.yml")
+
+# retrieve info
+subject = "10"
+path    = reader.config["DS_DIR"]/f"sub-{subject}"/"eeg"
+runs    = len(glob.glob(str(path/"*.eeg")))
+
+# skip if `ave` already exists
+output = reader.config["MM_DIR"]/f"sub-{subject}"/"ave"
+if output.exists():
+  raise FileExistsError("Averaged EEG already exists")
+
+# parameters for creating epochs
+tmin     = -0.45
+tmax     = 0.45
+baseline = [-0.44, -0.2]
+
+# Iterate throughs eegs
+for r in range(runs):
+    data = reader(subject, "eeg", run=r+1, task="rest", verbose=0)
+    
+    # average referencing
+    data["eeg"] = data["eeg"].set_eeg_reference(ref_channels="average", projection=True, verbose="warning")
+
+    # epochs
+    events = mne.events_from_annotations(data["eeg"], verbose="warning")[0]
+    epochs = mne.Epochs(data["eeg"], events, tmin=tmin, tmax=tmax, baseline=baseline, verbose="warning")
+
+    # evoked
+    evoked = epochs.average()
+
+    # save EEG
+    file = mm.io.get_bidspath(
+        root     = reader.config["MM_DIR"],
+        subject  = data["sub"],
+        datatype = "ave",
+        session  = None,
+        task     = data["task"],
+        run      = data["run"],
+    )
+    
+    mm.io.mkdir(file)
+    evoked.save(file)
+
+    if r+1%100 == 0:
+        print(f"Files processed: ({r+1}/{runs})")
+```
+
+## Data analysis
+
+# Results
+
+# Discussion
+
+# Conclusion
