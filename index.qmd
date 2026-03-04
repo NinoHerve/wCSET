@@ -70,6 +70,8 @@ You should now be ready to run anything that comes ahead.
 
 :::::
 
+
+
 ## Datasets
 
 This project is divided into two studies. In the first study we evaluate connectivity-informed source imaging methods using simulations. This helps us comprehend the advantages and disadvantages of the mehod versus state of the art methods. In the second study we evaluate these methods using simultaneous EEG/iEEG recordings. This helps us see whether these method can actually help in practice with real noise condition and misinformation situations.
@@ -79,284 +81,514 @@ This project is divided into two studies. In the first study we evaluate connect
 
 We did not apply any additional EEG cleaning protocol as they were already processed in the dataset. We simply averaged the EEGs and cropped (cropping values?) around the spike to reduce the amount of computations.
 
-```{python clean_eeg_intra.py}
-import logging
-import traceback
+#### EEG preprocessing (INTRA)
+
+```{python intra_eeg.py}
+# | output: false
+
+from pathlib import Path
 import mne
 import mindmap as mm
-from scripts.dataset_readers import IntraReader
+from scripts.utils import loop, check_files
+from scripts.data_manager import IntraManager
 
-# --------------
-# configuration
-# --------------
-logging.basicConfig(level=logging.INFO, force=True)
-reader = IntraReader("wcset_intra.config.yml")
+# Data manager
+dm = IntraManager("intra.config.yml")
 
-task     = "spk"      # Name of EEG task
-baseline = [0., 1.]   # Baseline for baseline correction (in [s])
-tmax     = 1.0        # Maximum timepoint (in [s]) for noise covariance.
+# Report folder
+report_dir = Path("./reports/")
+report_dir.mkdir(exist_ok=True)
 
-# -------------------------
-# Iterate through subjects
-# -------------------------
+@loop(subjects=dm.subjects)
+def process_eeg(sub, overwrite):
+  # Output files
+  fave = mm.io.build_mm_path(dm.roots["mm"], sub, "ave", task="spk")
+  fcov = mm.io.build_mm_path(dm.roots["mm"], sub, "cov", task="spk")
 
-for sub in reader.config["SUBS"]:
-  
-  # file paths
-  feeg = mm.io.get_bidspath(
-    root     = reader.config["MM_DIR"],
-    subject  = sub,
-    datatype = "ave",
-    task     = task,
-  )
-  fcov = mm.io.get_bidspath(
-    root     = reader.config["MM_DIR"],
-    subject  = sub,
-    datatype = "cov",
-    task     = task,
-  )
+  if check_files([fave, fcov]) and not overwrite:
+    return
 
-  # Skip if already processed
-  if feeg.exists():
-    logging.info(f"SKIPPING sub-{sub}: AVE already exists.")
-    continue
+  # load data
+  sr = dm.get_subject(sub)
+  eeg = sr.load("eeg", task="spk")
 
-  try:
-    # 0. Load data
-    data = reader(str(sub), "eeg", task=task)
+  # Process EEG
+  eeg = eeg.set_eeg_reference(ref_channels="average", projection=True) # Average referencing
+  eeg = eeg.apply_baseline(baseline=[0,1.5]) # Apply baseline correction
+  ncov = mne.compute_covariance(eeg, tmax=1.5, method="empirical") # Noise covariance
+  ave = eeg.average() # averaging
 
-    # 1. Average referencing
-    data["eeg"] = data["eeg"].set_eeg_reference(ref_channels="average", projection=True)
+  # save
+  ave.save(fave, overwrite=overwrite)
+  ncov.save(fcov, overwrite=overwrite)
 
-    # 2. Baseline correction
-    data["eeg"] = data["eeg"].apply_baseline(baseline=baseline)
+  # save reports for visualization
+  mm.viz.create_pipeline_report(ave, ncov, sub, report_dir/f"sub-{sub}_desc-intra_ave.html")
 
-    # 3. Compute noise covariance
-    noise_cov = mne.compute_covariance(data["eeg"], tmax=tmax, method="empirical")
 
-    # 4. Average epochs
-    evoked = data["eeg"].average()
-
-    # 5. Save outputs
-    feeg.parent.mkdir(parents=True, exist_ok=True)
-    fcov.parent.mkdir(parents=True, exist_ok=True)
-    
-    evoked.save(feeg)
-    noise_cov.save(fcov, overwrite=True)
-
-    logging.info(f"SUCCESS: Averaged EEG and computed noise covariance for sub-{sub}.")
-
-  except Exception as e:
-    logging.error(f"FAILED: sub-{sub}")
-    logging.error(traceback.format_exc())   # captures full error for debug
-
+process_eeg(overwrite=True)
 ```
 
+#### iEEG preprocessing (INTRA)
+
+```{python intra_ieeg.py}
+# | output: false
+
+import mne
+import mindmap as mm
+from scripts.utils import loop, check_files
+from scripts.data_manager import IntraManager
+
+# Data manager
+dm = IntraManager("intra.config.yml")
+
+# report folder
+# Report folder
+report_dir = Path("./reports/")
+report_dir.mkdir(exist_ok=True)
+
+@loop(subjects=dm.subjects)
+def process_ieeg(sub, overwrite):
+  # Output files
+  fiave = mm.io.build_mm_path(dm.roots["mm"], sub, "i-ave", task="spk")
+
+  if check_files([fiave]) and not overwrite:
+    return
+
+  # load data
+  sr = dm.get_subject(sub)
+  ieeg = sr.load("ieeg", task="spk")
+
+  # Process iEEG (Average referencing? Whitening?)
+  iave = ieeg.average() # averaging
+
+  # save
+  iave.save(fiave, overwrite=overwrite)
+
+process_ieeg(overwrite=False)
+```
+
+
+### Dipole setup (INTRA)
 
 For every subject, we use FreeSurfer's recon-all to reconstruct the inner cortical surface on which we uniformly distribute ~6000 dipoles using MNE-Python. Still using FreeSurfer, the inner skull, outer skull and outer skin surfaces are extracted and assembled together into a Boundary Element Model. The conductivities applied correspond to the default MNE-Python conductivities of {{ var bem.brain}} {{ var bem.unit }} {{ var bem.skull }}, {{ var bem.unit }}, {{ var bem.skin }} {{ var bem.unit }} for the brain, skull and skin respectively.
 
+#### FreeSurfer white surface extraction
+
 ```{python filename="freesurfer_intra.py"}
 %%bash
-bash scripts/fsrecon.sh wcset_intra.config.yml
+bash scripts/fsrecon.sh intra.config.yml
 ```
 
+#### Source placement
 
 ```{python filename="source_space_intra.py"}
-import logging
-import traceback
+# | output: false
+
 import mne
 import mindmap as mm
-from scripts.dataset_readers import IntraReader
+from scripts.utils import loop, check_files
+from scripts.data_manager import IntraManager
 
-# --------------
-# configuration
-# --------------
-logging.basicConfig(level=logging.INFO, force=True)
-reader = IntraReader("wcset_intra.config.yml")
+# Data manager
+dm = IntraManager("intra.config.yml")
 
-# -------------------------
-# Iterate through subjects
-# -------------------------
+@loop(subjects=dm.subjects)
+def setup_source_space(sub, overwrite):
+  # Output files
+  fsrc = mm.io.build_mm_path(dm.roots["mm"], sub, "src")
 
-for sub in reader.config["SUBS"]:
-  
-  # Define paths
-  fsrc = mm.io.get_bidspath(
-    root     = reader.config["MM_DIR"],
-    subject  = sub,
-    datatype = "src",
+  if check_files([fsrc]) and not overwrite:
+    return
+
+  # 1. Load data
+  sr = dm.get_subject(sub)
+  vtx_ctx = sr.load("vertex-ctx")
+
+  # 2. Setup source space
+  source_space = mne.setup_source_space(
+    subject      = f"sub-{sub}",
+    spacing      = "oct6",    # sampling mehtod (influences dipole spacing)
+    surface      = "white",
+    add_dist     = True,
+    subjects_dir = dm.roots["fs"],
+    n_jobs       = 10,
+    verbose      = "warning"
   )
-  output_dir = fsrc.parent
-  sub_id     = f"sub-{sub}"
 
-  # 1. Skip if already processed
-  if fsrc.exists():
-    logging.info(f"SKIPPING {sub_id}: Source space already exists.")
-    continue
+  # 3. Remove medial wall
+  source_space = mm.anatomy.source_space.filter_dipoles_by_id_list(source_space, vtx_ctx)
 
-  try:
-    # 2. Load data
-    data = reader(str(sub), "vertex-ctx")
+  # 4. Save output
+  source_space.save(fsrc, overwrite=overwrite, verbose="warning")
 
-    # 3. Setup source space
-    source_space = mne.setup_source_space(
-      subject      = sub_id,
-      spacing      = "oct6",
-      surface      = "white",
-      add_dist     = True,
-      subjects_dir = reader.config["FS_DIR"],
-      n_jobs       = 10,
-      verbose      = "warning"
-    )
-
-    source_space = mm.head.filter_dipoles_by_id_list(source_space, data["vertex-ctx"])
-
-    # 4. Save output
-    output_dir.mkdir(parents=True, exist_ok=True)
-    source_space.save(fsrc, verbose="warning")
-
-    logging.info(f"SUCCESS: Created source space for sub-{sub}.")
-
-  except Exception as e:
-    logging.error(f"FAILED: sub-{sub}")
-    logging.error(traceback.format_exc())   # captures full error for debug
+setup_source_space(overwrite=False)
 ```
+
+
+### Boundary Element Model
 
 ```{python filename="bem_intra.py"}
-import logging
-import traceback
+# | output: false
+
 import mne
 import mindmap as mm
-from scripts.dataset_readers import IntraReader
+from scripts.utils import loop, check_files
+from scripts.data_manager import IntraManager
 
-# --------------
-# configuration
-# --------------
-logging.basicConfig(level=logging.INFO, force=True)
-config = mm.io.read_config("wcset_intra.config.yml")
+# Data manager
+dm = IntraManager("intra.config.yml")
 
-# -------------------------
-# Iterate through subjects
-# -------------------------
+# make boundary element model
+@loop(subjects=dm.subjects)
+def make_bem(sub, overwrite):
 
-for sub in config["SUBS"]:
-  
-  # Define paths
-  fbem = mm.io.get_bidspath(
-    root        = config["MM_DIR"],
-    subject     = sub,
-    datatype    = "bem",
+  # Output files
+  fbem = mm.io.build_mm_path(dm.roots["mm"], sub, "bem")
+
+  if check_files([fbem]) and not overwrite:
+    return
+
+  # 1. Build BEM layers from T1w MRI
+  mne.bem.make_watershed_bem(
+    subject = f"sub-{sub}",
+    subjects_dir = dm.roots["fs"],
+    volume = "T1",
+    overwrite = True,
+    verbose = "warning",
   )
-  output_dir = fbem.parent
-  sub_id     = f"sub-{sub}"
 
-  # 1. Skip if already processed
-  if fbem.exists():
-    logging.info(f"SKIPPING {sub_id}: BEM already exists.")
-    continue
+  # 2. Correct layers
+  mm.anatomy.forward.correct_skull(
+    subject = f"sub-{sub}",
+    offset = 2,          # minimum skull thickness
+    fs_dir = dm.roots["fs"],
+    save_arrows = True,
+  )
 
-  try:
-    # 2. Extract surfaces
-    mne.bem.make_watershed_bem(
-      subject      = sub_id,
-      subjects_dir = config["FS_DIR"],
-      volume       = "T1",
-      overwrite    = True,
-      verbose      = "warning",
-    )
+  # 3. Mount BEM
+  model = mne.make_bem_model(
+    subject = f"sub-{sub}",
+    subjects_dir = dm.roots["fs"],
+    conductivity = [0.3, 0.006, 0.3],       # electrical conductivities (brain, skull, skin)
+    ico = 4,                                # mesh resolution for computation (icosahedron X)
+    verbose = "warning",
+  )
+  bem = mne.make_bem_solution(model, verbose="warning")
 
-    # 3. Correct surfaces
-    mm.head.correct_skull(
-      subject     = sub_id,
-      offset      = 2,          # minimum skull thickness
-      fs_dir      = config["FS_DIR"],
-      save_arrows = True,
-    )
+  # 4. Save output
+  mne.write_bem_solution(fbem, bem, overwrite=overwrite, verbose="warning")
 
-    # 4. Mount BEM
-    model = mne.make_bem_model(
-      subject      = sub_id,
-      subjects_dir = config["FS_DIR"],
-      conductivity = [0.3, 0.006, 0.3],       # electrical conductivities (brain, skull, skin)
-      ico          = 4,
-      verbose      = "warning",
-    )
-    bem = mne.make_bem_solution(model, verbose="warning")
-
-    # 5. Save output
-    output_dir.mkdir(parents=True, exist_ok=True)
-    mne.write_bem_solution(fbem, bem, verbose="warning")
-
-    logging.info(f"SUCCESS: Created BEM for sub-{sub}.")
-
-  except Exception as e:
-    logging.error(f"FAILED: sub-{sub}")
-    logging.error(traceback.format_exc())   # captures full error for debug
+make_bem(overwrite=False)
 ```
 
+
+#### Forward solution
 
 After checking for the alignment between electrodes and skin surface, we compute the forward operator using MNE-Pyhton.
 
 ```{python filename="fwd_intra.py"}
-import logging
-import traceback
+# | output: false
+
 import mne
 import mindmap as mm
-from scripts.dataset_readers import IntraReader
+from scripts.utils import loop, check_files
+from scripts.data_manager import IntraManager
 
-# --------------
-# configuration
-# --------------
-logging.basicConfig(level=logging.INFO, force=True)
-reader = IntraReader("wcset_intra.config.yml")
+# Data manager
+dm = IntraManager("intra.config.yml")
 
-# -------------------------
-# Iterate through subjects
-# -------------------------
+# compute forward solution
+@loop(subjects=dm.subjects)
+def compute_fwd(sub, overwrite):
 
-for sub in reader.config["SUBS"]:
-  
-  # Define paths
-  ffwd = mm.io.get_bidspath(
-    root     = reader.config["MM_DIR"],
-    subject  = sub,
-    datatype = "fwd",
+  # Output files
+  ffwd = mm.io.build_mm_path(dm.roots["mm"], sub, "fwd")
+
+  if check_files([ffwd]) and not overwrite:
+    return
+
+  # 1. Load data
+  sr = dm.get_subject(sub)
+  src = sr.load("src")
+  bem = sr.load("bem")
+  ave = sr.load("ave", task="spk")
+  trans = sr.load("eeg-trans")
+
+  # 2. compute forward solution
+  forward = mne.make_forward_solution(
+    info = ave.info,
+    trans = trans,
+    src = src,
+    bem = bem,
+    meg = False,
+    eeg = True,
+    verbose = "warning",
   )
 
-  # Skip if already processed
-  if ffwd.exists():
-    logging.info(f"SKIPPING {sub_id}: forward solution already exists.")
-    continue
+  # 3. Save output
+  mne.write_forward_solution(ffwd, forward, overwrite=overwrite, verbose="warning")
 
-  try:
-    # 0. Load data
-    data = reader(sub, "bem", "src-raw", "ave", "trans", task="spk")
+compute_fwd(overwrite=False)
+```
 
-    # 1. Make forward solution
-    forward = mne.make_forward_solution(
-      info    = data["ave"].info,
-      trans   = data["trans"],
-      src     = data["src-raw"],
-      bem     = data["bem"],
-      meg     = False,
-      eeg     = True,
-      verbose = "warning",
+
+### Connectivity matrix
+
+This dataset does not contain any diffusion acquisition that would normaly allow us to generate a connectome matrix. The best alternative we found via the simulations is to use only the geometry obtained via the brain mesh that which we obtain through FreeSurfer.
+
+```{python filename="conn_intra.py"}
+# | output: false
+
+import numpy as np
+import pygsp
+import mindmap as mm
+from scripts.utils import loop, check_files
+from scripts.data_manager import IntraManager
+
+# Data manager
+dm = IntraManager("intra.config.yml")
+
+# create geometries
+@loop(subjects=dm.subjects)
+def create_geometry(sub, overwrite):
+
+  # output files
+  fcon = mm.io.build_mm_path(dm.roots["mm"], sub, "con", desc="geom")
+  feig = mm.io.build_mm_path(dm.roots["mm"], sub, "eig", desc="geom")
+
+  if check_files([fcon, feig]) and not overwrite:
+    return
+
+  # 1. Load data
+  sr = dm.get_subject(sub)
+  fwd = sr.load("fwd")
+
+  # 1. Create geometry
+  geom = mm.analysis.connectivity.connectome_from_geometry(
+    source_space = fwd["src"], 
+    weights = True,
+    inter_hemi_dist = 5,
+  )
+
+  # 3. Compute spectral properties
+  graph = pygsp.graphs.Graph(geom, lap_type="normalized")
+  graph.compute_fourier_basis()
+
+  eigvec = graph.U    # eigenvectors
+  eigval = graph.e    # eigenvalues
+
+  # 4. Save outputs
+  np.save(fcon, geom)
+  mm.core.io.write_eig(feig, eigvec, eigval)
+
+create_geometry(overwrite=False)
+```
+
+### Source Reconstruction
+
+```{python filename="source_reconstruction_intra.py"}
+# | output: false
+
+import mne
+import mindmap as mm
+from scripts.utils import loop, check_files
+from scripts.data_manager import IntraManager
+
+# data manager
+dm = IntraManager("intra.config.yml")
+
+# apply source reconstruction
+@loop(subjects=dm.subjects)
+def source_recon(sub, overwrite=True):
+  # outputs files
+  fwcset = mm.io.build_mm_path(dm.roots["mm"], sub, "stc", task="spk", desc="wcset")
+  #fcset = mm.io.build_mm_path(dm.roots["mm"], sub, "stc", desc="cset")
+  fsloreta = mm.io.build_mm_path(dm.roots["mm"], sub, "stc", task="spk", desc="sloreta")
+  fdspm = mm.io.build_mm_path(dm.roots["mm"], sub, "stc", task="spk", desc="dspm")
+  fmne = mm.io.build_mm_path(dm.roots["mm"], sub, "stc", task="spk", desc="mne")
+
+  if check_files([fwcset, fsloreta, fdspm, fmne]) and not overwrite:
+    return
+
+  # 1. Load data
+  sr = dm.get_subject(sub)
+  fwd = sr.load("fwd")
+  ave = sr.load("ave", task="spk")
+  ncov = sr.load("cov", task="spk")
+  eig = sr.load("eig", desc="geom")
+
+  snr = 3.0               # default SNR for evoked potentials according to MNE-python
+  lambda2 = 1 / (snr**2)  # regularization parameter
+
+  # -------------------------------
+  # Run source reconstructions <3
+  # -------------------------------
+
+  # 2.1 wcset
+  inv = mm.analysis.inverse.wCSET(
+    forward = fwd,
+    noise_cov = ncov,
+    depth = 0.8,                # depth weighting
+    noise_norm = None,
+    eigenvectors = eig["vec"],
+    eigenvalues = eig["val"],
+    harm = 0.7,                 # harmonic weighting
+  )
+  wcset = inv.solve(ave, lambda2)
+
+  # 2.2 sLORETA
+  inv = mne.minimum_norm.make_inverse_operator(ave.info, fwd, ncov, depth=0.8, fixed=True)
+  sloreta = mne.minimum_norm.apply_inverse(ave, inv, lambda2, method="sLORETA")
+
+  # 2.3 dSPM
+  dspm = mne.minimum_norm.apply_inverse(ave, inv, lambda2, method="dSPM")
+
+  # 2.4 MNE
+  mne_ = mne.minimum_norm.apply_inverse(ave, inv, lambda2, method="MNE")
+
+  # 3. Save
+  wcset.save(fwcset, overwrite=overwrite, verbose="warning")
+  sloreta.save(fsloreta, overwrite=overwrite, verbose="warning")
+  dspm.save(fdspm, overwrite=overwrite, verbose="warning")
+  mne_.save(fmne, overwrite=overwrite, verbose="warning")
+
+source_recon(overwrite=True)
+```
+
+
+```{python filename=intra_vieeg.py}
+# | output: false
+
+import mne
+import mindmap as mm
+from scripts.utils import loop, check_files
+from scripts.data_manager import IntraManager
+
+# data manager
+dm = IntraManager("intra.config.yml")
+methods = ["wcset", "sloreta", "dspm", "mne"]
+
+@loop(subjects=dm.subjects)
+def compute_vieeg(sub, overwrite):
+  # output files
+  files = [mm.io.build_mm_path(dm.roots["mm"], sub, "v-ave", task="spk", desc=m)
+            for m in methods]
+
+  if check_files(files) and not overwrite:
+    return
+
+  # 1. Load data
+  sr = dm.get_subject(sub)
+  src = sr.load("src")
+  iave = sr.load("i-ave", task="spk")
+
+  # 2. Compute virtual electrodes
+  vieeg = []
+  for m in methods:
+    stc = sr.load("stc", task="spk", desc=m)
+
+    v = mm.analysis.eeg.compute_virtual_ieeg(
+      src, stc, iave,
+      conductivity = 0.25,  # conductivity adjusted for infinite homogeneous space
+      threshold = 0.003,   # minimal distance for exponential
     )
 
-    # 2. Save output
-    ffwd.parent.mkdir(parents=True, exist_ok=True)
-    mne.write_forward_solution(ffwd, forward, verbose="warning")
+    vieeg.append(v)
 
-    logging.info(f"SUCCESS: Computed forward solution for sub-{sub}.")
+  # 3. save
+  for i, m in enumerate(methods):
+    vieeg[i].save(files[i], overwrite=overwrite, verbose="warning")
 
-  except Exception as e:
-    logging.error(f"FAILED: sub-{sub}")
-    logging.error(traceback.format_exc())   # captures full error for debug
+compute_vieeg(overwrite=True)
+```
+
+```{python filename=intra_grova.py}
+#| output: false
+
+from pathlib import Path
+import pandas as pd
+import mindmap as mm
+from scripts.utils import loop, check_files
+from scripts.data_manager import IntraManager
+
+# data manager
+dm = IntraManager("intra.config.yml")
+methods = ["wcset", "sloreta", "dspm", "mne"]
+
+# results file
+fgrova = Path("./results/grova.csv")
+fgrova.parent.mkdir(exist_ok=True)
+
+@loop(subjects=dm.subjects)
+def compute_grova_metrics(sub):
+  # load data
+  sr = dm.get_subject(sub)
+  iave = sr.load("i-ave", task="spk")
+
+  # standardize
+  iave = mm.analysis.eeg.normalize_evoked(iave, "global", "zscore")
+
+  grova = []
+  for m in methods:
+    vave = sr.load("v-ave", task="spk", desc=m)
+
+    g = {"subject": sub, "method": m}
+    g = g | mm.analysis.eeg.compute_grova_metrics(
+      iave, vave,
+      true_extent = 0.7,      # spike area = channels reaching above 70% max power
+      spurious_dist = 0.01,   # spurious area = 10mm from spike area
+    )
+
+    grova.append(g)
+
+  # save
+  grova = pd.DataFrame(grova)
+  mm.core.write_csv_row(fgrova, grova, index_cols=["subject", "method"], write_new=True)
+
+compute_grova_metrics()
+```
+
+```{python filename=results_grova.py}
+import pandas as pd
+from itables import show
+
+df = pd.read_csv("./results/grova.csv")
+df = df.sort_values("subject")
+
+options = {
+  # grouping
+  "rowGroup": {"dataSrc":0},
+  "orderFixed": [[0, "asc"]],
+  "columnDefs": [{"visible": False, "targets": [0]}],
+
+  # scroll option
+  "scrollY": "400px",
+  "scrollCollapse": True,
+  "paging": False,
+}
+
+show(df.sort_values("subject"), **options)
+```
+
+
+```{python}
+import itables
+itables.init_notebook_mode()
+
+df = itables.sample_pandas_dfs.get_countries()
+
+itables.show(
+  df.sort_values("region"),
+  rowGroup={"dataSrc":1},
+  columnDefs=[{"targets": 1, "visible": False}]
+)
 ```
 
 ### Simulations - dataset
 
 For simulations we use a sample subject (sub-10) from the Vepcon dataset (REFERENCE THIS PROPERLY). The sample contains a T1 weighted MRI (MORE INFO) and the tractograms processed from diffusion MRI (MORE INFO).
+
 
 ```{python}
 #| echo: false
@@ -425,7 +657,6 @@ To solve the forward problem of source reconstruction we implement a Boundary El
 
 ## Head model
 
-
 ### Boundary Element Method
 
 ### Connectome
@@ -433,61 +664,6 @@ To solve the forward problem of source reconstruction we implement a Boundary El
 ## Inverse problem
 
 ## EEG processing
-
-```{python}
-#| echo: false
-
-import glob
-import mne
-import mindmap as mm
-
-reader = mm.io.dataset_reader("wcset_simf.config.yml")
-
-# retrieve info
-subject = "10"
-path    = reader.config["DS_DIR"]/f"sub-{subject}"/"eeg"
-runs    = len(glob.glob(str(path/"*.eeg")))
-
-# skip if `ave` already exists
-output = reader.config["MM_DIR"]/f"sub-{subject}"/"ave"
-if output.exists():
-  raise FileExistsError("Averaged EEG already exists")
-
-# parameters for creating epochs
-tmin     = -0.45
-tmax     = 0.45
-baseline = [-0.44, -0.2]
-
-# Iterate throughs eegs
-for r in range(runs):
-    data = reader(subject, "eeg", run=r+1, task="rest", verbose=0)
-    
-    # average referencing
-    data["eeg"] = data["eeg"].set_eeg_reference(ref_channels="average", projection=True, verbose="warning")
-
-    # epochs
-    events = mne.events_from_annotations(data["eeg"], verbose="warning")[0]
-    epochs = mne.Epochs(data["eeg"], events, tmin=tmin, tmax=tmax, baseline=baseline, verbose="warning")
-
-    # evoked
-    evoked = epochs.average()
-
-    # save EEG
-    file = mm.io.get_bidspath(
-        root     = reader.config["MM_DIR"],
-        subject  = data["sub"],
-        datatype = "ave",
-        session  = None,
-        task     = data["task"],
-        run      = data["run"],
-    )
-    
-    mm.io.mkdir(file)
-    evoked.save(file)
-
-    if r+1%100 == 0:
-        print(f"Files processed: ({r+1}/{runs})")
-```
 
 ## Data analysis
 

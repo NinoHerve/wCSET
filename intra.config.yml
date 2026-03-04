@@ -1,0 +1,25 @@
+# data directories
+DIR_RAW: /media/nino/DATA/INTRA                            # Dataset directory (raw)
+DIR_FS: /media/nino/DATA/INTRA/derivatives/freesurfer     # freesurfer directory
+DIR_MM: /media/nino/DATA/INTRA/derivatives/mindmap        # mindmap directory
+DIR_SPK: /media/nino/DATA/INTRA/derivatives/spike_trials  # EEG spike directory
+
+# templates
+STD_MNI: /media/nino/DATA/templates/mni_icbm152_nlin_asym_09c_nifti/mni_icbm152_nlin_asym_09c/mni_icbm152_t1_tal_nlin_asym_09c.nii    # MNI template
+STD_LAUSL: /media/nino/DATA/atlas/laus2018/lh.atlas-laus2018_desc-scale4.annot                                                        # Left cortical atlas
+STD_LAUSR: /media/nino/DATA/atlas/laus2018/rh.atlas-laus2018_desc-scale4.annot                                                        # Right cortical atlas
+STD_THAL: /media/nino/DATA/atlas/Thalamic_Nuclei/Thalamus_Nuclei-HCP-4DSPAMs.nii.gz                                                   # Thalamic nuclei atlas
+STD_THALclut: /media/nino/DATA/atlas/Thalamic_Nuclei/Thalamic_Nuclei-ColorLUT.txt                                                    # Thalamic nuclei color lut
+
+# others
+FS_HOME: /home/nino/Softwares/freesurfer  # Freesurfer home directory
+
+# dataset infos
+NAME: intra
+SUBS:
+- "12"
+- "34"
+- "48"
+- "50"
+TASKS:
+- spk
