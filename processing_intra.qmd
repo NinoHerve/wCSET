@@ -1,0 +1,495 @@
+---
+title: Preprocessing of INTRA
+
+author:
+  - name: Nino Herve
+    affiliation: Université de Lausanne (UNIL)
+    roles: writing
+  - name: Nicolas Roehri
+    affiliation: Epilepsy
+  - name: Yasser Alemán-Goméz
+    affiliation: Connectomics
+  - name: Patric Hagmann
+
+number-sections: true
+format: 
+  html:
+    code-fold: true
+
+execute:
+  echo: false
+  freeze: true
+
+abstract:
+  This file let's you run all the preprocessing steps of the simulataneous intracranial EEG and scalp EEG to achieve the results presented index.qmd.
+
+keywords:
+  - Source Imaging
+  - Source Reconstruction
+  - Connectomics
+  - Brain Graph Signal Processing
+
+bibliography: references.bib
+---
+
+# 1. Environment & Data Acquisition
+
+## Data Procurement
+
+## Computational Environment
+
+To run all the code in this manuscript, you will need the following softwares:
+- FreeSurfer
+- Simnibs
+- python
+- git
+- yq
+We recommend you build a virtual environment for the python framework using conda. It is important that you use python version 3.10 as it is the newest python version that let's all the used dependencies coexist. The virtual environment should then contain the mindmap package, specificaly designed to hold any functions related to this project.
+```bash
+cd ~/location/for/mindmap/package
+git clone githublink
+
+cd ~/location/for/manuscript/project
+git clone githublink
+
+conda create -n <env-name> python=3.11
+conda activate <env-name>
+pip install .
+```
+You should now be ready to run anything that comes ahead.
+
+# 2. Signal Processing (Electrophysiology)
+
+## Scalp EEG Conditioning
+
+```{python filename="TODELETE.py"}
+from scripts.data_manager import IntraManager
+
+dm = IntraManager("intra.config.yml")
+```
+
+```{python filename="eeg_preprocessing_intra.py"}
+# | output: false
+
+from pathlib import Path
+from scripts.utils import loop, check_files
+from scripts.data_manager import IntraManager
+
+# data manager
+dm = IntraManager("intra.config.yml")
+
+# report folder
+report_dir = Path("./reports/")
+report_dir.mkdir(exist_ok=True)
+
+@loop(subjects=dm.subjects)
+def process_eeg(sub, overwrite):
+    # ouput files
+    fave = dm.build_path(sub, "ave", task="spk")
+    fcov = dm.build_path(sub, "cov", task="spk")
+
+    if check_files([fave, fcov]) and not overwrite:
+        return
+
+    # 0. Load data
+    eeg = dm.load(sub, "eeg", task="spk")
+
+    # 1. Process EEG
+    eeg = eeg.set_eeg_reference(ref_channels="average", projection=True) # Average referencing
+    eeg = eeg.apply_baseline(baseline=[0,1.5])                           # Apply baseline correction
+    ncov = mne.compute_covariance(eeg, tmax=1.5, method="empirical")     # Noise covariance
+    ave = eeg.average()                                                  # averaging
+
+    # 2. save
+    ave.save(fave, overwrite=overwrite)
+    ncov.save(fcov, overwrite=overwrite)
+
+    # 3. Make a report
+    mm.viz.create_pipeline_report(ave, ncov, sub, report_dir/f"sub-{sub}_desc-intra_ave.html")
+
+process_eeg(overwrite=False)
+```
+
+
+## iEEG Ground Truth Preparation
+
+```{python filename="ieeg_preprocessing_intra.py"}
+# | output: false
+
+from pathlib import Path
+from scripts.utils import loop, check_files
+from scripts.data_manager import IntraManager
+
+# data manager
+dm = IntraManager("intra.config.yml")
+
+# report folder
+report_dir = Path("./reports/")
+report_dir.mkdir(exist_ok=True)
+
+@loop(subjects=dm.subjects)
+def process_ieeg(sub, overwrite):
+    # Output files
+    fiave = dm.build_path(sub, "i-ave", task="spk")
+
+    if check_files([fiave]) and not overwrite:
+        return
+
+    # 0. Load data
+    ieeg = dm.load(sub, "ieeg", task="spk")
+
+    # 1. Process iEEG
+    iave = ieeg.average() # averaging
+
+    # 2. save
+    iave.save(fiave, overwrite=overwrite)
+
+process_ieeg(overwrite=False)
+```
+
+
+# 3. Anatomical & Forward Modeling
+
+## Cortical Surface Modeling (FreeSurfer)
+
+```{python filename="brain_surface_reconstruction.py"}
+%%bash
+bash scripts/fsrecon.sh intra.config.yml
+```
+
+
+```{python filename="setup_source_space_intra.py"}
+# | output: false
+
+import mne
+import mindmap as mm
+from scripts.utils import loop, check_files
+from scripts.data_manager import IntraManager
+
+# data manager
+dm = IntraManager("intra.config.yml")
+
+@loop(subjects=dm.subjects)
+def setup_source_space(sub, overwrite):
+    # output files
+    fsrc = dm.build_path(sub, "src")
+
+    if check_files([fsrc]) and not overwrite:
+        return
+
+    # 0. Load data
+    vtx_ctx = dm.load(sub, "vertex-ctx")   # vertices in cortex (omits medial wall)
+
+    # 1. Setup source space
+    source_space = mne.setup_source_space(
+        subject = f"sub-{sub}",
+        spacing = "oct6",    # sampling mehtod (influences dipole spacing)
+        surface = "white",
+        add_dist = True,
+        subjects_dir = dm.roots["fs"],
+        n_jobs = 10,
+        verbose = "warning"
+    )
+
+    # 2. Remove medial wall
+    source_space = mm.anatomy.source_space.filter_dipoles_by_id_list(source_space, vtx_ctx)
+
+    # 3. Save
+    source_space.save(fsrc, overwrite=overwrite, verbose="warning")
+
+setup_source_space(overwrite=False)
+```
+
+
+## Tissue Segmentation & Mesh Generation (SimNIBS)
+
+```{python filename="head_segmentation_intra.py"}
+# | output: false
+
+import mindmap as mm
+from scripts.utils import loop, check_files
+from scripts.data_manager import IntraManager
+
+# data manager
+dm = IntraManager("intra.config.yml")
+
+# segment head
+@loop(subjects=dm.subjects)
+def segment_head(sub, overwrite):
+    # output file
+    fseg = dm.build_path(sub, "seg")
+    fbem = dm.build_path(sub, "bem")
+
+    # ---------------------
+    # Tissue segmentation
+    # ---------------------
+
+    # input files
+    ft1 = dm.build_path(sub, "T1w")
+
+    # 1. run charm pipeline
+    mm.anatomy.segmentation.run_charm(
+        sub,
+        ft1,
+        charm_dir = dm.roots["charm"],
+        overwrite = overwrite,
+    )
+
+    # ----------------
+    # Mesh generation
+    # ----------------
+
+    # 0. Load data
+    seg = dm.load(sub, "seg")             # charm segmentation
+    ras2tkras = dm.load(sub, "ras2tkras") # ras to tkras transform
+    vol_info = dm.load(sub, "vol-info")   # volume information (to save surfaces in FreeSurfer format)
+    bem_labels = dm.get_bem_labels()      # charm labels needed for each BEM layer
+
+    # 1. Build BEM layers from CHARM segmentation
+    layers = mm.anatomy.forward.build_bem_layers(seg, bem_labels, n_smooth=20)
+    layers = mm.anatomy.forward.bem_transform(layers, ras2tkras)
+
+    # 2. save layers in freesurfer/{subject}/bem
+    folder = dm.roots["fs"]/f"sub-{sub}"/"bem"
+    folder.mkdir(exist_ok=True)
+    mm.anatomy.forward.save_bem_as_freesurfer(folder, layers, vol_info, overwrite=True)
+
+segment_head(overwrite=False)
+```
+
+
+## Lead Field Computation
+
+```{python filename="forward_problem_intra.py"}
+# | output: false
+
+import mne
+import mindmap as mm
+from scripts.utils import loop, check_files
+from scripts.data_manager import IntraManager
+
+# data manager
+dm = IntraManager("intra.config.yml")
+
+# solver forward problem
+@loop(subjects=dm.subjects)
+def compute_fwd(sub, overwrite):
+    # output files
+    ffwd = dm.build_path(sub, "fwd")
+
+    if check_files([ffwd]) and not overwrite:
+        return
+
+    # 0. Load data
+    ave = dm.load(sub, "ave", task="spk")    # EEG for channel positions
+    trans = dm.load(sub, "eeg-trans")        # EEG to ras transformation
+    src = dm.load(sub, "src")                # Source space
+
+    # 1. assemble BEM
+    model = mne.make_bem_model(
+        subject = f"sub-{sub}",
+        subjects_dir = dm.roots["fs"],
+        conductivity = [0.3, 0.006, 0.3],
+        ico = None,     # ico=None is forced because 'tris' mismatch with MNE
+        verbose = "warning",
+    )
+
+    bem = mne.make_bem_solution(model)
+
+    # 2. Compute forward solution
+    forward = mne.make_forward_solution(
+        info = ave.info,
+        trans = trans,
+        src = src,
+        bem = bem,
+        meg = False,
+        eeg = True,
+        verbose = "warning",
+    )
+
+    # 3. save solution
+    mne.write_forward_solution(ffwd, forward, overwrite=overwrite, verbose="warning")
+
+compute_fwd(overwrite=False)
+```
+
+
+
+# Connectomics
+
+## Build geometry connectivity graph and compute its eigensystem
+
+```{python filename="build_connectivity_intra.py"}
+# | output: false
+
+import numpy as np
+import pygsp
+import mindmap as mm
+from scripts.utils import loop, check_files
+from scripts.data_manager import IntraManager
+
+# data manager
+dm = IntraManager("intra.config.yml")
+
+# create geometries
+@loop(subjects=dm.subjects)
+def create_geometry(sub, overwrite):
+    # output files
+    fcon = dm.build_path("con", desc="geom")
+    feig = dm.build_path("eig", desc="geom")
+
+    if check_files([fcon, feig]) and not overwrite:
+        return
+
+    # 0. Load data
+    fwd = dm.load("fwd")
+
+    # 1. Create geometry
+    geom = mm.analysis.connectivity.connectome_from_geometry(
+        source_space = fwd["src"], 
+        weights = True,
+        inter_hemi_dist = 5,
+    )
+
+    # 2. Compute spectral properties
+    graph = pygsp.graphs.Graph(geom, lap_type="normalized")
+    graph.compute_fourier_basis()
+
+    eigvec = graph.U    # eigenvectors
+    eigval = graph.e    # eigenvalues
+
+    # 3. Save outputs
+    np.save(fcon, geom)
+    mm.core.io.write_eig(feig, eigvec, eigval)
+
+create_geometry(overwrite=False)
+```
+
+
+# Inverse problem
+
+## Solve inverse problem
+
+```{python filename="solve_inverse_intra.py"}
+# | output: false
+
+import mne
+import mindmap as mm
+from scripts.utils import loop, check_files
+from scripts.data_manager import IntraManager
+
+# data manager
+dm = IntraManager("intra.config.yml")
+
+# apply inverse solvers
+@loop(subjects=dm.subjects)
+def source_recon(sub, overwrite=True):
+    # outputs files
+    fwcset = dm.build_path(sub, "stc", task="spk", desc="wcset")
+    #fcset = sr.get_path("stc", task="spk", desc="cset")
+    fsloreta = dm.build_path(sub, "stc", task="spk", desc="sloreta")
+    fdspm = dm.build_path(sub, "stc", task="spk", desc="dspm")
+    fmne = dm.build_path(sub, "stc", task="spk", desc="mne")
+
+    if check_files([fwcset, fsloreta, fdspm, fmne]) and not overwrite:
+        return
+
+    # 0. Load data
+    fwd = dm.load(sub, "fwd")                    # forward solution
+    ave = dm.load(sub, "ave", task="spk")        # averaged EEG
+    ncov = dm.load(sub, "cov", task="spk")       # EEG noise covariance
+    eig = dm.load(sub, "eig", desc="geom")       # Connectome eigensystem
+
+    # 1. Estimate regularizer parameter
+    snr, _ = mm.analysis.eeg.estimate_evoked_snr(ave, baseline=(0,1.5), noise_cov=ncov)
+    snr = snr.max()
+    lambda2 = 1.0 / (snr**2)
+
+    print(f"Estimated SNR: {snr:.3f}")
+    print(f"Estimated lambda2: {lambda2:.3f}")
+
+    # ---------------------------------
+    # 2. Run source reconstructions <3
+    # ---------------------------------
+
+    # 2.1 wcset
+    inv = mm.analysis.inverse.wCSET(
+        forward = fwd,
+        noise_cov = ncov,
+        depth = 0.8,                # depth weighting
+        noise_norm = None,
+        eigenvectors = eig["vec"],
+        eigenvalues = eig["val"],
+        harm = 0.7,                 # harmonic weighting
+    )
+    wcset = inv.solve(ave, lambda2)
+
+    # 2.2 sLORETA
+    inv = mne.minimum_norm.make_inverse_operator(ave.info, fwd, ncov, depth=0.8, fixed=True)
+    sloreta = mne.minimum_norm.apply_inverse(ave, inv, lambda2, method="sLORETA")
+
+    # 2.3 dSPM
+    dspm = mne.minimum_norm.apply_inverse(ave, inv, lambda2, method="dSPM")
+
+    # 2.4 MNE
+    mne_ = mne.minimum_norm.apply_inverse(ave, inv, lambda2, method="MNE")
+
+    # 3. Save
+    wcset.save(fwcset, overwrite=overwrite, verbose="warning")
+    sloreta.save(fsloreta, overwrite=overwrite, verbose="warning")
+    dspm.save(fdspm, overwrite=overwrite, verbose="warning")
+    mne_.save(fmne, overwrite=overwrite, verbose="warning")
+
+source_recon(overwrite=True)
+```
+
+
+# Virtual intracranial-EEG
+
+## Project source images to intracranial channels
+
+```{python filename="estimate_ieeg_intra.py"}
+# | output: false
+
+import mne
+import mindmap as mm
+from scripts.utils import loop, check_files
+from scripts.data_manager import IntraManager
+
+# data manager
+dm = IntraManager("intra.config.yml")
+methods = ["wcset", "sloreta", "dspm", "mne"]
+
+@loop(subjects=dm.subjects)
+def compute_vieeg(sub, overwrite):
+    # output files
+    files = [dm.build_path(sub, "v-ave", task="spk", desc=m) for m in methods]
+
+    if check_files(files) and not overwrite:
+        return
+
+    # 1. Load data
+    src = dm.load(sub, "fwd")["src"]
+    iave = dm.load(sub, "i-ave", task="spk")
+
+    # 2. Compute virtual electrodes
+    vieeg = []
+    for m in methods:
+        # load source image
+        stc = dm.load(sub, "stc", task="spk", desc=m)
+
+        # estimate intracranial EEG
+        v = mm.analysis.eeg.compute_virtual_ieeg(
+            src, stc, iave,
+            conductivity = 0.25,  # conductivity adjusted for infinite homogeneous space
+            threshold = 0.003,   # minimal distance for exponential
+        )
+
+        vieeg.append(v)
+
+    # 3. save
+    for i, m in enumerate(methods):
+        vieeg[i].save(files[i], overwrite=overwrite, verbose="warning")
+
+compute_vieeg(overwrite=True)
+```

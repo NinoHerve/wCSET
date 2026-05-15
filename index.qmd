@@ -32,16 +32,251 @@ keywords:
 bibliography: references.bib
 ---
 
-# Introduction
+# 1. Introduction
 
-Neural processes in the brain generate electric and magnetic fields that can be measured extracranially using electroencephalography (EEG) and/or magnetoencephalography (MEG) (@jackson_neurophysiological_2014). These techniques provide access to brain activity with high temporal resolution, but because the measurements are acquired outside the head, their spatial resolution is limited. To address this limitation, mathematical methods collectively referred to as source reconstruction aim to estimate whole-brain neural activity from the recorded signals (@knosche_eegmeg_2022). In a distributed source model, the brain activity is divided into sufficiently small areas such that neural sources can be modeled as current dipoles (@nunez_multi-scale_2019). If constraining the activity only to cortical areas, this typically requires dividing the gray matter into 5,000 or more dipoles. Because the number of sources vastly exceeds the number of sensors (typically 64-128), reconstruncting brain activity constitutes an ill-posed inverse problem that requires the incorporation of prior information to steer the solution toward the most probable estimate (@knosche_eegmeg_2022). Most widely used source reconstruction methods aim to select the solution with the lowest overall energy and assume independence between sources, in accordance with Occam’s razor. This is the case for approaches such as sLORETA, eLORETA, ~dSPM~, and beamformers. Since the introduction of these methods, numerous approaches have sought to incorporate more informative priors in order to obtain more physiologically realistic solutions.
+<!-- The following section (A compact basis for functional Data) should be in the intro -->
 
-For example, LORETA assumes that neighboring sources are correlated, motivated by the notion that neurons operate in spatially organized populations. PatchLORETA adopts a similar assumption but further posits that these populations form spatially contiguous patches, leading to abrupt transitions between active and inactive regions. Other methods assume that relationships between sources are dynamic and data-driven; in these approaches, source correlations are treated as unknown parameters and jointly estimated with source activity, at the cost of increased model complexity (e.g., BC-VARETA).
+**A Compact Basis for Functional Data**
 
-Recent advances in connectomics—the study of whole-brain networks—have provided new perspectives on incorporating fast brain activity into regularization schemes. Progress in diffusion MRI has enabled the reconstruction of white-matter fiber tracts through tractography, which can be represented as a graph in which nodes correspond to brain regions and edges encode properties such as fiber length or density; this graph representation is referred to as the structural connectome.
+The GFT provides a highly **compact basis** for functional brain data. In simple terms, this means that complex patterns of brain activity are not random; they tend to follow the underlying structural pathways.
 
-@rue-queralt_connectome_2021 showed that fast brain activity can be represented compactly in the basis of the connectome’s harmonics, obtained via the graph Fourier transform. This property can be exploited to constrain and improve EEG source reconstruction.
-# Materials and Methods
+By projecting functional signals (e.g., EEG source activity) onto this structural eigenbase, we find that a large portion of the signal's energy is often concentrated in a small subset of low-frequency eigenvectors. These "smooth" eigenvectors represent global patterns of integration across the connectome. Consequently, the GFT allows us to represent high-dimensional brain activity using only a few significant structural modes, effectively separating biologically organized signal from stochastic noise.
+
+
+# 2. Materials and Methods
+
+## 2.1 Data Acquisition and Datasets
+
+### 2.1.1 Synthetic Data
+<!-- Simulation environment setup (Study 1) -->
+Simulations were conducted using data from a single representative subject selected from the VEPCON dataset [Ref]. The anatomical framework consists of a T1-weighted MRI and a corresponding structural tractogram derived from diffusion tensor imaging (DTI). Using the cortical source space defined in section 2.3.1 we clustered the dipoles in the same brain regions according to the ProbConn atlas (~400 brain regions, 2-10 dipoles per region). An initial source activity is rendered by randomly selecting a brain region and attributing a spike-like signal to all dipoles of the region, similar to classic simulation approaches [FindRef]. Our spike is obtained from a double hamming window (Figure 1.a) formulated as follow: $$$$. 
+
+To model the propagation of activity, we integrated structural constraints by calculating the temporal latency between active and quiescent dipoles. The total delay, $τ_{\text{tot}}$​, between two dipoles is defined by the shortest path in the structural network, accounting for two distinct physiological components:
+
+1. **Processing Delay ($\tau_p$​):** Represents synaptic latencies and local regional processing.
+    
+2. **Transmission Delay ($\tau_t$​):** Represents the time required for signal propagation along axonal projections, defined as: $$\tau_t = \frac{l_{axon}}{v_{axon}}$$
+    where $l_{axon}$​ is the fiber length and $v_{axon}$​ is the conduction velocity derived from literature [FindRef].
+    
+
+To simulate physiological signal attenuation, a decay factor of **0.25** was applied at each network node. This ensures that while long-range connections facilitate distant information transfer with higher latency, signal intensity diminishes as the number of topological "steps" increases, resulting in a damped feedforward diffusion process (Figure 1c).
+
+### 2.1.2 Clinical Dataset A
+<!-- 20 patients with focal epilepsy (Study 2) -->
+To validate electroencphalographic source localizsation (ESL) clinicaly, we used the data from [ref] constituting of 44 patietns with pharmocoresistant focal epilepsy. The patients underwent a first resective surgery validated by 12-month postsurgical outcome. 28 patients had completed seizure freedom and were selected for this study since we can assume that the resected section corresponded to the epileptic tissue and use it as ground truth for our localization scheme. The data consisted of a T1-weigthed MRI and a resting state EEG recording before surgery, as well as a post-surgery T1-weighted MRI. Interictal spikes were identified on the EEG and averaged over their tip. Pre and post-surgery MRI were coregistered using affine transformation.
+
+
+### 2.1.3 Clinical Dataset B
+<!-- 3 patients with simultaneous iEEG/EEG (Study 3) -->
+
+
+
+## 2.2 Signal Preprocessing
+
+
+### 2.2.1 EEG/iEEG Processing
+<!-- Filtering, artifact rejection, and epoching (noting differences across the three datasets). -->
+The simulated data and the simultaneous iEEG/EEG data provide EEG resting state as epochs centered around the spike peak. We first apply C Averaged Referencing (CAR) as is common for Source Reconstruction and computed the source covariance matrix, used to whiten the data later on. The epochs are then averaged.
+
+The EEG data for the source localization was already averaged, so the data could not be whitened for source reconstruction. An c averaged referencing was applied. Most data were already cleaned from artifacts, only subject A and B had to undergo an additional notch filter has the 50 Hz was extremely high for these recording. Baseline correction was also applied to every one as subject C and D did not have it.
+
+There are no specific processing suggested for the intracranial electrode. We simply averaged all epochs into an averaged signal.
+
+## 2.3 Forward Modeling and Structural Priors
+
+### 2.3.1 Source Space
+
+We modeled neural activity using a **distributed dipole model** with a **cortical constraint**. The source space was restricted to the cortical white matter surface, reconstructed from T1-weighted MRI data using **FreeSurfer (v.X.X.X)**. Approximately **6,000 dipoles** were uniformly distributed across this surface using **MNE-Python**, with dipole orientations fixed **normal** to the cortical manifold. This configuration ensures that the reconstructed activity aligns with the known physiological orientation of pyramidal neurons.
+
+### 2.3.2 Volume Conduction Model
+<!-- BEM modeling (shared across all studies). Description of the "dual-BEM" setup for Study 1 to avoid the inverse crime -->
+The forward problem involves calculating the electrical potential at the sensor locations generated by unitary dipole activity within the source space. To model the volume conduction between the sources and sensors, we employed a **Boundary Element Model (BEM)**. A standard BEM represents the interfaces between major head tissues—specifically the **inner skull, outer skull, and outer skin**—assuming homogeneous and isotropic electrical conductivity within each compartment. We utilized the standard conductivity values: **0.3 S/m** for the brain and scalp, and **0.06 S/m** for the skull.
+
+While MNE-Python typically relies on FreeSurfer’s watershed algorithm for surface extraction, this approach often yields sub-optimal geometries for BEM. To improve the accuracy of the head model, we implemented a custom pipeline: brain tissues were segmented using the **SimNIBS CHARM** pipeline, and BEM surfaces were subsequently constructed from these segmentations via a **sphere-fitting method** (see Figure X in the Annex for a comparison of these approaches). Since the EEG sensors were pre-co-registered to the T1-weighted MRI, they were intrinsically aligned with the resulting head model. The final forward solution (the gain matrix) was computed using MNE-Python.
+
+A second forward solution was computed with conductivity values 0.03 S/m for the brain and scalp, and 0.006 S/m for the skull. This second forward solution is used during source reconstruction of simulated data to implement some voluntary error between the true head model and the used head model as the true head model is rarely being used in real setups. Using the same forward solution for simulation and reconstruction is reffered to as the inverse crime [ref]. The difference between the too forward models generate an error of around 10% (see Figure X).
+
+### 2.3.3 Connectivity Matrices
+<!-- The "Prior". Definition of Empirical connectomes (Study 1) and Surrogate matrices (Studies 1, 2, and 3) -->
+
+In this work, the brain is modeled as a graph (or connectome) where nodes represent localized brain regions - specifically dipoles in our source space - and edges represent the structural scaffolding between them. For the Connectome Spectrume Electromagnetic Tomography (CSET) source reconstruction method and it's weighted version (wCSET), we utilize a structural connectome, where edges represent physical anatomical links.
+
+**Empirical Connectomes**
+
+We incorporate two distinct types of structural links:
+1. **Long-range connections**: These represent white matter tracts (axonal bundles) estimated via diffusion MRI (dMRI) tractography.
+2. **Short-range connections**: To account for local gray matter connectivity not captured by standard tractography, we connect neighboring dipoles if their geodesic distance on the cortical manifold is less than 10 mm.
+
+To ensure physical consistency, edges are weighted by distance (in mm): fiber length for long-range tracts and geodesic distance for local connections.
+
+**Connectome Surrogates**
+
+In clinical settings where diffusion data may be unavailable, we evaluate two **connectome surrogates** validated through our simulation framework (see Section 3.1):
+
+- **Probabilistic Atlas Surrogate:** Long-range tracts are extrapolated from the **ProbConn atlas**. We parcellate the subject’s brain according to the atlas and connect dipoles between two regions if a tract exists in more than **60%** of the atlas population. Gray matter connections are then added as described above.
+    
+- **Geometry-only Surrogate:** This model relies solely on gray matter connectivity derived from the brain mesh. While distinct from the Beltrami-operator-weighted geometry, this surrogate tests the hypothesis that local brain geometry alone can capture significant brain-function coupling without explicit long-range information.
+
+**Random permutation**
+
+In the simulation, one could select the connectome used to make the simulation for the source reconstruction method. But in reality, one never has the exact knowledge of the model. Therefore, we implemented a procedure to sabotage the connectome before applying source reconstruction (see results 3.1.2). There are 3 times of sabotages tested individually:
+- **Permutation**: Take an edge, delete it, and create a new one where there was none.
+- **Deletion**: Randomly delete an edge
+- **Addition**: Randomly add an edge
+
+We then consider a maximum number of sabotage to apply, which correponds to the number of connections in the connectome. This threshold is then set to be 100% sabotage. In the case of permutation, it's means we have applied as many permutations as there are edges. For the Deletion it means we don't have any more edges. For the addition it means we have double the amount of total edges. While 0% correspond to the original connectome.
+
+**The Graph Fourier Transform (GFT)**
+
+The connectome is mathematically represented by an adjacency matrix A, or more commonly, the **Graph Laplacian** L, defined as L=D−A (where D is the degree matrix). This representation allows us to apply the tools of **Graph Signal Processing (GSP)** to neural data.
+
+Just as the classical Fourier Transform decomposes a time-series into sine and cosine waves, the **Graph Fourier Transform (GFT)** decomposes brain activity into a set of "graph harmonics." These harmonics are the eigenvectors $u_k$​ of the Graph Laplacian, obtained via the eigendecomposition: $$\mathbf L= \mathbf{UΛU}^⊤$$
+where $\mathbf Λ$ contains the eigenvalues (graph frequencies) and $\mathbf U=[u1​,u2​,…,uN​]$ forms the **orthonormal eigenbase**.
+
+
+## 2.4 Clinical Ground Truth Definition
+
+In contrast to the simulated framework, we usually do not have the exact brain activity maps to evaluate source reconstruction methods. We therefore use proxis which allow to test specific aspects of the method. In the first dataset [ref], we use the fact that patients underwent surgery, removed a brain section and were symptom free of epilepsy after the surgery. We use the resected area as ground truth to measure the source localization error. We therefore need to segement the resected area (See 2.4.1). In the second data, we have the recordings of electric potential inside the brain but only in a few areas. For that we need to estimate the underlying potential generated by our reconstructed maps (which show, dipole currents) at the same locations as the intracranial channels.We use for that a simplified version of the forward problem (see section 2.4.2).
+
+### 2.4.1 Resected Area Segmentation
+<!-- Defining the gold standard for localization (Study 2). -->
+
+The pre- and post-operative T1 images were co-registered using a linear affine transformation by the original data providers. We generated a difference map between these volumes to highlight the resected tissue. This map was binarized, and morphological opening operators were applied to isolate the resection mask. While this automated process was robust for most subjects, manual correction was required in cases where non-surgical intensity changes (e.g., motion artifacts or fluid shifts) were detected. In such instances, the resection was manually segmented every third slice, with the intervening masks generated via slice-by-slice interpolation.
+
+### 2.4.2 Source-to-iEEG Projection
+<!-- The pipeline for projecting estimated sources to intracranial channel locations for temporal comparison (Study 3) -->
+
+Following source reconstruction, the estimated cortical activity was projected onto the coordinates of the intracranial electrodes to generate "virtual" iEEG potentials. This projection followed the methodology of **Grova et al. (2016)**. Given that this step assumes the sources and sensors reside within the same compartment, we modeled this as an infinite homogeneous conduction problem. The potential $\Phi$ at a location $r$ is estimated from the brain activity as:$$\Phi(r) = \frac{1}{4\pi \sigma} \sum_i \frac{\mathbf j_i \cdot(\mathbf r - \mathbf r_i)}{\lvert \mathbf r - \mathbf r_i\rvert^3}$$Following the adjustments proposed by **Cosandier-Rimélé
+et al. 2007**, the brain tissue conductivity (σ) was set to **0.25 S/m**(modified from the standard **0.33 S/m**) to compensate for the simplifications inherent in the homogeneous model. Assuming an iEEG-MRI coregistration accuracy of 3 mm, we use the same model adjustement to prevent instabilities of the model caused by too close measurements: $$\begin{align}\Phi(r) &= \frac{1}{4\pi \sigma} \sum_i \frac{\mathbf j_i \cdot(\mathbf r - \mathbf r_i)}{\lvert \mathbf r - \mathbf r_i\rvert^3} \text{ if } r>r_0 = 3 \text{ mm} \\ \Phi(r) &= \frac{1}{4\pi \sigma} \sum_i \frac{\mathbf j_i \cdot(\mathbf r - \mathbf r_0)}{\lvert \mathbf r - \mathbf r_i\rvert^3} \text{ if } r\ler_0 = 3 \text{ mm}\end{align}$$
+
+## 2.5 Source Reconstruction Framework
+
+For every study, we used MNE-Python's widely used methods wMNE, dSPM and sLORETA (see section 2.5.1) and compare it to the our connectivity-informed methods described in section 2.5.2.
+
+<!-- ??? Where do I put whitening ??? -->
+
+### 2.5.1 Standard Inverse Solutions
+<!-- Reference methods (e.g. MNE, eLORETA) -->
+In the M/EEG inverse problem, we aim to estimate underlying dipole activities $\mathbf s\in \mathbb R^n$ from observed sensor measurements $\mathbf y \in \mathbb R^m$. This relationship is defined by the forward model: $$\mathbf y = \mathbf L \mathbf s + \epsilon$$
+
+where $\mathbf L$ is the lead-field matrix and $\epsilon$ represents additive noise. Because the number of dipoles greatly exceeds the number of sensors ($n\gg m$), the problem is ill-posed and lacks a unique solution without further constraints.
+
+From a Bayesian perspective, $\mathbf s$ is treated as a random variable with a prior distribution $P(\mathbf s)$. Assuming a Gaussian prior $\mathbf s \sim \mathcal N(0, \Sigma_{\mathbf s})$, reconstruction becomes a Maximum A Posteriori (MAP) estimation, leading to the optimization problem:
+$$
+\mathbf s^* = \text{arg }\underset{\mathbf s}{\text{min}}\underbrace{\lVert\mathbf y-\mathbf L\mathbf s\rVert_2^2}_{\text{Data Fidelity}} + \lambda\underbrace{\lVert \mathbf C \mathbf s\rVert_p^p}_{\text{Regulaization}} \tag{1}
+$$
+
+Here, $\lambda$ is the regularization parameter balancing data fit with prior assumptions. The matrix $\mathbf C$ acts as a weighting matrix derived from the prior covariance, such that $\mathbf C^T\mathbf C = \mathbf \Sigma_{\mathbf s}^{-1}$.
+
+Most widely used methods (e.g., sLORETA, eLORETA, dSPM, or LCMV) assume independent sources, implying $\mathbf \Sigma_{\mathbf s}^{-1} = \mathbf I_{n}$​. Weighted MNE (wMNE) also assumes independent sources but applies a depth-weighting matrix $\mathbf W_d$​ to counteract the depth bias:
+
+$$
+\mathbf \Sigma_{\mathbf s}^{-1} = \mathbf W_d, \qquad \text{where} \quad W_{ii} = \frac{1}{\lVert \mathbf L_{:i}\rVert}
+$$
+
+While it is widely accepted that source activity is heavily interdependent, these independent assumptions are typically chosen because estimating these co-dependences has remained computationally or theoretically elusive.
+
+sLORETA and dSPM apply a post-hoc standardization which ultimately also resolves the depth bias problem.
+
+### 2.5.2 Connectivity-Informed Inverse Solution
+<!-- The proposed method incorporating the structural prior. -->
+
+**Connectome Spectrum Electromagnetic Tomography** (J. Rué-Queralt 2024)
+
+Connectome Spectrum Electromagnetic Tomography (**CSET**) addresses the independence limitation, by operating in a **component-based space**. Instead of solving for activity in the brain's physical space, CSET projects the activity onto the **eigenmodes of the connectome** ($U$). This transforms the problem into the "connectome spectrum" space, where the prior can be more effectively described.
+
+Given that the connectome spectrum is known to be compact, CSET enforces sparsity by applying an $l_1$​-norm to the regularizer. Let $\mathbf {\hat s}$ represent the spectrum of $\mathbf s$ (where $\mathbf s = \mathbf U \mathbf {\hat s}). Equation (1) is then modified to: $$\mathbf {\hat s}^* = \text{arg }\underset{\mathbf s}{\text{min}}\lVert\mathbf y-\mathbf L\mathbf U \mathbf {\hat s}\rVert_2^2 + \lambda\lVert \mathbf {\hat s}\rVert_1 \tag{2}$$
+The physical brain activity is then recovered via $\mathbf s^* = \mathbf U\mathbf{\hat s}^*$
+
+**weighted CSET**
+
+While basic CSET enforces sparsity, it does not necessarily distinguish between signal and noise in a physiologically informed way. For instance, **Pok Su Min et al.** assumed eigenmode contributions follow a Gaussian distribution ($l_2$-norm) with higher penalties for high-frequency modes—mirroring temporal signal processing where high frequencies often represent noise.
+
+However, recent research suggests that high-frequency connectome eigenmodes are crucial for representing **segregated brain functions**. _FindName et al. (2025)_ categorized the spectrum into three domains based on the **gap-spectrum** (the difference between consecutive frequencies):
+
+1. **Low frequency:** Integrative properties (shared across subjects).
+    
+2. **Medium frequency:** Degenerative properties (subject-specific/noise).
+    
+3. **High frequency:** Segregative properties (shared across subjects).
+    
+Our simulations indicate that CSET is robust to connectome variations, suggesting the reconstruction identifies integrative and segregative harmonics. Consequently, we propose weighting the harmonics based on the gap-spectrum to suppress the "degenerative" region while boosting integrative and segregative components. Equation (2) thus becomes:
+
+$$
+\mathbf {\hat s}^* = \text{arg }\underset{\mathbf s}{\text{min}}\lVert\mathbf y-\mathbf L\mathbf U \mathbf {\hat s}\rVert_2^2 + \lambda\lVert \mathbf W_h\mathbf {\hat s}\rVert_1 \tag{2}
+$$
+
+where $\mathbf W_h$​ is a diagonal matrix of gap-values: $W_{ii}​=\lambda_{gap}^i​​$.
+
+## 2.6 Performance Evaluation Metrics
+
+### 2.6.1 Map to map comparison
+
+In the case of the simulation, ground truth data is available to compare the source reconstructed images directly with the ground truth. To evaluate each method we simply compute the log envelope correlation between two maps. For example, for a given time point $t$, the correlation between reconstructed map and ground truth map would be given by:
+$$
+\mathcal C(t) = \frac{\sum_i \mathbf s^t_{text{true}}(i) * \mathbf s^t_{\text{est}(i)}{\sigma^i_{true} * \sigma^i_{est}}
+$$
+
+Where $\mathbf s^i_{x}(t)$ is the activity at dipole $i$ and time $t$. $\sigma_{x}(t)$ is the standard deviation of the map (True or estimated) at the given time $t$. We chose the envelope because whether the reconstructed activity is positive or negative is simply a matter of dipole orientation, in both cases the maps indicate activity. The log is to make sure the correlation happens on a normal distribution.
+
+### 2.6.1 Localization Accuracy
+<!-- Spatial distance to resection/focal point (Studies 1 and 2) -->
+
+To evaluate localization accuracy, the source onset of the interictal spikes was defined at 50% of the rising phase, following the methodology of **FindName (2015)**. The Euclidean distance was then calculated between the estimated source location and the resection volume. To ensure the metric remained robust to the discrete nature of the voxel grid—where a single "closest" voxel might introduce up to a 10 mm discretization error—we calculated the mean distance to the ten nearest voxels within the mask. This averaging approach ensures that if an estimated source is located within the resection volume, the resulting distance effectively converges to zero.
+
+
+### 2.6.2 Channel comparison
+<!-- Temporal correlation and "center of Mass" movement over time between estimated and ground-truth iEEG (studies 1 and 3) -->
+
+To evaluate the accuracy of the spatial reconstruction, the projected virtual iEEG activity was compared against the recorded ground-truth iEEG. While spatial correlation is a standard metric in simulations, preliminary analysis indicated high uncertainty in this measure for clinical data (see **Appendix Figure 2**). Consequently, we utilized more robust aggregate metrics.
+
+To assess whether the reconstructed activity was localized to the correct anatomical region during propagation, we calculated the **Center of Mass (CoM)** of the activity. This is particularly relevant for propagation, where activity often involves multiple disparate contacts simultaneously. The CoM for a set of electrode activities is defined as: $$\text{CoM}=\frac{\sum_k A_k \cdot \mathbf r_k}{\sum_k A_k}$$where $A_k$ represents the activity (amplitude) at the $k$-th electrode located at $\mathbf r_k$.
+
+Finally, the temporal dynamics of the propagation were evaluated using **temporal correlation**. This was calculated as the Pearson correlation coefficient between the envelopes of the estimated and ground-truth channel activities. Essentially the same as the spatial correlation but axed around space:
+
+$$
+\mathfrak C(i) = \frac{\sum_t \mathbf s^i_{text{true}}(t) * \mathbf s^i_{\text{est}(t)}{\sigma^i_{true} * \sigma^i_{est}}
+$$
+
+
+# 3. Results
+
+To test the impact of neglecting source dependences we created a simulation that is constrained by the structural connectivity. This allows us to have simulated 
+
+## 3.1 Study 1: Simulation-Based Validation
+
+### 3.1.1 Localization vs. Propagation
+<!-- Proof that connectivity priors specifically improve the reconstruction of dynamic/spread compared to standard methods -->
+
+To test the impact of neglecting source dependences we created a simulation that is constrained by the structural connectivity. This allows us to have simulated EEG recordings with complex ground truth activity. Figure 3.1.a shows an example of a EEG recording with the key events happening. We have the peak phase, where the EEG signal is highest. At that phase, similar to what is suggested in the literature, the source has already started to propagate. Generaly, it is advised to reconstruct around 50% of the rising phase (or even before if the signal to noise permits it) to properly locate the source. We consider as the source propagation phase everything happening after 50% rising phase until the signal is back to noise level. We then applied source reconstruction of the commonly used methods available on MNE-python (wMNE, sLORETA, dSPM) and the methods derived from the lab (CSET and the new wCSET). We did source localization to compare the accuracy of source localization. We also computed the spatial correlation time point by time point between the simulated ground truth and the reconstructions for all our source reconstruction methods. The latest allows us to estimate which is best for reconstructed the source propagation. For statistical validation, we repeated for each brain region (400) the simulation 30 times. We then averaged the spatial correlation for each brain region and plotted the spatial correlation over time in Figure 3. The figure shows that the spatial correlation starts at 0 (signal to noise ratio is null) and gradually increases when the source spreads overall (increasing signal to noise ratio) and then decreases again. We highlighted on the time axis the peak phase of the EEG signal and the 50% rising phase. We see that the highest correlation is obtained around the peak phase which is where all methods distinguish themselves. wCSET achieves the highest correlation of 0.7 followed by CSET 0.6 and the other methods 0.4. At 50% rising phase all methods perform similarly well which is the region one would select to do source localization. 
+
+### 3.1.2 Robustness to Prior Noise
+<!-- Performance results when using degreaded or surrogate connectomes. -->
+
+To test how the connectivity-informed methods behave in case of uncertainty, we do source reconstruction with different levels of permutations in the connectome used for source reconstruction (see materials and methods). While the simulation always uses the same structural connectivity but has a source starting at different location for every simulation, the reconstructing might use a different connectome do solve the inverse problem. For every simulation we reconstruct the activity and measure the spatial correlation at the peak phase (phase at which the performance was best previously). Figure 3.2.a shows the accuracy at peak phase for various levels of random permutations, ranging from 0% (same connectome as used to simulate) to 100% (completely random connectome). We see the accuracy remaining stable at 0.6 accuracy until around 60%, above which the accuracy starts decreasing until 0.4 (accuracy of methods assuming source independence). We also tested which surrogate model might best be used in case the user does not have any diffusion data available. We tested the three surrogate presented in the Materials & Methods, the all-to-all, some-to-some and geometric surrogates. Figure 3.2.b shows a box plot of the performance using each surrogate by measuring the spatial correlation at the peak phase of the EEG. The figure indicates that the best surrogate seems to be some-to-some rather than connecting all-to-all or no white matter connections at all (geometric).
+
+
+## 3.2 Study 2: Clinical Localization (Large Cohort)
+
+### 3.2.1 Localization Error
+<!-- Showing that the connectivity-informed method remains as accurate as standard methods for identifying the seizure onset zone (Validation against resected areas) -->
+
+By comparing the maximum of the source image at 50% rising phase, we generate an estimation of the epileptic zone. This is then compared to brain resection area for patients who underwent surgery and became symptom free. The box plot if figure 3.3 indicate the distance to the resected area of each source localization estimation for the methods, wMNE, dSPM, sLORETA, CSET and wCSET. All boxes show similar results with no significant differences. 
+
+## 3.3 Study 3: Clinical Dynamics (Simultaneous iEEG/EEG)
+
+### 3.3.1 Temporal Correlation Analysis
+<!-- Showing higher similarity between estimated and true iEEG signals using the proposed method -->
+
+After projecting source reconstruction to the intracranial EEG channels we compare the virtual channels to the ground truth channels to estimate the brain activity reconstruction. Figure 4.1 shows the temporal correlation of each channel for every subject (3 in total) and Figure 4.2 shows the distance between the center of gravity of the estimated channel activities and the ground truth channel activity. 
+
+
+### 3.3.2 Propagation Accuracy
+<!-- Evidence that the "Center of Mass" of reconstructed activity follows the true intracranial trajectory more closely -->
+
+## 4. Discussion
+
+## 5. Conclusion
 
 ::::: {.content-visible when="output"}
 
@@ -72,441 +307,167 @@ You should now be ready to run anything that comes ahead.
 
 
 
-## Datasets
-
-This project is divided into two studies. In the first study we evaluate connectivity-informed source imaging methods using simulations. This helps us comprehend the advantages and disadvantages of the mehod versus state of the art methods. In the second study we evaluate these methods using simultaneous EEG/iEEG recordings. This helps us see whether these method can actually help in practice with real noise condition and misinformation situations.
-
-
-## Methods
-
-We did not apply any additional EEG cleaning protocol as they were already processed in the dataset. We simply averaged the EEGs and cropped (cropping values?) around the spike to reduce the amount of computations.
-
-#### EEG preprocessing (INTRA)
-
-```{python intra_eeg.py}
-# | output: false
-
-from pathlib import Path
-import mne
-import mindmap as mm
-from scripts.utils import loop, check_files
-from scripts.data_manager import IntraManager
-
-# Data manager
-dm = IntraManager("intra.config.yml")
-
-# Report folder
-report_dir = Path("./reports/")
-report_dir.mkdir(exist_ok=True)
-
-@loop(subjects=dm.subjects)
-def process_eeg(sub, overwrite):
-  # Output files
-  fave = mm.io.build_mm_path(dm.roots["mm"], sub, "ave", task="spk")
-  fcov = mm.io.build_mm_path(dm.roots["mm"], sub, "cov", task="spk")
-
-  if check_files([fave, fcov]) and not overwrite:
-    return
-
-  # load data
-  sr = dm.get_subject(sub)
-  eeg = sr.load("eeg", task="spk")
-
-  # Process EEG
-  eeg = eeg.set_eeg_reference(ref_channels="average", projection=True) # Average referencing
-  eeg = eeg.apply_baseline(baseline=[0,1.5]) # Apply baseline correction
-  ncov = mne.compute_covariance(eeg, tmax=1.5, method="empirical") # Noise covariance
-  ave = eeg.average() # averaging
-
-  # save
-  ave.save(fave, overwrite=overwrite)
-  ncov.save(fcov, overwrite=overwrite)
-
-  # save reports for visualization
-  mm.viz.create_pipeline_report(ave, ncov, sub, report_dir/f"sub-{sub}_desc-intra_ave.html")
-
-
-process_eeg(overwrite=True)
-```
-
-#### iEEG preprocessing (INTRA)
-
-```{python intra_ieeg.py}
-# | output: false
-
-import mne
-import mindmap as mm
-from scripts.utils import loop, check_files
-from scripts.data_manager import IntraManager
-
-# Data manager
-dm = IntraManager("intra.config.yml")
-
-# report folder
-# Report folder
-report_dir = Path("./reports/")
-report_dir.mkdir(exist_ok=True)
-
-@loop(subjects=dm.subjects)
-def process_ieeg(sub, overwrite):
-  # Output files
-  fiave = mm.io.build_mm_path(dm.roots["mm"], sub, "i-ave", task="spk")
-
-  if check_files([fiave]) and not overwrite:
-    return
-
-  # load data
-  sr = dm.get_subject(sub)
-  ieeg = sr.load("ieeg", task="spk")
-
-  # Process iEEG (Average referencing? Whitening?)
-  iave = ieeg.average() # averaging
-
-  # save
-  iave.save(fiave, overwrite=overwrite)
-
-process_ieeg(overwrite=False)
-```
-
-
-### Dipole setup (INTRA)
-
-For every subject, we use FreeSurfer's recon-all to reconstruct the inner cortical surface on which we uniformly distribute ~6000 dipoles using MNE-Python. Still using FreeSurfer, the inner skull, outer skull and outer skin surfaces are extracted and assembled together into a Boundary Element Model. The conductivities applied correspond to the default MNE-Python conductivities of {{ var bem.brain}} {{ var bem.unit }} {{ var bem.skull }}, {{ var bem.unit }}, {{ var bem.skin }} {{ var bem.unit }} for the brain, skull and skin respectively.
-
-#### FreeSurfer white surface extraction
-
-```{python filename="freesurfer_intra.py"}
-%%bash
-bash scripts/fsrecon.sh intra.config.yml
-```
-
-#### Source placement
-
-```{python filename="source_space_intra.py"}
-# | output: false
-
-import mne
-import mindmap as mm
-from scripts.utils import loop, check_files
-from scripts.data_manager import IntraManager
-
-# Data manager
-dm = IntraManager("intra.config.yml")
-
-@loop(subjects=dm.subjects)
-def setup_source_space(sub, overwrite):
-  # Output files
-  fsrc = mm.io.build_mm_path(dm.roots["mm"], sub, "src")
-
-  if check_files([fsrc]) and not overwrite:
-    return
-
-  # 1. Load data
-  sr = dm.get_subject(sub)
-  vtx_ctx = sr.load("vertex-ctx")
-
-  # 2. Setup source space
-  source_space = mne.setup_source_space(
-    subject      = f"sub-{sub}",
-    spacing      = "oct6",    # sampling mehtod (influences dipole spacing)
-    surface      = "white",
-    add_dist     = True,
-    subjects_dir = dm.roots["fs"],
-    n_jobs       = 10,
-    verbose      = "warning"
-  )
-
-  # 3. Remove medial wall
-  source_space = mm.anatomy.source_space.filter_dipoles_by_id_list(source_space, vtx_ctx)
-
-  # 4. Save output
-  source_space.save(fsrc, overwrite=overwrite, verbose="warning")
-
-setup_source_space(overwrite=False)
-```
-
-
-### Boundary Element Model
-
-```{python filename="bem_intra.py"}
-# | output: false
-
-import mne
-import mindmap as mm
-from scripts.utils import loop, check_files
-from scripts.data_manager import IntraManager
-
-# Data manager
-dm = IntraManager("intra.config.yml")
-
-# make boundary element model
-@loop(subjects=dm.subjects)
-def make_bem(sub, overwrite):
-
-  # Output files
-  fbem = mm.io.build_mm_path(dm.roots["mm"], sub, "bem")
-
-  if check_files([fbem]) and not overwrite:
-    return
-
-  # 1. Build BEM layers from T1w MRI
-  mne.bem.make_watershed_bem(
-    subject = f"sub-{sub}",
-    subjects_dir = dm.roots["fs"],
-    volume = "T1",
-    overwrite = True,
-    verbose = "warning",
-  )
-
-  # 2. Correct layers
-  mm.anatomy.forward.correct_skull(
-    subject = f"sub-{sub}",
-    offset = 2,          # minimum skull thickness
-    fs_dir = dm.roots["fs"],
-    save_arrows = True,
-  )
-
-  # 3. Mount BEM
-  model = mne.make_bem_model(
-    subject = f"sub-{sub}",
-    subjects_dir = dm.roots["fs"],
-    conductivity = [0.3, 0.006, 0.3],       # electrical conductivities (brain, skull, skin)
-    ico = 4,                                # mesh resolution for computation (icosahedron X)
-    verbose = "warning",
-  )
-  bem = mne.make_bem_solution(model, verbose="warning")
-
-  # 4. Save output
-  mne.write_bem_solution(fbem, bem, overwrite=overwrite, verbose="warning")
-
-make_bem(overwrite=False)
-```
-
-
-#### Forward solution
-
-After checking for the alignment between electrodes and skin surface, we compute the forward operator using MNE-Pyhton.
-
-```{python filename="fwd_intra.py"}
-# | output: false
-
-import mne
-import mindmap as mm
-from scripts.utils import loop, check_files
-from scripts.data_manager import IntraManager
-
-# Data manager
-dm = IntraManager("intra.config.yml")
-
-# compute forward solution
-@loop(subjects=dm.subjects)
-def compute_fwd(sub, overwrite):
-
-  # Output files
-  ffwd = mm.io.build_mm_path(dm.roots["mm"], sub, "fwd")
-
-  if check_files([ffwd]) and not overwrite:
-    return
-
-  # 1. Load data
-  sr = dm.get_subject(sub)
-  src = sr.load("src")
-  bem = sr.load("bem")
-  ave = sr.load("ave", task="spk")
-  trans = sr.load("eeg-trans")
-
-  # 2. compute forward solution
-  forward = mne.make_forward_solution(
-    info = ave.info,
-    trans = trans,
-    src = src,
-    bem = bem,
-    meg = False,
-    eeg = True,
-    verbose = "warning",
-  )
-
-  # 3. Save output
-  mne.write_forward_solution(ffwd, forward, overwrite=overwrite, verbose="warning")
-
-compute_fwd(overwrite=False)
-```
-
-
-### Connectivity matrix
-
-This dataset does not contain any diffusion acquisition that would normaly allow us to generate a connectome matrix. The best alternative we found via the simulations is to use only the geometry obtained via the brain mesh that which we obtain through FreeSurfer.
-
-```{python filename="conn_intra.py"}
-# | output: false
+```{python filename="intra_data.py"}
 
 import numpy as np
-import pygsp
 import mindmap as mm
-from scripts.utils import loop, check_files
-from scripts.data_manager import IntraManager
-
-# Data manager
-dm = IntraManager("intra.config.yml")
-
-# create geometries
-@loop(subjects=dm.subjects)
-def create_geometry(sub, overwrite):
-
-  # output files
-  fcon = mm.io.build_mm_path(dm.roots["mm"], sub, "con", desc="geom")
-  feig = mm.io.build_mm_path(dm.roots["mm"], sub, "eig", desc="geom")
-
-  if check_files([fcon, feig]) and not overwrite:
-    return
-
-  # 1. Load data
-  sr = dm.get_subject(sub)
-  fwd = sr.load("fwd")
-
-  # 1. Create geometry
-  geom = mm.analysis.connectivity.connectome_from_geometry(
-    source_space = fwd["src"], 
-    weights = True,
-    inter_hemi_dist = 5,
-  )
-
-  # 3. Compute spectral properties
-  graph = pygsp.graphs.Graph(geom, lap_type="normalized")
-  graph.compute_fourier_basis()
-
-  eigvec = graph.U    # eigenvectors
-  eigval = graph.e    # eigenvalues
-
-  # 4. Save outputs
-  np.save(fcon, geom)
-  mm.core.io.write_eig(feig, eigvec, eigval)
-
-create_geometry(overwrite=False)
-```
-
-### Source Reconstruction
-
-```{python filename="source_reconstruction_intra.py"}
-# | output: false
-
-import mne
-import mindmap as mm
-from scripts.utils import loop, check_files
-from scripts.data_manager import IntraManager
-
-# data manager
-dm = IntraManager("intra.config.yml")
-
-# apply source reconstruction
-@loop(subjects=dm.subjects)
-def source_recon(sub, overwrite=True):
-  # outputs files
-  fwcset = mm.io.build_mm_path(dm.roots["mm"], sub, "stc", task="spk", desc="wcset")
-  #fcset = mm.io.build_mm_path(dm.roots["mm"], sub, "stc", desc="cset")
-  fsloreta = mm.io.build_mm_path(dm.roots["mm"], sub, "stc", task="spk", desc="sloreta")
-  fdspm = mm.io.build_mm_path(dm.roots["mm"], sub, "stc", task="spk", desc="dspm")
-  fmne = mm.io.build_mm_path(dm.roots["mm"], sub, "stc", task="spk", desc="mne")
-
-  if check_files([fwcset, fsloreta, fdspm, fmne]) and not overwrite:
-    return
-
-  # 1. Load data
-  sr = dm.get_subject(sub)
-  fwd = sr.load("fwd")
-  ave = sr.load("ave", task="spk")
-  ncov = sr.load("cov", task="spk")
-  eig = sr.load("eig", desc="geom")
-
-  snr = 3.0               # default SNR for evoked potentials according to MNE-python
-  lambda2 = 1 / (snr**2)  # regularization parameter
-
-  # -------------------------------
-  # Run source reconstructions <3
-  # -------------------------------
-
-  # 2.1 wcset
-  inv = mm.analysis.inverse.wCSET(
-    forward = fwd,
-    noise_cov = ncov,
-    depth = 0.8,                # depth weighting
-    noise_norm = None,
-    eigenvectors = eig["vec"],
-    eigenvalues = eig["val"],
-    harm = 0.7,                 # harmonic weighting
-  )
-  wcset = inv.solve(ave, lambda2)
-
-  # 2.2 sLORETA
-  inv = mne.minimum_norm.make_inverse_operator(ave.info, fwd, ncov, depth=0.8, fixed=True)
-  sloreta = mne.minimum_norm.apply_inverse(ave, inv, lambda2, method="sLORETA")
-
-  # 2.3 dSPM
-  dspm = mne.minimum_norm.apply_inverse(ave, inv, lambda2, method="dSPM")
-
-  # 2.4 MNE
-  mne_ = mne.minimum_norm.apply_inverse(ave, inv, lambda2, method="MNE")
-
-  # 3. Save
-  wcset.save(fwcset, overwrite=overwrite, verbose="warning")
-  sloreta.save(fsloreta, overwrite=overwrite, verbose="warning")
-  dspm.save(fdspm, overwrite=overwrite, verbose="warning")
-  mne_.save(fmne, overwrite=overwrite, verbose="warning")
-
-source_recon(overwrite=True)
-```
-
-
-```{python filename=intra_vieeg.py}
-# | output: false
-
-import mne
-import mindmap as mm
-from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
 # data manager
 dm = IntraManager("intra.config.yml")
 methods = ["wcset", "sloreta", "dspm", "mne"]
+sub = "48"
+sr = dm.get_subject(sub)
 
-@loop(subjects=dm.subjects)
-def compute_vieeg(sub, overwrite):
-  # output files
-  files = [mm.io.build_mm_path(dm.roots["mm"], sub, "v-ave", task="spk", desc=m)
-            for m in methods]
+# load data (True iEEG and virtual iEEGs)
+iave = sr.load("i-ave", task="spk")
+vave = {m:sr.load("v-ave", task="spk", desc=m) for m in methods}
 
-  if check_files(files) and not overwrite:
-    return
+# compute extent & spurious
+extent_mask = mm.core.get_spike_extent_mask(
+    iave.data.T, 
+    perc_max_amp=0.5
+)
 
-  # 1. Load data
-  sr = dm.get_subject(sub)
-  src = sr.load("src")
-  iave = sr.load("i-ave", task="spk")
+spurious_mask = mm.core.get_spurious_mask(
+    extent_mask,
+    mm.analysis.eeg.get_ch_positions(iave),
+    spurious_dist=0.01
+)
 
-  # 2. Compute virtual electrodes
-  vieeg = []
-  for m in methods:
-    stc = sr.load("stc", task="spk", desc=m)
+# swith: standardize
+if False:
+  iave = mm.analysis.eeg.normalize_evoked(iave)
+  vave = {m:mm.analysis.eeg.normalize_evoked(vave[m]) for m in methods}
 
-    v = mm.analysis.eeg.compute_virtual_ieeg(
-      src, stc, iave,
-      conductivity = 0.25,  # conductivity adjusted for infinite homogeneous space
-      threshold = 0.003,   # minimal distance for exponential
-    )
+# switch: standardize by baseline
+if True:
+  iave = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0,1))
+  vave = {m:mm.analysis.eeg.normalize_evoked_by_baseline(v, baseline=(0,1)) for m, v in vave.items()}
 
-    vieeg.append(v)
+# switch for absolute values
+if True:
+  iave.data = np.abs(iave.data)
+  for k in vave.keys():
+    vave[k].data = np.abs(vave[k].data)
 
-  # 3. save
-  for i, m in enumerate(methods):
-    vieeg[i].save(files[i], overwrite=overwrite, verbose="warning")
-
-compute_vieeg(overwrite=True)
+# plot
+%matplotlib qt
+mm.viz.plot_channel_grid(iave, vave, extent_mask=extent_mask, spurious_mask=spurious_mask, n_visible=4)
 ```
 
-```{python filename=intra_grova.py}
+
+```{python filename="intra_corr.py"}
+
+import numpy as np
+import mindmap as mm
+from scripts.data_manager import IntraManager
+
+# data manager
+dm = IntraManager("intra.config.yml")
+methods = ["wcset", "sloreta", "dspm", "mne"]
+sub = "48"
+mode = "temporal"
+sr = dm.get_subject(sub)
+
+# load data (True iEEG and virtual iEEGs)
+iave = sr.load("i-ave", task="spk")
+vave = {m:sr.load("v-ave", task="spk", desc=m) for m in methods}
+
+# --------------
+# Preprocessing
+# --------------
+
+# switch: standardize
+if True:
+  iave = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0,1))
+  vave = {m:mm.analysis.eeg.normalize_evoked_by_baseline(v, baseline=(0,1)) for m, v in vave.items()}
+
+if True:
+  iave = mm.analysis.eeg.normalize_evoked(iave)
+  vave = {m:mm.analysis.eeg.normalize_evoked(v) for m, v in vave.items()}
+
+# switch for absolute values
+if False:
+  iave.data = np.abs(iave.data)
+  for m, v in vave.items():
+    v.data = np.abs(v.data)
+
+# binarize
+iave_bin = mm.analysis.eeg.binarize_evoked(iave, threshold=0.5, method="max")
+vave_bin = {m: mm.analysis.eeg.binarize_evoked(vave[m], threshold=0.5, method="max") for m in methods}
+
+# switch: crop
+if True:
+  tmin, tmax = mm.analysis.eeg.find_spike_window(iave, baseline=(0,1.0), gap_fill_ms=200)
+  iave = iave.crop(tmin, tmax)
+  iave_bin = iave_bin.crop(tmin, tmax)
+  vave = {m:v.crop(tmin, tmax) for m, v in vave.items()}
+  vave_bin = {m:v_bin.crop(tmin, tmax) for m, v_bin in vave_bin.items()}
+
+# -----------------
+# Compute Metrics
+# ----------------
+
+metrics = mm.metric.MetricSuite(f"Intracranial EEG, sub-{sub}")
+for m in methods:
+  # correlation
+  corr = mm.analysis.eeg.compute_evoked_correlation(
+    iave, vave[m],
+    mode = mode,
+    method = "log-envelope",
+  )
+
+  # cosine
+  cos = mm.analysis.eeg.compute_evoked_cosine(
+    iave, vave[m],
+    mode = mode,
+  )
+
+  # confusion
+  confusion = mm.analysis.eeg.compute_evoked_confusion(
+    iave_bin, vave_bin[m],
+    mode = mode,
+  )
+
+  # scores
+  scores = mm.analysis.eeg.compute_evoked_scores(
+    iave_bin, vave_bin[m],
+    mode = mode,
+  )
+
+  metrics.register(m, "correlation", corr, chan=iave.ch_names)
+  metrics.register(m, "cosine", cos, chan=iave.ch_names)
+  metrics.register(m, "tp", confusion["tp"], chan=iave.ch_names)
+  metrics.register(m, "tn", confusion["tn"], chan=iave.ch_names)
+  metrics.register(m, "fp", confusion["fp"], chan=iave.ch_names)
+  metrics.register(m, "fn", confusion["fn"], chan=iave.ch_names)
+  metrics.register(m, "accuracy", scores["accuracy"], chan=iave.ch_names)
+  metrics.register(m, "f1", scores["f1"], chan=iave.ch_names)
+  metrics.register(m, "precision", scores["precision"], chan=iave.ch_names)
+  metrics.register(m, "recall", scores["recall"], chan=iave.ch_names)
+
+# -----
+# Plot
+# -----
+
+%matplotlib qt
+metrics.plot(metrics=["correlation", "cosine"], kind="scatter")
+```
+
+
+```{python filename="intra_cog.py"}
+
+```
+
+
+
+
+```{python filename="evaluate_vieeg.py"}
 #| output: false
 
 from pathlib import Path
+import numpy as np
 import pandas as pd
 import mindmap as mm
 from scripts.utils import loop, check_files
@@ -519,39 +480,100 @@ methods = ["wcset", "sloreta", "dspm", "mne"]
 # results file
 fgrova = Path("./results/grova.csv")
 fgrova.parent.mkdir(exist_ok=True)
+fcorr = lambda sub: Path(f"./results/sub-{sub}_correlation.npz")
+fcorr("").parent.mkdir(exist_ok=True)
 
 @loop(subjects=dm.subjects)
-def compute_grova_metrics(sub):
-  # load data
+def evaluate_vieeg(sub):
+  # load intracranial average (ground truth)
   sr = dm.get_subject(sub)
   iave = sr.load("i-ave", task="spk")
 
   # standardize
   iave = mm.analysis.eeg.normalize_evoked(iave, "global", "zscore")
+  #iave = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0,1))
 
   grova = []
+  corr = {}
+
+  # iterate over methods
   for m in methods:
+    # load virtual averages (estimates)
     vave = sr.load("v-ave", task="spk", desc=m)
 
+    # standardize
+    vave = mm.analysis.eeg.normalize_evoked(vave, "global", "zscore")
+    #vave = mm.analysis.eeg.normalize_evoked_by_baseline(vave, baseline=(0,1))  # maybe delete this one
+
+    # grova metrics
     g = {"subject": sub, "method": m}
     g = g | mm.analysis.eeg.compute_grova_metrics(
       iave, vave,
-      true_extent = 0.7,      # spike area = channels reaching above 70% max power
+      true_extent = 0.5,      # spike area = channels reaching above 70% max power
       spurious_dist = 0.01,   # spurious area = 10mm from spike area
     )
-
     grova.append(g)
 
+    # temporal correlation
+    corr[m] = mm.analysis.eeg.compute_evoked_correlation(
+      iave, vave, 
+      axis = 0,                 # correlation along channels (n_timepoints,) 
+      method = "log-envelope"   # correlation of absolute values
+    )
+    
   # save
   grova = pd.DataFrame(grova)
   mm.core.write_csv_row(fgrova, grova, index_cols=["subject", "method"], write_new=True)
+  np.savez(fcorr(sub), **corr)
 
-compute_grova_metrics()
+evaluate_vieeg()
 ```
 
-```{python filename=results_grova.py}
+```{python filename="compute_correlation_matrices.py"}
+#| output: false
+
+import numpy as np
+import mindmap as mm
+from scripts.utils import loop, check_files
+from scripts.data_manager import IntraManager
+
+# alias
+corr = mm.analysis.eeg.compute_evoked_corr_matrix
+
+# data manager
+dm = IntraManager("intra.config.yml")
+methods = ["wcset", "sloreta", "dspm", "mne"]
+
+# output file
+fcorr = lambda sub: f"./results/sub-{sub}_matrix_correlation.npz"
+
+# loop
+for sub in dm.subjects:
+  sr = dm.get_subject(sub)
+
+  # load ground truth
+  iave = sr.load("i-ave", task="spk")
+
+  # ground truth vs ground truth correlations
+  corr_matrices = {"true": corr(iave, iave, window=(1.5, 3.0))}
+
+  # correlation matrices
+  for i,m in enumerate(methods):
+    vave = sr.load("v-ave", task="spk", desc=m)
+
+    # estimation vs estimation correlations
+    corr_matrices[f"{m}_est"] = corr(vave, vave, window=(1.5, 3.0))
+
+    # ground truth vs estimation correlations
+    corr_matrices[f"{m}_eval"] = corr(iave, vave, window=(1.5, 3.0))
+
+  np.savez(fcorr(sub), **corr_matrices)
+```
+
+```{python filename="results_grova.py"}
 import pandas as pd
 from itables import show
+import itables.options as opt
 
 df = pd.read_csv("./results/grova.csv")
 df = df.sort_values("subject")
@@ -563,7 +585,7 @@ options = {
   "columnDefs": [{"visible": False, "targets": [0]}],
 
   # scroll option
-  "scrollY": "400px",
+  #"scrollY": "400px",
   "scrollCollapse": True,
   "paging": False,
 }
@@ -572,18 +594,32 @@ show(df.sort_values("subject"), **options)
 ```
 
 
-```{python}
-import itables
-itables.init_notebook_mode()
+```{python filename="results_correlation.py"}
+import numpy as np
+import matplotlib.pyplot as plt
+from scripts.data_manager import IntraManager
 
-df = itables.sample_pandas_dfs.get_countries()
+dm = IntraManager("intra.config.yml")
+methods = ["wcset", "sloreta", "dspm", "mne"]
 
-itables.show(
-  df.sort_values("region"),
-  rowGroup={"dataSrc":1},
-  columnDefs=[{"targets": 1, "visible": False}]
-)
+fig, axes = plt.subplots(2, 2, figsize=(14, 8), sharex=True)
+
+for ax, sub in zip(axes.flat, dm.subjects):
+    corr = np.load(f"./results/sub-{sub}_correlation.npz")
+    for method, series in corr.items():
+        ax.plot(series, label=method)
+    ax.set(title=f"sub-{sub}: iave-vave correlation", xlabel="Timepoint", ylabel="Correlation", ylim=(-1, 1))
+
+# Single shared legend outside the grid
+handles, labels = axes[0, 0].get_legend_handles_labels()
+fig.legend(handles, labels, loc="lower center", ncol=len(methods), bbox_to_anchor=(0.5, -0.05))
+
+plt.suptitle("iave-vave correlation", fontsize=14, fontweight="bold")
+plt.tight_layout()
+plt.show()
 ```
+
+
 
 ### Simulations - dataset
 
@@ -646,29 +682,268 @@ mm.simulation.make_sim_datset(reader, subject, labels, params, repetition=30)
 ```
 
 
-### Simultaneous EEG iEEG
-
-To evaluate the wCSET *in vivo* we have a simulataneous EEG iEEG dataset containing 20 subjects with temporal lobe epilepsy. (DESCRIPTION OF DATASET).
-
-## Head model
-
-To solve the forward problem of source reconstruction we implement a Boundary Element Method (BEM) through the MNE-Python pipeline. This consists in first reconstructing the brain surfaces (pial and white) using the recon-all pipeline from FreeSurfer. We use MNE-Python to generate a cortical constrained source space consisting in uniformily distributing sources accross the white surface and remove the sources on the medial walls as they do not belong to gray matter which causes problems when adding white matter tracts later on. The BEM surfaces (inner-skull, outer-skull, outer-skin) are extracted from the MRI using MNE-python which essentialy implements a wrapper of the Watershed algorithm implemented in FreeSurfer. The layers are associated into a BEM model with MNE-Python's default electrical conductivitie: 0.3 for the csf, 0.06 for the skull and 0.06 for the skin. For the subject of the simulation, a biosemi-256 montage template where we removed the electrodes on the cheecks is coregistered then projected to the skin surface. For the simulataneous EEG iEEG data, the electrodes were loclized  
 
 
-## Head model
 
-### Boundary Element Method
 
-### Connectome
+```{python filename="spatial_correlation_threshold.py"}
+import numpy as np
+import matplotlib.pyplot as plt
+import mindmap as mm
+from scripts.data_manager import IntraManager
 
-## Inverse problem
+# data manager
+dm = IntraManager("intra.config.yml")
+sub = "48"
 
-## EEG processing
+# load data
+sr = dm.get_subject(sub)
+iave = sr.load("i-ave", task="spk")
+vave = {m:sr.load("v-ave", task="spk", desc=m)
+        for m in ["wcset", "sloreta", "mne", "dspm"]}
+        
+# normalize (to count in std)
+iave = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0,1.0))
+for k in vave.keys():
+  vave[k] = mm.analysis.eeg.normalize_evoked_by_baseline(vave[k], baseline=(0,1.0))
 
-## Data analysis
+# compute correlation
+corr = {m:[] for m in vave.keys()}
+corr_avg = {m:[] for m in vave.keys()}
+for k in vave.keys():
+  c, times = mm.analysis.eeg.compute_evoked_correlation(iave, vave[k], mode="temporal", method="log-envelope", threshold=0)
+  corr[k] = c
+  corr_avg[k] = np.mean(c)
+  
+# plot
+plt.figure()
+for k in vave.keys():
+  plt.plot(iave.ch_names, corr[k])
 
-# Results
+print(f"Average: {corr_avg}")
+```
 
-# Discussion
+# temporal correlation
 
-# Conclusion
+```{python filename="correlation_matrices.py"}
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from scripts.data_manager import IntraManager
+
+# data manager
+dm = IntraManager("intra.config.yml")
+sub = "48"
+
+# load data
+sr = dm.get_subject(sub)
+iave = sr.load("i-ave", task="spk")
+matrices = np.load(f"results/sub-{sub}_matrix_correlation.npz", allow_pickle=True)
+
+# extract data
+ch_names = iave.ch_names
+plot_names = matrices.files
+values = [np.abs(matrices[n]) for n in plot_names]
+
+
+def visualize_correlations(matrices, channel_names, titles=None):
+  """
+  Visualizes a list of matrices in separate interactive windows.
+  """
+  minimum = 0
+  for m in matrices:
+    minimum = min(m.min(), minimum)
+
+  for i, matrix in enumerate(matrices):
+    # create new figure
+    fig, ax = plt.subplots(figsize=(8, 7))
+
+    # fixed colormap from -1 to 1 or 0 to 1
+    if minimum < 0:
+      im = ax.imshow(matrix, cmap='RdBu_r', vmin=-1, vmax=1)
+    else:
+      im = ax.imshow(matrix, cmap="Reds", vmin=0, vmax=1)
+
+    # add colorbar
+    cbar = fig.colorbar(im, ax=ax)
+    cbar.set_label("Correlation ($r$)", rotation=270, labelpad=15)
+
+    # set titles
+    title = titles[i] if titles else f"Correlation Matrix {i+1}"
+    ax.set_title(title)
+
+    # Handle Tick labels
+    ticks = np.arange(len(channel_names))
+    ax.set_xticks(ticks)
+    ax.set_yticks(ticks)
+    ax.set_xticklabels(channel_names, rotation=90, fontsize=8)
+    ax.set_yticklabels(channel_names, fontsize=8)
+
+    # optional: grid lines to help distinguish cells
+    ax.set_xticks(ticks - 0.5, minor=True)
+    ax.set_yticks(ticks - 0.5, minor=True)
+    ax.grid(which="minor", color="w", linestyle="-", linewidth=0.5)
+    ax.tick_params(which="minor", bottom=False, left=False)
+
+    plt.tight_layout()
+
+  plt.show()
+
+%matplotlib qt
+visualize_correlations(values, ch_names, plot_names)
+```
+
+# global field power
+
+```{python filename="global_field_power.py"}
+import mindmap as mm
+from scripts.data_manager import IntraManager
+
+# data manager 
+dm = IntraManager("intra.config.yml")
+sub = "48"
+
+# load data
+sr = dm.get_subject(sub)
+iave = sr.load("i-ave", task="spk")
+vave = {m:sr.load("v-ave", task="spk", desc=m)
+        for m in ["wcset", "sloreta", "mne", "dspm"]}
+
+# plot global field power
+%matplotlib qt
+mm.viz.plot_gfp_comparison(iave, vave, norm_baseline=(0,1.0)).show()
+```
+
+
+# Relative Energy Map
+
+
+```{python filenam="relative_energy_map.py"}
+import mindmap as mm
+
+from scripts.data_manager import IntraManager
+
+# data manager
+dm = IntraManager("intra.config.yml")
+sub = "48"
+
+# load data
+sr = dm.get_subject(sub)
+iave = sr.load("i-ave", task="spk")
+vave = {m:sr.load("v-ave", task="spk", desc=m) for m in ["wcset", "sloreta", "mne", "dspm"]}
+
+tmin, tmax = mm.analysis.eeg.find_spike_window(iave, baseline=(0,1.0), gap_fill_ms=200)
+print(f"Estimated spike window: {tmin:.3f} - {tmax:.3f}")
+
+# combine evokeds
+evokeds = vave.copy()
+evokeds["True iEEG"] = iave
+
+# normalize
+for k in evokeds.keys():
+  evokeds[k] = mm.analysis.eeg.normalize_evoked_by_baseline(evokeds[k], baseline=(0,1.0))
+
+# visualize relative energy map
+%matplotlib qt
+for k, evk in evokeds.items():
+  fig, ax = mm.viz.plot_evoked_rem(iave, evk, rng=(tmin, tmax), mode="spatial")
+  fig.suptitle(f"sub-{sub}: {k}")
+plt.show()
+```
+
+
+
+```{python filename="center_of_gravity.py"}
+import mindmap as mm
+from scripts.data_manager import IntraManager
+
+# data manager
+dm = IntraManager("intra.config.yml")
+sub = "12"
+
+# load data
+sr = dm.get_subject(sub)
+src = sr.load("src")
+iave = sr.load("i-ave", task="spk")
+vave = {m:sr.load("v-ave", task="spk", desc=m) for m in ["wcset", "sloreta", "mne", "dspm"]}
+
+# combine evokeds
+evokeds = vave.copy()
+evokeds["True iEEG"] = iave
+
+# normalize
+iave = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0,1.0))
+for k in vave.keys():
+  vave[k] = mm.analysis.eeg.normalize_evoked_by_baseline(vave[k], baseline=(0,1.0))
+
+
+# visualize center of gravity
+mm.viz.plot_evoked_cog(evokeds, ref_name="True iEEG", source_space=src, rng=(1.9, 2.5), center_ref=False).show()
+```
+
+
+
+
+```{python filename="center_of_gravity.py"}
+import numpy as np
+import matplotlib.pyplot as plt
+import mindmap as mm
+from scripts.data_manager import IntraManager
+
+# data manager
+dm = IntraManager("intra.config.yml")
+sub = "34"
+
+# load data
+sr = dm.get_subject(sub)
+iave = sr.load("i-ave", task="spk")
+vave = {m:sr.load("v-ave", task="spk", desc=m)
+        for m in ["wcset", "sloreta", "mne", "dspm"]}
+        
+# normalize (to count in std)
+iave = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0,1.0))
+for k in vave.keys():
+  vave[k] = mm.analysis.eeg.normalize_evoked_by_baseline(vave[k], baseline=(0,1.0))
+
+# compute correlation
+corr = {m:[] for m in vave.keys()}
+corr_avg = {m:[] for m in vave.keys()}
+for k in vave.keys():
+  c, times = mm.analysis.eeg.compute_evoked_correlation(iave, vave[k], mode="spatial", method="pearson", threshold=3)
+  corr[k] = c
+  corr_avg[k] = np.mean(c)
+  
+# plot
+plt.figure()
+for k in vave.keys():
+  plt.plot(times, corr[k])
+
+print(f"Average: {corr_avg}")
+```
+
+```{python filename="spatial_correlation_threshold.py"}
+import numpy as np
+import matplotlib.pyplot as plt
+import mindmap as mm
+from scripts.data_manager import IntraManager
+
+# data manager
+dm = IntraManager("intra.config.yml")
+sub = "34"
+
+# load data
+sr = dm.get_subject(sub)
+iave = sr.load("i-ave", task="spk")
+vave = {m:sr.load("v-ave", task="spk", desc=m)
+        for m in ["wcset", "sloreta", "mne", "dspm"]}
+        
+# normalize (to count in std)
+iave = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0,1.0))
+for k in vave.keys():
+  vave[k] = mm.analysis.eeg.normalize_evoked_by_baseline(vave[k], baseline=(0,1.0))
+
+%matplotlib qt 
+mm.viz.plot_channel_grid(iave, vave).show()
+```
+
+

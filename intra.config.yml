@@ -1,6 +1,7 @@
 # data directories
 DIR_RAW: /media/nino/DATA/INTRA                            # Dataset directory (raw)
 DIR_FS: /media/nino/DATA/INTRA/derivatives/freesurfer     # freesurfer directory
+DIR_CHARM: /media/nino/DATA/INTRA/derivatives/charm
 DIR_MM: /media/nino/DATA/INTRA/derivatives/mindmap        # mindmap directory
 DIR_SPK: /media/nino/DATA/INTRA/derivatives/spike_trials  # EEG spike directory
 
@@ -13,6 +14,7 @@ STD_THALclut: /media/nino/DATA/atlas/Thalamic_Nuclei/Thalamic_Nuclei-ColorLUT.tx
 
 # others
 FS_HOME: /home/nino/Softwares/freesurfer  # Freesurfer home directory
+BEM_CONFIG: charm
 
 # dataset infos
 NAME: intra

@@ -1,0 +1,308 @@
+---
+title: Preprocessing of SIMU
+
+author:
+  - name: Nino Herve
+    affiliation: Université de Lausanne (UNIL)
+    roles: writing
+  - name: Nicolas Roehri
+    affiliation: Epilepsy
+  - name: Yasser Alemán-Goméz
+    affiliation: Connectomics
+  - name: Patric Hagmann
+
+number-sections: true
+format: 
+  html:
+    code-fold: true
+
+execute:
+  echo: false
+  freeze: true
+
+abstract:
+  This file let's you run all the simulation required to achieve the results presented index.qmd.
+
+keywords:
+  - Source Imaging
+  - Source Reconstruction
+  - Connectomics
+  - Brain Graph Signal Processing
+
+bibliography: references.bib
+---
+
+
+# 1. Environment & Data Acquisition
+
+
+## Data Procurment
+
+## Computational Environment
+
+# 3. Anatomical & Forward Modeling
+
+# Cortical Surface Modeling
+
+```{python filename="MultiConn_parcellation.py"}
+# | output: false
+
+import mindmap as mm
+from scripts.utils import check_files
+from scripts.data_manager import SimfManager
+
+overwrite = False
+
+# data manager
+fconfig = "simf.config.yml"
+dm = SimfManager(fconfig)
+
+# output files
+entities = dict(space="fs", segmentation="multiconn2022", scale="4")
+fseg = dm.get_path("10", "dseg", **entities)
+fclut = dm.get_path("10", "dseg", extension=".txt", **entities)
+
+if check_files([fseg, fclut]) and not overwrite:
+  raise FileExistsError("Output file already exists!")
+
+# 1. Run the MultiConn parcellation pipeline
+multiconn = mm.anatomy.parcellation.parcellate_multiconn(
+  sub = "10",
+  fconfig = fconfig,
+  margin = 2,       # White matter extension in [mm]
+  thresh = 0.05,    # Probability threshold to discretize thalamus atlas
+  verbose = 1,
+)
+
+# 2. Save data
+multiconn.save(
+  fseg,
+  fclut,
+)
+```
+
+```{python filename="setup_source_space.py"}
+# | output: false
+
+import mne
+import mindmap as mm
+from scripts.utils import check_files
+from scripts.data_manager import SimfManager
+
+overwrite = True
+sub = "10"
+
+# data manager
+dm = SimfManager("simf.config.yml")
+
+# output files
+fsrc = dm.get_path(sub, "src")
+
+if check_files([fsrc]) and not overwrite:
+  raise FileExistsError("Output file already exists!")
+
+# 0. Load data
+ctx = dm.load(sub, "ctx", space="fs", segmentation="multiconn2022", scale="4")
+ras2tkras = dm.load(sub, "ras2tkras")
+
+source_space = mne.setup_source_space(
+  subject = f"sub-{sub}",
+  spacing = "oct6",
+  surface = "white",
+  add_dist = True,
+  subjects_dir = dm.config["DIR_FS"],
+  n_jobs = 10,
+  verbose = "warning",
+)
+
+source_space = mm.anatomy.source_space.filter_dipoles_by_nifti_mask(source_space, ctx, ras2tkras)
+
+source_space.save(fsrc, overwrite=overwrite)
+```
+
+
+```{python filename="bem_layers.py"}
+# | output: false
+
+import mindmap as mm
+from scripts.utils import check_files
+from scripts.data_manager import SimfManager
+
+# options
+overwrite = False
+
+# data manager
+dm = SimfManager("simf.config.yml")
+sub = "10"
+
+# output files
+fseg = dm.get_path(sub, "seg")
+
+if check_files([fseg]) and not overwrite:
+  raise FileExistsError("Output file already exists!")
+
+# ---------------------
+# Tissue segmentation
+# ---------------------
+
+# input files
+ft1 = dm.get_path(sub, "T1w")
+
+# 1. Run charm pipeline
+mm.anatomy.segmentation.run_charm(
+  subject = sub,
+  t1_file = ft1,
+  charm_dir = dm.roots["charm"],
+  overwrite = overwrite,
+)
+
+# -----------------
+# Mesh generation
+# -----------------
+
+# 0. Load data
+charm = dm.load(sub, "seg")
+ras2tkras = dm.load(sub, "ras2tkras")
+vol_info = dm.load(sub, "vol-info")
+bem_labels = dm.get_bem_labels()
+
+# 1. Build BEM layers from CHARM segmentation
+layers = mm.anatomy.forward.build_bem_layers(charm, bem_labels, n_smooth=20)
+layers = mm.anatomy.forward.bem_transform(layers, ras2tkras)
+
+# 2. Save layers in freesurfer/{subject}/bem
+folder = dm.roots["fs"]/f"sub-{sub}"/"bem"
+folder.mkdir(exist_ok=True)
+mm.anatomy.forward.save_bem_as_freesurfer(folder, layers, vol_info, overwrite=True)
+```
+
+```{python filename="eeg_template_coregistration.py"}
+# | output: false
+
+import mindmap as mm
+from scripts.utils import check_files
+from scripts.data_manager import SimfManager
+
+overwrite = False
+
+# data manager
+dm = SimfManager("simf.config.yml")
+sub = "10"
+
+# output files
+ftmp = dm.get_path(sub, "ave-temp")
+
+if check_files([ftmp]) and not overwrite:
+  raise FileExistsError("Output file already exists!")
+
+# Make template and coregister to head model
+ave_tmp = mm.analysis.functional.eeg.build_eeg_template(
+  duration = 1,         # in [s]
+  frequency = 250,
+  montage = "spike",    # EGI 256 channel cap with removed cheeks
+)
+
+ave_tmp = mm.anatomy.forward.template_coregistration(
+  ave_tmp,
+  f"sub-{sub}",
+  dm.roots["fs"],
+  iterations = 0
+)
+
+# save coregistered template
+ave_tmp.save(ftmp, overwrite=overwrite)
+```
+
+```{python filename="forward_problem.py"}
+# | output: false
+
+import mne
+import mindmap as mm
+from scripts.utils import check_files
+from scripts.data_manager import SimfManager
+
+overwrite = False
+
+# data manager
+dm = SimfManager("simf.config.yml")
+sub = "10"
+
+# output files
+ffwd_sim = dm.get_path(sub, "fwd", desc="sim")
+ffwd_inv = dm.get_path(sub, "fwd", desc="inv")
+
+if check_files([ffwd_sim, ffwd_inv]) and not overwrite:
+  raise FileExistsError("Output file already exists!")
+
+# 0. Load data
+ave = dm.load(sub, "ave-temp")
+trans = dm.load(sub, "eeg-trans")
+src = dm.load(sub, "src")
+
+# ----------------------------------------------------
+# 1. Compute forward for simulations
+# ¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+# ----------------------------------------------------
+
+# 1.1 Assemble BEM 
+model = mne.make_bem_model(
+  subject = f"sub-{sub}",
+  subjects_dir = dm.roots["fs"],
+  conductivity = [0.3, 0.006, 0.3],
+  ico = None,
+  verbose = "warning",
+)
+
+bem = mne.make_bem_solution(model)
+
+# 1.2 Compute forward solution
+forward = mne.make_forward_solution(
+  info = ave.info,
+  trans = trans,
+  src = src,
+  bem = bem,
+  meg = False,
+  eeg = True,
+  verbose = "warning",
+)
+
+# 1.3 Save solution
+mne.write_forward_solution(ffwd_sim, forward, overwrite, verbose="warning")
+
+# ----------------------------------------------------
+# 2. Compute forward for source reconstruction
+# ¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+# Change conductivy ratios to introduce model errors
+# to avoid commiting  "inverse crimes".
+# ----------------------------------------------------
+
+# 2.1 Assemble BEM 
+model = mne.make_bem_model(
+  subject = f"sub-{sub}",
+  subjects_dir = dm.roots["fs"],
+  conductivity = [0.03, 0.006, 0.03],   # different conductivities to generate 10% errors
+  ico = None,
+  verbose = "warning",
+)
+
+bem = mne.make_bem_solution(model)
+
+# 2.2 Compute forward solution
+forward = mne.make_forward_solution(
+  info = ave.info,
+  trans = trans,
+  src = src,
+  bem = bem,
+  meg = False,
+  eeg = True,
+  verbose = "warning",
+)
+
+# 2.3 Save solution
+mne.write_forward_solution(ffwd_inv, forward, overwrite, verbose="warning")
+```
+
+
+```{python filename="connectivity.py"}
+# | output: false
+```

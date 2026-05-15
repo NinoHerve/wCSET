@@ -86,8 +86,8 @@ done
 export FREESURFER_HOME=$(yq '.FS_HOME' "$CONFIG_FILE")
 source "$FREESURFER_HOME/SetUpFreeSurfer.sh"
 
-export SUBJECTS_DIR=$(yq '.FS_DIR' "$CONFIG_FILE")
-export DATASET_DIR=$(yq '.DS_DIR' "$CONFIG_FILE")
+export SUBJECTS_DIR=$(yq '.DIR_FS' "$CONFIG_FILE")
+export DATASET_DIR=$(yq '.DIR_RAW' "$CONFIG_FILE")
 
 # check if dataset dir exists
 if [ ! -d "$DATASET_DIR" ]; then

@@ -1,22 +1,24 @@
 # data directories
 DIR_RAW: /media/nino/DATA/SIMF                            # Dataset directory (raw)
 DIR_FS: /media/nino/DATA/SIMF/derivatives/freesurfer     # freesurfer directory
+DIR_CHARM: /media/nino/DATA/SIMF/derivatives/charm
 DIR_MM: /media/nino/DATA/SIMF/derivatives/mindmap        # mindmap directory
-DIR_SPK: /media/nino/DATA/SIMF/derivatives/spike_trials  # EEG spike directory
+DIR_SIM: /media/nino/DATA/SIMF/derivatives/simulations   # EEG spike directory
 DIR_CMP: /media/nino/DATA/SIMF/derivatives/cmp-v3.0.3
 
 # templates
-STD_CON: /media/nino/DATA/atlas/probconnatlas/wm.connatlas.scale4.h5
-STD_LAUSL: /media/nino/DATA/atlas/laus2018/lh.atlas-laus2018_desc-scale4.annot
-STD_LAUSR: /media/nino/DATA/atlas/laus2018/rh.atlas-laus2018_desc-scale4.annot
-STD_MNI: /media/nino/DATA/templates/mni_icbm152_nlin_asym_09c_nifti/mni_icbm152_nlin_asym_09c/mni_icbm152_t1_tal_nlin_asym_09c.nii
-STD_THAL: /media/nino/DATA/atlas/Thalamic_Nuclei/Thalamus_Nuclei-HCP-4DSPAMs.nii.gz
-STD_THALclut: /media/nino/DATA/atlas/Thalamic_Nuclei/Thalamic_Nuclei-ColorLUT.txt
+REF_CON: /media/nino/DATA/atlas/probconnatlas/wm.connatlas.scale4.h5
+REF_LAUSL: /media/nino/DATA/atlas/laus2018/lh.atlas-laus2018_desc-scale4.annot
+REF_LAUSR: /media/nino/DATA/atlas/laus2018/rh.atlas-laus2018_desc-scale4.annot
+REF_MNI: /media/nino/DATA/templates/mni_icbm152_nlin_asym_09c_nifti/mni_icbm152_nlin_asym_09c/mni_icbm152_t1_tal_nlin_asym_09c.nii
+REF_THAL: /media/nino/DATA/atlas/Thalamic_Nuclei/Thalamus_Nuclei-HCP-4DSPAMs.nii.gz
+REF_THALclut: /media/nino/DATA/atlas/Thalamic_Nuclei/Thalamic_Nuclei-ColorLUT.txt
 
 MONTAGE: /media/nino/DATA/SPIKE/derivatives/cartool-v3.80/sub-pat44/ses-preop/eeg/
 
 # others
 FS_HOME: /home/nino/Softwares/freesurfer  # Freesurfer home directory
+BEM_CONFIG: charm
 
 # dataset infos
 NAME: simf
