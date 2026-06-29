@@ -32,18 +32,38 @@ keywords:
 bibliography: references.bib
 ---
 
-# 1. Introduction
+# Introduction
 
-<!-- The following section (A compact basis for functional Data) should be in the intro -->
+**Electroencephalography (EEG)** is widely utilized for its unparalleled temporal resolution, which allows researchers to study neural dynamics _in vivo_. However, as measurements are primarily recorded at the scalp, the technique suffers from poor spatial resolution. In 1995, the **Minimum Norm Estimate (MNE)** was introduced to project EEG data onto a cortical surface modeled from individual MRI. This approach, broadly termed **source reconstruction**, aimed to combine the high temporal resolution of EEG with the spatial precision of structural imaging.
 
-**A Compact Basis for Functional Data**
+Despite three decades of evolution into a diverse array of variants (e.g., sLORETA, eLORETA, dSPM, LCMV), these methods are still primarily used to identify isolated brain regions — a practice often called **source localization**. This focus on localization overlooks a fundamental shift in modern neuroscience toward **connectomics**. As the "localizationist" view reaches its theoretical limits, it is being superseded by **connectivity neuroscience**, which treats the brain as an integrated system of interacting networks rather than a collection of independent regions.
 
-The GFT provides a highly **compact basis** for functional brain data. In simple terms, this means that complex patterns of brain activity are not random; they tend to follow the underlying structural pathways.
+Current source reconstruction methods are largely ill-suited for this shift because they rely on the assumption of **independent sources**. This assumption is defensible when activity is genuinely focal — for example, identifying the cortical onset of a sensory stimulus or an epileptic spike — but breaks down as soon as multiple brain regions are simultaneously involved. Without a structured prior on source interactions, the reconstruction spreads activity artificially across the cortex, a phenomenon known as the **leakage effect**, which conflates true network propagation with artefactual bleed.
 
-By projecting functional signals (e.g., EEG source activity) onto this structural eigenbase, we find that a large portion of the signal's energy is often concentrated in a small subset of low-frequency eigenvectors. These "smooth" eigenvectors represent global patterns of integration across the connectome. Consequently, the GFT allows us to represent high-dimensional brain activity using only a few significant structural modes, effectively separating biologically organized signal from stochastic noise.
+Several strategies have been proposed to address this. Some methods incorporate functional priors from fMRI to constrain expected source interactions [ref]. Others take an agnostic approach, jointly estimating source activities and their unknown covariance structure from the data itself — a family exemplified by **BC-VARETA** [ref]. <!-- Explain limitations of these methods? --> A third strategy draws on the growing body of evidence for **structure–function coupling**: since neural activity is known to propagate along the brain's structural scaffolding, the connectome estimated from diffusion MRI tractography provides a principled and subject-specific prior for source reconstruction.
+
+**Graph Signal Processing (GSP)** provides the mathematical machinery to exploit this coupling. By applying eigendecomposition to the connectome's graph Laplacian, one obtains an orthonormal set of **brain harmonics** — eigenvectors ordered by their associated graph frequency. Low-frequency harmonics capture smooth, globally integrated patterns of activity; high-frequency harmonics encode more locally segregated ones. Projecting source activity onto this eigenbasis — the **Graph Fourier Transform (GFT)** — yields a compact representation termed the **connectome spectrum**. Crucially, recent work has demonstrated that both fMRI and EEG source activity are highly compact in this domain: activity energy concentrates predominantly in low-frequency harmonics and decays following an inverse curve, reflecting the tendency of brain dynamics to align with the smooth, integrative modes of the structural connectome [refs]. **Rué-Queralt et al. (2024)** leveraged this principle to introduce **Connectome Spectrum Electromagnetic Tomography (CSET)**: a source reconstruction method that enforces an L₁ sparsity prior directly in the connectome spectrum, restricting solutions to a small number of active harmonics and thereby embedding structural organisation into the reconstruction.
+
+Similar concepts have been explored using the **Beltrami-Laplace operator** applied to the cortical mesh rather than the connectome's graph Laplacian [ref]. This substitutes white matter tractography with the local geometry of the gray matter surface, capturing fine-grained short-range connectivity at the expense of the long-range structural pathways defined by white matter tracts. Interestingly, current evidence suggests that spectral bases derived from brain geometry yield comparably compact representations of neural signals as those from full structural connectomes [refs] — a finding that suggests compact signal representations are a property of anatomically grounded structural graphs rather than of any particular connectivity modality. **Pok Him Siu et al.** [ref] further proposed a weighted spectral method, but based on SVD truncation of the forward operator rather than L₁ or L₂ regularization. In their framework, weights act as a hard spectral filter — determining which components of the source reconstruction are retained — rather than as a continuous penalty embedded in an optimization problem. Consequently, the reconstruction does not seek a solution that optimally conforms to the desired spectral distribution; it applies a fixed filter post hoc.
+
+CSET and these related methods share a common limitation: they do not distinguish between biologically meaningful harmonics and those dominated by noise. The connectome spectrum contains a **degenerate mid-frequency region** where eigenvalues are densely packed and poorly defined, making individual harmonics subject-variable and unreliable [ref]. In this work, we address this with **weighted CSET (wCSET)**, which replaces the L₁ prior with a **weighted L₂ prior** whose penalties follow a U-shaped profile across the spectrum — derived from the **gap-spectrum** [Sibes et al.] — assigning low penalties to the integrative low-frequency and segregative high-frequency harmonics, and high penalties to the degenerate mid-frequency region. Unlike the post-hoc filtering of Pok Him Siu et al., wCSET integrates this weighting directly into the optimization, yielding solutions that are simultaneously data-consistent and structurally informed in a principled sense.
+
+A critical gap in this body of work, however, is the absence of robust validation. **Rué-Queralt et al.** validated CSET by correlating reconstructed source activity with fMRI data from the same task. Yet fMRI measures hemodynamic responses — blood oxygenation changes driven by neurovascular coupling — which reflect neural activity only indirectly and with significant temporal blurring. The resulting mismatch between EEG source reconstructions and fMRI extends well beyond what correlation can account for, and constitutes a weak proxy for the electrophysiological ground truth these methods aim to reconstruct. The remaining works validate through source localization in epilepsy patients. While some report improvements in estimated source extent, this evaluation criterion is fundamentally misaligned with the ambition of connectivity-informed methods: their value lies not in refining the spatial footprint of a focal source, but in capturing the dynamic propagation of activity across interconnected networks — a capability that localization accuracy simply cannot measure.
+
+The primary barrier to a more appropriate validation is therefore the lack of a **ground truth for interconnected neural dynamics**. We address this gap by reviving and extending the framework proposed by **Grova et al. (2016)** <!-- Site Maria's work -->, which exploits simultaneous EEG and intracranial EEG (iEEG) recordings. Unlike fMRI or localization benchmarks, iEEG directly measures electrical potential within the brain — free from neurovascular coupling, skull attenuation, and temporal blurring — making it the only available electrophysiological ground truth for dynamic source reconstruction. By projecting EEG-reconstructed sources onto iEEG electrode locations, we obtain two directly comparable datasets — **estimated iEEG** and **true iEEG** — providing an electrophysiologically grounded benchmark for evaluating source reconstruction beyond localization.
+
+We utilize this framework alongside a clinical localization cohort to evaluate **CSET** and **wCSET** across three complementary studies:
+
+- **Study I:** Using simulations of spontaneous source diffusion via dMRI-based structural connectivity, we demonstrate that while standard methods accurately localize a source's _onset_, connectivity-informed methods are significantly superior at capturing its _propagation_. We also assess the robustness of these methods against erroneous connectivity data.
+
+- **Study II:** Using a clinical epilepsy dataset where post-surgical success defines the ground truth, we show that connectivity-informed methods preserve localization accuracy comparable to gold-standard clinical algorithms — confirming that the gain in network sensitivity does not come at the cost of focal precision.
+
+- **Study III:** Using simultaneous EEG/iEEG recordings, we validate source reconstruction directly against intracranial measurements, demonstrating the ability of connectivity-informed methods to map dynamic neural networks beyond simple point-source localization.
+
+Together, these studies establish wCSET as a principled and clinically viable tool for reconstructing distributed brain dynamics, and introduce a multi-level validation framework that moves the field beyond localization as the sole benchmark for source imaging.
 
 
-# 2. Materials and Methods
+# Materials and Methods
 
 ## 2.1 Data Acquisition and Datasets
 
@@ -63,7 +83,7 @@ To simulate physiological signal attenuation, a decay factor of **0.25** was a
 
 ### 2.1.2 Clinical Dataset A
 <!-- 20 patients with focal epilepsy (Study 2) -->
-To validate electroencphalographic source localizsation (ESL) clinicaly, we used the data from [ref] constituting of 44 patietns with pharmocoresistant focal epilepsy. The patients underwent a first resective surgery validated by 12-month postsurgical outcome. 28 patients had completed seizure freedom and were selected for this study since we can assume that the resected section corresponded to the epileptic tissue and use it as ground truth for our localization scheme. The data consisted of a T1-weigthed MRI and a resting state EEG recording before surgery, as well as a post-surgery T1-weighted MRI. Interictal spikes were identified on the EEG and averaged over their tip. Pre and post-surgery MRI were coregistered using affine transformation.
+To validate electroencephalographic source localization (ESL) clinically, we used the data from [ref] constituting of 44 patients with pharmacoresistant focal epilepsy. The patients underwent a first resective surgery validated by 12-month postsurgical outcome. 28 patients had completed seizure freedom and were selected for this study since we can assume that the resected section corresponded to the epileptic tissue and use it as ground truth for our localization scheme. The data consisted of a T1-weighted MRI and a resting state EEG recording before surgery, as well as a post-surgery T1-weighted MRI. Interictal spikes were identified on the EEG and averaged over their tip. Pre and post-surgery MRI were coregistered using affine transformation.
 
 
 ### 2.1.3 Clinical Dataset B
@@ -94,12 +114,12 @@ The forward problem involves calculating the electrical potential at the sensor 
 
 While MNE-Python typically relies on FreeSurfer’s watershed algorithm for surface extraction, this approach often yields sub-optimal geometries for BEM. To improve the accuracy of the head model, we implemented a custom pipeline: brain tissues were segmented using the **SimNIBS CHARM** pipeline, and BEM surfaces were subsequently constructed from these segmentations via a **sphere-fitting method** (see Figure X in the Annex for a comparison of these approaches). Since the EEG sensors were pre-co-registered to the T1-weighted MRI, they were intrinsically aligned with the resulting head model. The final forward solution (the gain matrix) was computed using MNE-Python.
 
-A second forward solution was computed with conductivity values 0.03 S/m for the brain and scalp, and 0.006 S/m for the skull. This second forward solution is used during source reconstruction of simulated data to implement some voluntary error between the true head model and the used head model as the true head model is rarely being used in real setups. Using the same forward solution for simulation and reconstruction is reffered to as the inverse crime [ref]. The difference between the too forward models generate an error of around 10% (see Figure X).
+A second forward solution was computed with conductivity values 0.03 S/m for the brain and scalp, and 0.006 S/m for the skull. This second forward solution is used during source reconstruction of simulated data to implement some voluntary error between the true head model and the used head model as the true head model is rarely being used in real setups. Using the same forward solution for simulation and reconstruction is referred to as the inverse crime [ref]. The difference between the two forward models generate an error of around 10% (see Figure X).
 
 ### 2.3.3 Connectivity Matrices
 <!-- The "Prior". Definition of Empirical connectomes (Study 1) and Surrogate matrices (Studies 1, 2, and 3) -->
 
-In this work, the brain is modeled as a graph (or connectome) where nodes represent localized brain regions - specifically dipoles in our source space - and edges represent the structural scaffolding between them. For the Connectome Spectrume Electromagnetic Tomography (CSET) source reconstruction method and it's weighted version (wCSET), we utilize a structural connectome, where edges represent physical anatomical links.
+In this work, the brain is modeled as a graph (or connectome) where nodes represent localized brain regions - specifically dipoles in our source space - and edges represent the structural scaffolding between them. For the Connectome Spectrum Electromagnetic Tomography (CSET) source reconstruction method and its weighted version (wCSET), we utilize a structural connectome, where edges represent physical anatomical links.
 
 **Empirical Connectomes**
 
@@ -124,7 +144,7 @@ In the simulation, one could select the connectome used to make the simulation f
 - **Deletion**: Randomly delete an edge
 - **Addition**: Randomly add an edge
 
-We then consider a maximum number of sabotage to apply, which correponds to the number of connections in the connectome. This threshold is then set to be 100% sabotage. In the case of permutation, it's means we have applied as many permutations as there are edges. For the Deletion it means we don't have any more edges. For the addition it means we have double the amount of total edges. While 0% correspond to the original connectome.
+We then consider a maximum number of sabotage to apply, which corresponds to the number of connections in the connectome. This threshold is then set to be 100% sabotage. In the case of permutation, it means we have applied as many permutations as there are edges. For the Deletion it means we don't have any more edges. For the addition it means we have double the amount of total edges. While 0% correspond to the original connectome.
 
 **The Graph Fourier Transform (GFT)**
 
@@ -163,7 +183,7 @@ where $\mathbf L$ is the lead-field matrix and $\epsilon$ represents additiv
 
 From a Bayesian perspective, $\mathbf s$ is treated as a random variable with a prior distribution $P(\mathbf s)$. Assuming a Gaussian prior $\mathbf s \sim \mathcal N(0, \Sigma_{\mathbf s})$, reconstruction becomes a Maximum A Posteriori (MAP) estimation, leading to the optimization problem:
 $$
-\mathbf s^* = \text{arg }\underset{\mathbf s}{\text{min}}\underbrace{\lVert\mathbf y-\mathbf L\mathbf s\rVert_2^2}_{\text{Data Fidelity}} + \lambda\underbrace{\lVert \mathbf C \mathbf s\rVert_p^p}_{\text{Regulaization}} \tag{1}
+\mathbf s^* = \text{arg }\underset{\mathbf s}{\text{min}}\underbrace{\lVert\mathbf y-\mathbf L\mathbf s\rVert_2^2}_{\text{Data Fidelity}} + \lambda\underbrace{\lVert \mathbf C \mathbf s\rVert_p^p}_{\text{Regularization}} \tag{1}
 $$
 
 Here, $\lambda$ is the regularization parameter balancing data fit with prior assumptions. The matrix $\mathbf C$ acts as a weighting matrix derived from the prior covariance, such that $\mathbf C^T\mathbf C = \mathbf \Sigma_{\mathbf s}^{-1}$.
@@ -185,7 +205,11 @@ sLORETA and dSPM apply a post-hoc standardization which ultimately also resolves
 
 Connectome Spectrum Electromagnetic Tomography (**CSET**) addresses the independence limitation, by operating in a **component-based space**. Instead of solving for activity in the brain's physical space, CSET projects the activity onto the **eigenmodes of the connectome** ($U$). This transforms the problem into the "connectome spectrum" space, where the prior can be more effectively described.
 
-Given that the connectome spectrum is known to be compact, CSET enforces sparsity by applying an $l_1$​-norm to the regularizer. Let $\mathbf {\hat s}$ represent the spectrum of $\mathbf s$ (where $\mathbf s = \mathbf U \mathbf {\hat s}). Equation (1) is then modified to: $$\mathbf {\hat s}^* = \text{arg }\underset{\mathbf s}{\text{min}}\lVert\mathbf y-\mathbf L\mathbf U \mathbf {\hat s}\rVert_2^2 + \lambda\lVert \mathbf {\hat s}\rVert_1 \tag{2}$$
+Given that the connectome spectrum is known to be compact, CSET enforces sparsity by applying an $l_1$​-norm to the regularizer. Let $\mathbf {\hat s}$ represent the spectrum of $\mathbf s$ (where $\mathbf s = \mathbf U \mathbf {\hat s}). Equation (1) is then modified to: 
+$$
+\mathbf {\hat s}^* = \text{arg }\underset{\mathbf s}{\text{min}}\lVert\mathbf y-\mathbf L\mathbf U \mathbf {\hat s}\rVert_2^2 + \lambda\lVert \mathbf {\hat s}\rVert_1 \tag{2}
+$$
+
 The physical brain activity is then recovered via $\mathbf s^* = \mathbf U\mathbf{\hat s}^*$
 
 **weighted CSET**
@@ -203,7 +227,7 @@ However, recent research suggests that high-frequency connectome eigenmodes are 
 Our simulations indicate that CSET is robust to connectome variations, suggesting the reconstruction identifies integrative and segregative harmonics. Consequently, we propose weighting the harmonics based on the gap-spectrum to suppress the "degenerative" region while boosting integrative and segregative components. Equation (2) thus becomes:
 
 $$
-\mathbf {\hat s}^* = \text{arg }\underset{\mathbf s}{\text{min}}\lVert\mathbf y-\mathbf L\mathbf U \mathbf {\hat s}\rVert_2^2 + \lambda\lVert \mathbf W_h\mathbf {\hat s}\rVert_1 \tag{2}
+\mathbf {\hat s}^* = \text{arg }\underset{\mathbf s}{\text{min}}\lVert\mathbf y-\mathbf L\mathbf U \mathbf {\hat s}\rVert_2^2 + \lambda\lVert \mathbf W_h\mathbf {\hat s}\rVert_1 \tag{3}
 $$
 
 where $\mathbf W_h$​ is a diagonal matrix of gap-values: $W_{ii}​=\lambda_{gap}^i​​$.
@@ -214,18 +238,18 @@ where $\mathbf W_h$​ is a diagonal matrix of gap-values: $W_{ii}​=\lambda
 
 In the case of the simulation, ground truth data is available to compare the source reconstructed images directly with the ground truth. To evaluate each method we simply compute the log envelope correlation between two maps. For example, for a given time point $t$, the correlation between reconstructed map and ground truth map would be given by:
 $$
-\mathcal C(t) = \frac{\sum_i \mathbf s^t_{text{true}}(i) * \mathbf s^t_{\text{est}(i)}{\sigma^i_{true} * \sigma^i_{est}}
+\mathcal C(t) = \frac{\sum_i \mathbf s^t_{text{true}}(i) * \mathbf s^t_{\text{est}(i)}{\sigma^i_{true} * \sigma^i_\text{est}}
 $$
 
 Where $\mathbf s^i_{x}(t)$ is the activity at dipole $i$ and time $t$. $\sigma_{x}(t)$ is the standard deviation of the map (True or estimated) at the given time $t$. We chose the envelope because whether the reconstructed activity is positive or negative is simply a matter of dipole orientation, in both cases the maps indicate activity. The log is to make sure the correlation happens on a normal distribution.
 
-### 2.6.1 Localization Accuracy
+### 2.6.2 Localization Accuracy
 <!-- Spatial distance to resection/focal point (Studies 1 and 2) -->
 
 To evaluate localization accuracy, the source onset of the interictal spikes was defined at 50% of the rising phase, following the methodology of **FindName (2015)**. The Euclidean distance was then calculated between the estimated source location and the resection volume. To ensure the metric remained robust to the discrete nature of the voxel grid—where a single "closest" voxel might introduce up to a 10 mm discretization error—we calculated the mean distance to the ten nearest voxels within the mask. This averaging approach ensures that if an estimated source is located within the resection volume, the resulting distance effectively converges to zero.
 
 
-### 2.6.2 Channel comparison
+### 2.6.3 Channel comparison
 <!-- Temporal correlation and "center of Mass" movement over time between estimated and ground-truth iEEG (studies 1 and 3) -->
 
 To evaluate the accuracy of the spatial reconstruction, the projected virtual iEEG activity was compared against the recorded ground-truth iEEG. While spatial correlation is a standard metric in simulations, preliminary analysis indicated high uncertainty in this measure for clinical data (see **Appendix Figure 2**). Consequently, we utilized more robust aggregate metrics.
@@ -239,7 +263,7 @@ $$
 $$
 
 
-# 3. Results
+# Results
 
 To test the impact of neglecting source dependences we created a simulation that is constrained by the structural connectivity. This allows us to have simulated 
 
@@ -248,7 +272,7 @@ To test the impact of neglecting source dependences we created a simulation that
 ### 3.1.1 Localization vs. Propagation
 <!-- Proof that connectivity priors specifically improve the reconstruction of dynamic/spread compared to standard methods -->
 
-To test the impact of neglecting source dependences we created a simulation that is constrained by the structural connectivity. This allows us to have simulated EEG recordings with complex ground truth activity. Figure 3.1.a shows an example of a EEG recording with the key events happening. We have the peak phase, where the EEG signal is highest. At that phase, similar to what is suggested in the literature, the source has already started to propagate. Generaly, it is advised to reconstruct around 50% of the rising phase (or even before if the signal to noise permits it) to properly locate the source. We consider as the source propagation phase everything happening after 50% rising phase until the signal is back to noise level. We then applied source reconstruction of the commonly used methods available on MNE-python (wMNE, sLORETA, dSPM) and the methods derived from the lab (CSET and the new wCSET). We did source localization to compare the accuracy of source localization. We also computed the spatial correlation time point by time point between the simulated ground truth and the reconstructions for all our source reconstruction methods. The latest allows us to estimate which is best for reconstructed the source propagation. For statistical validation, we repeated for each brain region (400) the simulation 30 times. We then averaged the spatial correlation for each brain region and plotted the spatial correlation over time in Figure 3. The figure shows that the spatial correlation starts at 0 (signal to noise ratio is null) and gradually increases when the source spreads overall (increasing signal to noise ratio) and then decreases again. We highlighted on the time axis the peak phase of the EEG signal and the 50% rising phase. We see that the highest correlation is obtained around the peak phase which is where all methods distinguish themselves. wCSET achieves the highest correlation of 0.7 followed by CSET 0.6 and the other methods 0.4. At 50% rising phase all methods perform similarly well which is the region one would select to do source localization. 
+To test the impact of neglecting source dependences we created a simulation that is constrained by the structural connectivity. This allows us to have simulated EEG recordings with complex ground truth activity. Figure 3.1.a shows an example of an EEG recording with the key events happening. We have the peak phase, where the EEG signal is highest. At that phase, similar to what is suggested in the literature, the source has already started to propagate. Generally, it is advised to reconstruct around 50% of the rising phase (or even before if the signal to noise permits it) to properly locate the source. We consider as the source propagation phase everything happening after 50% rising phase until the signal is back to noise level. We then applied source reconstruction of the commonly used methods available on MNE-python (wMNE, sLORETA, dSPM) and the methods derived from the lab (CSET and the new wCSET). We did source localization to compare the accuracy of source localization. We also computed the spatial correlation time point by time point between the simulated ground truth and the reconstructions for all our source reconstruction methods. The latest allows us to estimate which is best for reconstructed the source propagation. For statistical validation, we repeated for each brain region (400) the simulation 30 times. We then averaged the spatial correlation for each brain region and plotted the spatial correlation over time in Figure 3. The figure shows that the spatial correlation starts at 0 (signal to noise ratio is null) and gradually increases when the source spreads overall (increasing signal to noise ratio) and then decreases again. We highlighted on the time axis the peak phase of the EEG signal and the 50% rising phase. We see that the highest correlation is obtained around the peak phase which is where all methods distinguish themselves. wCSET achieves the highest correlation of 0.7 followed by CSET 0.6 and the other methods 0.4. At 50% rising phase all methods perform similarly well, which is the region one would select to do source localization.
 
 ### 3.1.2 Robustness to Prior Noise
 <!-- Performance results when using degreaded or surrogate connectomes. -->
@@ -274,9 +298,9 @@ After projecting source reconstruction to the intracranial EEG channels we compa
 ### 3.3.2 Propagation Accuracy
 <!-- Evidence that the "Center of Mass" of reconstructed activity follows the true intracranial trajectory more closely -->
 
-## 4. Discussion
+## Discussion
 
-## 5. Conclusion
+## Conclusion
 
 ::::: {.content-visible when="output"}
 
@@ -368,11 +392,10 @@ dm = IntraManager("intra.config.yml")
 methods = ["wcset", "sloreta", "dspm", "mne"]
 sub = "48"
 mode = "temporal"
-sr = dm.get_subject(sub)
 
 # load data (True iEEG and virtual iEEGs)
-iave = sr.load("i-ave", task="spk")
-vave = {m:sr.load("v-ave", task="spk", desc=m) for m in methods}
+iave = dm.load(sub, "i-ave", task="spk")
+vave = {m:dm.load(sub, "v-ave", task="spk", desc=m) for m in methods}
 
 # --------------
 # Preprocessing

@@ -1,0 +1,14 @@
+
+
+```{python filename="parcellation.py"}
+# | output: false
+
+from pathlib import Path
+from scripts.utils import loop, check_files
+from scripts.data_manager import SpikeManager
+
+# data manager
+dm = SpikeManager("spike.config.yml")
+
+
+```
