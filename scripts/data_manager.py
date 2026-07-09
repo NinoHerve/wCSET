@@ -184,7 +184,7 @@ class SpikeManager(mm.io.DatasetManager):
 
         # add datatypes
         self.add_datatype("eeg", "cart", self.build_spike_path, self.read_eeg)
-        self.add_datatype("mri", "cmp", self.build_spike_path, mm.anatomy.mri.read_mri)
+        self.add_datatype("T1w", "cmp", self.build_spike_path, mm.anatomy.mri.read_mri)
         self.add_datatype("eeg-trans", "cart", self.build_spike_path, load_identity_trans)
 
     def build_spike_path(self, root, subject, suffix, **kwargs):
@@ -203,7 +203,7 @@ class SpikeManager(mm.io.DatasetManager):
             folder = root / f"sub-{subject}" / f"ses-{session}" / "eeg"
             return folder / f"sub-{subject}_ses-{session}_task-{task}_desc-{desc}_eeg.vhdr"
 
-        if suffix == "mri":
+        if suffix == "T1w":
             if session is None:
                 raise ValueError("mri requires session entity.")
             res_part  = f"_res-{res}"   if res  else ""

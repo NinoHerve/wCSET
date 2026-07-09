@@ -7,11 +7,12 @@ DIR_CART: /media/nino/DATA/SPIKE/derivatives/cartool-v3.80        # EEG spike di
 DIR_CMP: /media/nino/DATA/SPIKE/derivatives/cmp-v3.0.0-beta-RC1   # MRI directory
 
 # templates
-STD_MNI: /media/nino/DATA/templates/mni_icbm152_nlin_asym_09c_nifti/mni_icbm152_nlin_asym_09c/mni_icbm152_t1_tal_nlin_asym_09c.nii    # MNI template
-STD_LAUSL: /media/nino/DATA/atlas/laus2018/lh.atlas-laus2018_desc-scale4.annot                                                        # Left cortical atlas
-STD_LAUSR: /media/nino/DATA/atlas/laus2018/rh.atlas-laus2018_desc-scale4.annot                                                        # Right cortical atlas
-STD_THAL: /media/nino/DATA/atlas/Thalamic_Nuclei/Thalamus_Nuclei-HCP-4DSPAMs.nii.gz                                                   # Thalamic nuclei atlas
-STD_THALclut: /media/nino/DATA/atlas/Thalamic_Nuclei/Thalamic_Nuclei-ColorLUT.txt                                                    # Thalamic nuclei color lut
+REF_CON: /media/nino/DATA/atlas/probconnatlas/wm.connatlas.scale4.h5
+REF_LAUSL: /media/nino/DATA/atlas/laus2018/lh.atlas-laus2018_desc-scale4.annot
+REF_LAUSR: /media/nino/DATA/atlas/laus2018/rh.atlas-laus2018_desc-scale4.annot
+REF_MNI: /media/nino/DATA/templates/mni_icbm152_nlin_asym_09c_nifti/mni_icbm152_nlin_asym_09c/mni_icbm152_t1_tal_nlin_asym_09c.nii
+REF_THAL: /media/nino/DATA/atlas/Thalamic_Nuclei/Thalamus_Nuclei-HCP-4DSPAMs.nii.gz
+REF_THALclut: /media/nino/DATA/atlas/Thalamic_Nuclei/Thalamic_Nuclei-ColorLUT.txt
 
 # others
 FS_HOME: /home/nino/Softwares/freesurfer  # Freesurfer home directory

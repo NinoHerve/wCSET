@@ -62,11 +62,6 @@ You should now be ready to run anything that comes ahead.
 
 ## Scalp EEG Conditioning
 
-```{python filename="TODELETE.py"}
-from scripts.data_manager import IntraManager
-
-dm = IntraManager("intra.config.yml")
-```
 
 ```{python filename="eeg_preprocessing_intra.py"}
 # | output: false

@@ -65,25 +65,45 @@ Together, these studies establish wCSET as a principled and clinically viable to
 
 # Materials and Methods
 
-## 2.1 Data Acquisition and Datasets
+## 2.1 Data Acquisition and Datasets1
 
 ### 2.1.1 Synthetic Data
 <!-- Simulation environment setup (Study 1) -->
-Simulations were conducted using data from a single representative subject selected from the VEPCON dataset [Ref]. The anatomical framework consists of a T1-weighted MRI and a corresponding structural tractogram derived from diffusion tensor imaging (DTI). Using the cortical source space defined in section 2.3.1 we clustered the dipoles in the same brain regions according to the ProbConn atlas (~400 brain regions, 2-10 dipoles per region). An initial source activity is rendered by randomly selecting a brain region and attributing a spike-like signal to all dipoles of the region, similar to classic simulation approaches [FindRef]. Our spike is obtained from a double hamming window (Figure 1.a) formulated as follow: $$$$. 
+Simulations were conducted using anatomical data from a single representative subject selected from the VEPCON dataset [@pascucci_source_2022]. The anatomical framework consists of a T1-weighted MRI and a corresponding structural tractogram derived from diffusion tensor imaging (DTI). EEG signals were simulated on a 204-channel montage derived from a 256-channel EGI HydroCel Geodesic Sensor Net, after removing cheek electrodes. The cortical source space (Section 2.3.1) was parcellated into brain regions using the MultiConn atlas [@aleman-gomez_multi-scale_2022] (~400 regions, 2–10 dipoles per region). In each simulation trial, a source region was drawn uniformly at random, and a spike-like waveform was assigned to all dipoles within that region, following classic simulation approaches [FindRef]. The spike waveform is a double Hanning window defined as:
 
-To model the propagation of activity, we integrated structural constraints by calculating the temporal latency between active and quiescent dipoles. The total delay, $τ_{\text{tot}}$​, between two dipoles is defined by the shortest path in the structural network, accounting for two distinct physiological components:
+$$s(t) = \begin{cases} h\!\left(t,\, \tfrac{2}{3}W\right) & 0 \leq t \leq \tfrac{2}{3}W \\[4pt] -\tfrac{1}{2}\,h\!\left(t - \tfrac{2}{3}W,\; \tfrac{1}{3}W\right) & \tfrac{2}{3}W < t \leq W \end{cases}$$
 
-1. **Processing Delay ($\tau_p$​):** Represents synaptic latencies and local regional processing.
-    
-2. **Transmission Delay ($\tau_t$​):** Represents the time required for signal propagation along axonal projections, defined as: $$\tau_t = \frac{l_{axon}}{v_{axon}}$$
-    where $l_{axon}$​ is the fiber length and $v_{axon}$​ is the conduction velocity derived from literature [FindRef].
-    
+where $h(t, T) = \frac{1}{2}\!\left[1 - \cos\!\left(\tfrac{2\pi t}{T}\right)\right]$ is a Hanning window of duration $T$ and $W$ is the total spike duration. The waveform consists of a dominant positive lobe spanning two-thirds of the spike duration, followed by a half-amplitude negative rebound over the remaining third, mimicking the morphology of a clinical interictal spike (Figure 1.a). The spike signal is then convolved with a Dirac comb to generate the full spike train.
 
-To simulate physiological signal attenuation, a decay factor of **0.25** was applied at each network node. This ensures that while long-range connections facilitate distant information transfer with higher latency, signal intensity diminishes as the number of topological "steps" increases, resulting in a damped feedforward diffusion process (Figure 1c).
+**Propagation model.** Activity was propagated across the connectome in a feedforward manner. The activity at dipole $j$ was modelled as:
+
+$$S_j(t) = \gamma^{h_j} \cdot s_0\!\left(t - \tau_j\right)$$
+
+where $s_0(t)$ is the source waveform, $h_j$ is the number of hops (graph edges) along the shortest path from the source to dipole $j$, and $\gamma \in [0,1]$ is a per-hop spatial decay factor. The total propagation delay $\tau_j$ was computed as the sum of per-edge delays along that path:
+
+$$\tau_j = \sum_{(u,v)\,\in\,\mathcal{P}_j} \!\left(\frac{l_{uv}}{v_c} + \tau_p\right) + \epsilon_\tau$$
+
+where $l_{uv}$ is the fiber length of edge $(u,v)$ in mm, $v_c$ is the axonal conduction speed, $\tau_p$ is a fixed nodal delay per hop representing synaptic latency, and $\epsilon_\tau \sim \mathcal{N}(0, \sigma_\tau)$ is a per-dipole jitter term modelling uncertainty in propagation timing. Dipoles unreachable from the source were assigned zero activity (Figure 1c).
+
+**Noise model.** Pink noise was added at the source level to model background neural activity, and independent white noise was added at the sensor level to model measurement noise. The signal-to-noise ratio (SNR) was calibrated to a fixed target by scaling the source activity prior to sensor projection. All parameters are summarised in @tbl-sim-params.
+
+Each simulation was repeated 30 times per source region to ensure statistical robustness.
+
+| Parameter | Symbol | Value | Unit |
+|:---|:---:|---:|:---:|
+| Spike duration | $W$ | 0.1 | s |
+| Axonal conduction speed | $v_c$ | 30 | mm/ms |
+| Nodal delay per hop | $\tau_p$ | 10 | ms |
+| Spatial decay factor | $\gamma$ | 0.5 | — |
+| Delay jitter (s.d.) | $\sigma_\tau$ | 1 | ms |
+| Target SNR | — | 10 | — |
+| Repetitions per region | — | 30 | — |
+
+: Simulation parameters. {#tbl-sim-params}
 
 ### 2.1.2 Clinical Dataset A
 <!-- 20 patients with focal epilepsy (Study 2) -->
-To validate electroencephalographic source localization (ESL) clinically, we used the data from [ref] constituting of 44 patients with pharmacoresistant focal epilepsy. The patients underwent a first resective surgery validated by 12-month postsurgical outcome. 28 patients had completed seizure freedom and were selected for this study since we can assume that the resected section corresponded to the epileptic tissue and use it as ground truth for our localization scheme. The data consisted of a T1-weighted MRI and a resting state EEG recording before surgery, as well as a post-surgery T1-weighted MRI. Interictal spikes were identified on the EEG and averaged over their tip. Pre and post-surgery MRI were coregistered using affine transformation.
+To validate electroencephalographic source imaging clinically, we used the dataset of @vorderwulbecke_high-density_2025, comprising 44 patients with pharmacoresistant focal epilepsy who underwent resective surgery. Surgical outcome was assessed at 12 months post-operatively. Of these, 28 patients achieved complete seizure freedom (Engel Class Ia), indicating that the resected tissue encompassed the epileptogenic zone; these 28 patients were selected as ground truth for our localization evaluation. Each patient's data consisted of a pre-operative T1-weighted MRI and a pre-operative interictal EEG recording, as well as a post-operative T1-weighted MRI. The dataset provides 257-channel high-density EEG (HydroCel Geodesic Sensor Net); cheek electrodes were excluded, yielding the 204-channel montage used throughout this study. Interictal epileptic discharges were visually identified and time-locked averaged at their peak.
 
 
 ### 2.1.3 Clinical Dataset B
@@ -96,62 +116,63 @@ To validate electroencephalographic source localization (ESL) clinically, we use
 
 ### 2.2.1 EEG/iEEG Processing
 <!-- Filtering, artifact rejection, and epoching (noting differences across the three datasets). -->
-The simulated data and the simultaneous iEEG/EEG data provide EEG resting state as epochs centered around the spike peak. We first apply C Averaged Referencing (CAR) as is common for Source Reconstruction and computed the source covariance matrix, used to whiten the data later on. The epochs are then averaged.
 
-The EEG data for the source localization was already averaged, so the data could not be whitened for source reconstruction. An c averaged referencing was applied. Most data were already cleaned from artifacts, only subject A and B had to undergo an additional notch filter has the 50 Hz was extremely high for these recording. Baseline correction was also applied to every one as subject C and D did not have it.
+**Studies 1 and 3 (Simulation and Simultaneous EEG/iEEG).** EEG data were available as epochs time-locked to the interictal spike peak. A Common Average Reference (CAR) was applied, consistent with standard practice for source reconstruction. Baseline correction was performed using the pre-spike period, and an empirical noise covariance matrix was estimated from the same baseline window for subsequent data whitening. Epochs were then averaged to obtain the evoked response.
 
-There are no specific processing suggested for the intracranial electrode. We simply averaged all epochs into an averaged signal.
+**Study 2 (Clinical Dataset A).** EEG data were provided as pre-averaged interictal discharge waveforms; individual epochs were not available. Preprocessing by the data providers included bandpass filtering (high-pass: 0.3–1 Hz; low-pass: 30–100 Hz, with filter settings varying across patients due to the longitudinal nature of the dataset), downsampling to 250 Hz, and interpolation of noisy channels from neighbouring electrodes using 3D splines. Since individual epochs were unavailable, noise covariance estimation and data whitening were not performed. A Common Average Reference was applied. A subset of subjects presented residual 50 Hz line noise and required an additional notch filter. Baseline correction was applied to subjects whose recordings lacked it.
+
+**iEEG (Study 3).** Intracranial recordings were available as epochs time-locked to the spike. Epochs were averaged directly to obtain the ground-truth intracranial evoked response; no further preprocessing was applied.
 
 ## 2.3 Forward Modeling and Structural Priors
 
 ### 2.3.1 Source Space
 
-We modeled neural activity using a **distributed dipole model** with a **cortical constraint**. The source space was restricted to the cortical white matter surface, reconstructed from T1-weighted MRI data using **FreeSurfer (v.X.X.X)**. Approximately **6,000 dipoles** were uniformly distributed across this surface using **MNE-Python**, with dipole orientations fixed **normal** to the cortical manifold. This configuration ensures that the reconstructed activity aligns with the known physiological orientation of pyramidal neurons.
+We modeled neural activity using a distributed dipole model with a cortical constraint. The source space was restricted to the cortical white matter surface, reconstructed from T1-weighted MRI data using FreeSurfer (v7.4.1). Approximately 6,000 dipoles were uniformly distributed across this surface using MNE-Python (v1.9.0; @gramfort_meg_2013), with dipole orientations fixed normal to the cortical manifold. This configuration ensures that the reconstructed activity aligns with the known physiological orientation of pyramidal neurons.
 
 ### 2.3.2 Volume Conduction Model
 <!-- BEM modeling (shared across all studies). Description of the "dual-BEM" setup for Study 1 to avoid the inverse crime -->
-The forward problem involves calculating the electrical potential at the sensor locations generated by unitary dipole activity within the source space. To model the volume conduction between the sources and sensors, we employed a **Boundary Element Model (BEM)**. A standard BEM represents the interfaces between major head tissues—specifically the **inner skull, outer skull, and outer skin**—assuming homogeneous and isotropic electrical conductivity within each compartment. We utilized the standard conductivity values: **0.3 S/m** for the brain and scalp, and **0.06 S/m** for the skull.
+The forward problem involves calculating the electrical potential at the sensor locations generated by unitary dipole activity within the source space. To model the volume conduction between the sources and sensors, we employed a Boundary Element Model (BEM). A standard BEM represents the interfaces between major head tissues—specifically the inner skull, outer skull, and outer skin—assuming homogeneous and isotropic electrical conductivity within each compartment. We used the MNE-Python default conductivity values of 0.3 S/m for the brain and scalp, and 0.006 S/m for the skull. This forward solution was used across all three studies.
 
-While MNE-Python typically relies on FreeSurfer’s watershed algorithm for surface extraction, this approach often yields sub-optimal geometries for BEM. To improve the accuracy of the head model, we implemented a custom pipeline: brain tissues were segmented using the **SimNIBS CHARM** pipeline, and BEM surfaces were subsequently constructed from these segmentations via a **sphere-fitting method** (see Figure X in the Annex for a comparison of these approaches). Since the EEG sensors were pre-co-registered to the T1-weighted MRI, they were intrinsically aligned with the resulting head model. The final forward solution (the gain matrix) was computed using MNE-Python.
+While MNE-Python typically relies on FreeSurfer’s watershed algorithm for surface extraction, this approach often yields sub-optimal geometries for BEM. To improve the accuracy of the head model, we implemented a custom pipeline: brain tissues were segmented into three compartments (inner skull, outer skull, scalp) using the SimNIBS CHARM pipeline (v4.5; @puonti_accurate_2020). Each compartment mask was smoothed via morphological closing and fitted with a deformable grade-5 icosahedral template. The three surfaces were fitted sequentially — inner skull first, then outer skull, then scalp — with each surface constrained to lie outside the previous one, ensuring non-intersecting layers (see Figure X). Since the EEG sensors were pre-co-registered to the T1-weighted MRI, they were intrinsically aligned with the resulting head model. The final forward solution (the gain matrix) was computed using MNE-Python.
 
-A second forward solution was computed with conductivity values 0.03 S/m for the brain and scalp, and 0.006 S/m for the skull. This second forward solution is used during source reconstruction of simulated data to implement some voluntary error between the true head model and the used head model as the true head model is rarely being used in real setups. Using the same forward solution for simulation and reconstruction is referred to as the inverse crime [ref]. The difference between the two forward models generate an error of around 10% (see Figure X).
+For Study 1 only, a second forward solution was computed for source reconstruction, with the skull conductivity increased to 0.012 S/m while keeping brain and scalp conductivities unchanged at 0.3 S/m. This deliberate mismatch avoids the inverse crime [ref] — the circularity that arises when the same head model is used for both generating and inverting simulated data, which artificially inflates reconstruction accuracy. The two forward models differ by approximately 10% (see Figure X).
 
 ### 2.3.3 Connectivity Matrices
 <!-- The "Prior". Definition of Empirical connectomes (Study 1) and Surrogate matrices (Studies 1, 2, and 3) -->
 
 In this work, the brain is modeled as a graph (or connectome) where nodes represent localized brain regions - specifically dipoles in our source space - and edges represent the structural scaffolding between them. For the Connectome Spectrum Electromagnetic Tomography (CSET) source reconstruction method and its weighted version (wCSET), we utilize a structural connectome, where edges represent physical anatomical links.
 
-**Empirical Connectomes**
+**Empirical connectomes**
 
 We incorporate two distinct types of structural links:
-1. **Long-range connections**: These represent white matter tracts (axonal bundles) estimated via diffusion MRI (dMRI) tractography.
-2. **Short-range connections**: To account for local gray matter connectivity not captured by standard tractography, we connect neighboring dipoles if their geodesic distance on the cortical manifold is less than 10 mm.
+1. Long-range connections: These represent white matter tracts (axonal bundles) estimated via diffusion MRI (dMRI) tractography.
+2. Short-range connections: To account for local gray matter connectivity not captured by standard tractography, we connect neighboring dipoles if their geodesic distance on the cortical manifold is less than 15 mm.
 
 To ensure physical consistency, edges are weighted by distance (in mm): fiber length for long-range tracts and geodesic distance for local connections.
 
-**Connectome Surrogates**
+**Connectome surrogates**
 
-In clinical settings where diffusion data may be unavailable, we evaluate two **connectome surrogates** validated through our simulation framework (see Section 3.1):
+In clinical settings where diffusion data may be unavailable, we evaluate two connectome surrogates validated through our simulation framework (see Section 3.1):
 
-- **Probabilistic Atlas Surrogate:** Long-range tracts are extrapolated from the **ProbConn atlas**. We parcellate the subject’s brain according to the atlas and connect dipoles between two regions if a tract exists in more than **60%** of the atlas population. Gray matter connections are then added as described above.
+- Probabilistic atlas surrogate: Long-range tracts are extrapolated from the MultiConn atlas [@aleman-gomez_multi-scale_2022]. We parcellate the subject’s brain according to the atlas and connect dipoles between two regions if a tract exists in more than 60% of the atlas population. Gray matter connections are then added as described above.
     
-- **Geometry-only Surrogate:** This model relies solely on gray matter connectivity derived from the brain mesh. While distinct from the Beltrami-operator-weighted geometry, this surrogate tests the hypothesis that local brain geometry alone can capture significant brain-function coupling without explicit long-range information.
+- Geometry-only surrogate: This model relies solely on gray matter connectivity derived from the brain mesh. While distinct from the Beltrami-operator-weighted geometry, this surrogate tests the hypothesis that local brain geometry alone can capture significant brain-function coupling without explicit long-range information.
 
-**Random permutation**
+**Connectome perturbation**
 
 In the simulation, one could select the connectome used to make the simulation for the source reconstruction method. But in reality, one never has the exact knowledge of the model. Therefore, we implemented a procedure to sabotage the connectome before applying source reconstruction (see results 3.1.2). There are 3 times of sabotages tested individually:
-- **Permutation**: Take an edge, delete it, and create a new one where there was none.
-- **Deletion**: Randomly delete an edge
-- **Addition**: Randomly add an edge
+- Permutation: Take an edge, delete it, and create a new one where there was none.
+- Deletion: Randomly delete an edge
+- Addition: Randomly add an edge
 
 We then consider a maximum number of sabotage to apply, which corresponds to the number of connections in the connectome. This threshold is then set to be 100% sabotage. In the case of permutation, it means we have applied as many permutations as there are edges. For the Deletion it means we don't have any more edges. For the addition it means we have double the amount of total edges. While 0% correspond to the original connectome.
 
-**The Graph Fourier Transform (GFT)**
+**Graph Fourier Transform**
 
-The connectome is mathematically represented by an adjacency matrix A, or more commonly, the **Graph Laplacian** L, defined as L=D−A (where D is the degree matrix). This representation allows us to apply the tools of **Graph Signal Processing (GSP)** to neural data.
+The connectome is mathematically represented by an adjacency matrix A, or more commonly, the graph Laplacian L, defined as L=D−A (where D is the degree matrix). This representation allows us to apply the tools of Graph Signal Processing (GSP) to neural data.
 
-Just as the classical Fourier Transform decomposes a time-series into sine and cosine waves, the **Graph Fourier Transform (GFT)** decomposes brain activity into a set of "graph harmonics." These harmonics are the eigenvectors $u_k$​ of the Graph Laplacian, obtained via the eigendecomposition: $$\mathbf L= \mathbf{UΛU}^⊤$$
-where $\mathbf Λ$ contains the eigenvalues (graph frequencies) and $\mathbf U=[u1​,u2​,…,uN​]$ forms the **orthonormal eigenbase**.
+Just as the classical Fourier Transform decomposes a time-series into sine and cosine waves, the Graph Fourier Transform (GFT) decomposes brain activity into a set of graph harmonics. These harmonics are the eigenvectors $u_k$ of the Graph Laplacian, obtained via the eigendecomposition: $$\mathbf{L} = \mathbf{U}\mathbf{\Lambda}\mathbf{U}^\top$$
+where $\mathbf{\Lambda}$ contains the eigenvalues (graph frequencies) and $\mathbf{U} = [u_1, u_2, \ldots, u_N]$ forms the orthonormal eigenbasis.
 
 
 ## 2.4 Clinical Ground Truth Definition
@@ -238,7 +259,7 @@ where $\mathbf W_h$​ is a diagonal matrix of gap-values: $W_{ii}​=\lambda
 
 In the case of the simulation, ground truth data is available to compare the source reconstructed images directly with the ground truth. To evaluate each method we simply compute the log envelope correlation between two maps. For example, for a given time point $t$, the correlation between reconstructed map and ground truth map would be given by:
 $$
-\mathcal C(t) = \frac{\sum_i \mathbf s^t_{text{true}}(i) * \mathbf s^t_{\text{est}(i)}{\sigma^i_{true} * \sigma^i_\text{est}}
+\mathcal{C}(t) = \frac{\sum_i \mathbf{s}^t_{\text{true}}(i) \cdot \mathbf{s}^t_{\text{est}}(i)}{\sigma_{\text{true}}(t) \cdot \sigma_{\text{est}}(t)}
 $$
 
 Where $\mathbf s^i_{x}(t)$ is the activity at dipole $i$ and time $t$. $\sigma_{x}(t)$ is the standard deviation of the map (True or estimated) at the given time $t$. We chose the envelope because whether the reconstructed activity is positive or negative is simply a matter of dipole orientation, in both cases the maps indicate activity. The log is to make sure the correlation happens on a normal distribution.
@@ -259,7 +280,7 @@ To assess whether the reconstructed activity was localized to the correct anatom
 Finally, the temporal dynamics of the propagation were evaluated using **temporal correlation**. This was calculated as the Pearson correlation coefficient between the envelopes of the estimated and ground-truth channel activities. Essentially the same as the spatial correlation but axed around space:
 
 $$
-\mathfrak C(i) = \frac{\sum_t \mathbf s^i_{text{true}}(t) * \mathbf s^i_{\text{est}(t)}{\sigma^i_{true} * \sigma^i_{est}}
+\mathfrak{C}(i) = \frac{\sum_t \mathbf{s}^i_{\text{true}}(t) \cdot \mathbf{s}^i_{\text{est}}(t)}{\sigma^i_{\text{true}} \cdot \sigma^i_{\text{est}}}
 $$
 
 

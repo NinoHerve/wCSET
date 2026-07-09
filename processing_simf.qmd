@@ -381,6 +381,8 @@ mm.core.write_eig(feig, eigvec, eigval)
 ```
 
 
+## Simulation
+
 ```{python filename="simulation.py"}
 # | output: false
 
@@ -463,6 +465,132 @@ mm.analysis.simulation.generate_simulation_dataset(
 
 ```{python filename="source_reconstruction.py"}
 # | output: false
-
+# script to handle parallel processing
 %run scripts/source_recon_sim.py
+```
+
+
+```{python filename="comparison.py"}
+# | output: false
+
+from pathlib import Path
+
+import mne
+import numpy as np
+import pandas as pd
+from joblib import Parallel, delayed
+from tqdm import tqdm
+
+import mindmap as mm
+from scripts.data_manager import SimfManager
+from scripts.utils import check_files, resample_pr_curve
+
+overwrite = False
+
+# data manager
+dm = SimfManager("simf.config.yml")
+sub = "10"
+
+methods = ["dspm", "sloreta", "cset", "wcset"]
+n_pr_points = 100   # points kept per resampled precision-recall curve
+
+# one MetricSuite folder regroups every metric of this study (raw per-run
+# curves + context) and is reloaded in a single call from comparison_plots.py
+results_dir = Path("./results")
+fmetrics = results_dir/f"sub-{sub}_simf-metrics"
+
+if check_files([fmetrics/"meta.json"]) and not overwrite:
+  raise FileExistsError("Output already exists!")
+
+# one row per simulation run
+index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
+
+# resolve every file path in the main process: `dm` wraps a pybids BIDSLayout
+# (SQLAlchemy-backed) that joblib/loky cannot pickle to ship to worker
+# processes, so workers must never close over `dm` itself - only plain paths
+run_paths = [
+  {
+    "gold": dm.get_path(sub, "gold", task="spk", run=run),
+    "ave": dm.get_path(sub, "ave", task="spk", run=run),
+    "stc": {m: dm.get_path(sub, "stc", task="spk", run=run, desc=m) for m in methods},
+  }
+  for run in index["run"]
+]
+
+
+def process_run(paths):
+  """Compute validation metrics for a single simulation run, for every method."""
+  gold = mne.read_source_estimate(paths["gold"])
+  ave = mne.read_evokeds(paths["ave"], verbose="warning")[0]
+
+  corr = {}
+  prec_hrp = {}
+  prec_pp = {}
+
+  for m in methods:
+    stc = mne.read_source_estimate(paths["stc"][m])
+
+    # align ground truth/sensor data to the reconstruction's (cropped) time window
+    ground = gold.copy().crop(tmin=stc.times[0], tmax=stc.times[-1])
+    data = ave.copy().crop(tmin=stc.times[0], tmax=stc.times[-1])
+
+    # ------------------------------------------------
+    # Spatial correlation over time
+    # ------------------------------------------------
+    corr[m] = mm.analysis.inverse.compute_stc_correlation(
+      ground, stc, mode="spatial", method="pearson"
+    )
+
+    # ------------------------------------------------
+    # Precision-recall curves @ 50% rising phase / peak phase
+    # ------------------------------------------------
+    for phase_name, ratio, store in [("hrp", 0.5, prec_hrp), ("pp", 1.0, prec_pp)]:
+      idx = mm.analysis.eeg.get_rising_phase(data, ratio=ratio, as_idx=True)
+      activity_mask = ground.data[:, idx] > 0
+      estimated = stc.data[:, idx]
+
+      curves = mm.core.calc_performance_curves(activity_mask, estimated)
+      precision, recall = curves["pr"]["precision"], curves["pr"]["recall"]
+      store[m], recall_grid = resample_pr_curve(precision, recall, n_points=n_pr_points)
+
+  return corr, prec_hrp, prec_pp, stc.times, recall_grid
+
+
+# run across the whole simulation dataset
+results = Parallel(n_jobs=-1)(
+  delayed(process_run)(paths)
+  for paths in tqdm(run_paths, desc="Computing validation metrics")
+)
+
+corr_runs, prhrp_runs, prpp_runs, times, recall_grid = zip(*results)
+
+# one MetricSuite regroups every metric of this study. Each metric is registered
+# as a single (n_runs, n_points) stack and kept as an array internally, which is
+# what makes register/save/reload cheap even at this scale (see mindmap's
+# MetricSuite.register/.save for details, and scripts/utils.py:resample_pr_curve
+# for why the PR curves are pre-downsampled onto a common recall grid)
+metrics = mm.metric.MetricSuite(f"sub-{sub} simulation validation")
+
+for m in methods:
+  metrics.register(m, "correlation", np.stack([r[m] for r in corr_runs]), times=times[0])
+  metrics.register(m, "precision_hrp", np.stack([r[m] for r in prhrp_runs]), recall=recall_grid[0])
+  metrics.register(m, "precision_pp", np.stack([r[m] for r in prpp_runs]), recall=recall_grid[0])
+
+metrics.save(fmetrics)
+```
+
+```{python filename="comparison_plots.py"}
+import numpy as np
+import mindmap as mm
+
+metrics = mm.metric.MetricSuite.load(fmetrics)
+
+# fast path: collapses each (n_runs, n_points) stack to its mean before plotting,
+# avoiding materializing the full per-run table (~14k runs x 4 methods is slow to
+# plot directly - swap in `metrics.plot(...)` below for the full-resolution
+# version with a bootstrapped CI band, at the cost of ~20-50s per figure)
+summary = metrics.reduce(np.mean)
+
+g = summary.plot(metrics=["correlation"], labels=methods, coord="times")
+g = summary.plot(metrics=["precision_hrp", "precision_pp"], labels=methods, coord="recall")
 ```
