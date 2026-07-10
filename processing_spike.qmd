@@ -472,3 +472,107 @@ def source_recon(sub, overwrite=True):
 
 source_recon(overwrite=True)
 ```
+
+
+# Resection Masks (RAMPS)
+
+```{python filename="resection_masks.py"}
+# | output: false
+
+import subprocess
+
+import pandas as pd
+
+from scripts.utils import loop
+from scripts.data_manager import SpikeManager
+
+# data manager
+dm = SpikeManager("spike.config.yml")
+
+# hemisphere of the epileptogenic zone (ground truth, from participants.tsv)
+participants = pd.read_csv(dm.roots["raw"]/"participants.tsv", sep="\t")
+hemisphere_by_sub = participants.set_index(
+    participants["participant_id"].str.removeprefix("sub-")
+)["hemisphere"].str.upper()
+
+# Resected lobe per subject, as a RAMPS --lobe letter (T/F/P/O, or a multi-letter
+# combo like "TF" for a resection spanning two lobes). participants.tsv only says
+# temporal ("TR") vs extratemporal ("ETR"), not which lobe, so this has to be filled
+# in by hand per subject (e.g. by comparing each subject's pre/post-op T1w - see
+# dm.get_path(sub, "T1w", session="postop", space="individual", desc="brain")).
+#
+# "T" is filled in below for every temporal resection - unambiguous from
+# participants.tsv, no image review needed. Extratemporal subjects are left as
+# None; fill in the ones you can and leave the rest for a later pass.
+LOBE_BY_SUBJECT = {
+    # temporal resections (unambiguous from participants.tsv: extraOrTemporal == "TR")
+    "pat10": "T", "pat11": "T", "pat12": "T", "pat13": "T", "pat14": "T",
+    "pat15": "T", "pat16": "T", "pat17": "T", "pat18": "T", "pat19": "T",
+    "pat20": "T", "pat21": "T", "pat22": "T", "pat23": "T", "pat24": "T",
+    "pat25": "T", "pat26": "T", "pat27": "T", "pat30": "T", "pat34": "T",
+    "pat35": "T", "pat36": "T", "pat41": "T", "pat42": "T", "pat43": "T",
+    "pat44": "T", "pat45": "T",
+
+    # extratemporal resections (extraOrTemporal == "ETR") - lobe not yet determined
+    # sub-pat03 has 1 F and 1 P
+    "pat01": "F", "pat02": "F", "pat03": "P", "pat04": "P", "pat05": "PO",
+    "pat06": "P", "pat07": "PO", "pat08": "PO", "pat09": "PO", "pat28": "P",
+    "pat29": "P", "pat31": "F", "pat32": "F", "pat33": "P", "pat37": "F",
+    "pat38": "F", "pat39": "P", "pat40": "TPO",
+}
+
+# RAMPS lives in its own conda env/install - see tutorials/anatomy/segmentation/resection-ramps.ipynb
+RAMPS_SCRIPT = "/home/nino/Softwares/RAMPS/RAMP.py"
+RAMPS_ENV = "RAMPenv"
+
+@loop(subjects=dm.subjects)
+def compute_resection_mask(sub, overwrite=False):
+    # output file (RAMPS creates this whole nested folder itself - don't pre-create it)
+    output_dir = dm.roots["mm"].parent/"ramps"/f"sub-{sub}"
+    fmask = output_dir/"RAMPS_Resection_Mask_Output"/"RAMP_The_resection_mask_in_PRE.nii.gz"
+
+    if fmask.exists() and not overwrite:
+        return
+
+    lobe = LOBE_BY_SUBJECT.get(sub)
+    if lobe is None:
+        raise ValueError(f"sub-{sub}: resected lobe not yet filled in LOBE_BY_SUBJECT.")
+
+    # 0. Load data
+    pre_t1  = dm.get_path(sub, "T1w", session="preop", res="cmp")
+    post_t1 = dm.get_path(sub, "T1w", session="postop", space="individual", desc="brain")
+
+    if not pre_t1.exists() or not post_t1.exists():
+        raise FileNotFoundError(f"Missing pre/post-op T1w for sub-{sub}.")
+
+    # 1. Hemisphere (ground truth)
+    hemisphere = hemisphere_by_sub[sub]
+
+    # 2. Run RAMPS (own conda env - ~15-20 min/subject on CPU)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    cmd = f"""
+    source ~/miniconda3/etc/profile.d/conda.sh
+    conda activate {RAMPS_ENV}
+    export FREESURFER_HOME={dm.config["FS_HOME"]}
+    source $FREESURFER_HOME/SetUpFreeSurfer.sh > /dev/null
+    python {RAMPS_SCRIPT} {pre_t1} {post_t1} {output_dir} {sub} {hemisphere} {lobe}
+    """
+    result = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True)
+
+    if result.returncode != 0:
+        raise RuntimeError(f"RAMPS failed for sub-{sub}:\n{result.stderr[-3000:]}")
+
+compute_resection_mask(overwrite=False)
+```
+
+## Quality Assessment
+
+Visual QC of the RAMPS output (pre-op T1w, post-op T1w and resection mask
+overlaid in freeview - see `scripts/review_resection.py`). Only subjects
+pat01-pat30 checked so far.
+
+- pat01, pat03: two resections, but RAMPS only generated one mask.
+- pat04, pat08, pat24, pat29: bad masks. For pat29, the pre/post images don't
+  look like the same brain.
+- pat28, pat33: RAMPS pipeline failed (no output).
+- pat14: never ran - has a post-op CT instead of a post-op T1w.

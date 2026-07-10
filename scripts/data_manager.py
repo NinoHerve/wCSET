@@ -192,6 +192,7 @@ class SpikeManager(mm.io.DatasetManager):
         session = kwargs.get("session")
         task    = kwargs.get("task")
         res     = kwargs.get("res")
+        space   = kwargs.get("space")
         desc    = kwargs.get("desc")
 
         if suffix == "eeg-trans":
@@ -206,10 +207,11 @@ class SpikeManager(mm.io.DatasetManager):
         if suffix == "T1w":
             if session is None:
                 raise ValueError("mri requires session entity.")
-            res_part  = f"_res-{res}"   if res  else ""
-            desc_part = f"_desc-{desc}" if desc else ""
+            res_part   = f"_res-{res}"     if res   else ""
+            space_part = f"_space-{space}" if space else ""
+            desc_part  = f"_desc-{desc}"   if desc  else ""
             folder = root / f"sub-{subject}" / f"ses-{session}" / "anat"
-            return folder / f"sub-{subject}_ses-{session}{res_part}{desc_part}_T1w.nii.gz"
+            return folder / f"sub-{subject}_ses-{session}{res_part}{space_part}{desc_part}_T1w.nii.gz"
 
         raise ValueError(f"Unknown suffix '{suffix}' for build_spike_path.")
 
