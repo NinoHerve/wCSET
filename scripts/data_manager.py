@@ -177,6 +177,7 @@ class SpikeManager(mm.io.DatasetManager):
         # add new roots
         self.add_root("cart", self.config["DIR_CART"])
         self.add_root("cmp", self.config["DIR_CMP"])
+        self.add_root("ramps", self.roots["mm"].parent/"ramps")  # matches resection_masks.py's output_dir
 
         # subjects come from participants.tsv in the raw root (no sub-* folders exist there)
         tsv = pd.read_csv(self.roots["raw"] / "participants.tsv", sep="\t")
@@ -186,6 +187,7 @@ class SpikeManager(mm.io.DatasetManager):
         self.add_datatype("eeg", "cart", self.build_spike_path, self.read_eeg)
         self.add_datatype("T1w", "cmp", self.build_spike_path, mm.anatomy.mri.read_mri)
         self.add_datatype("eeg-trans", "cart", self.build_spike_path, load_identity_trans)
+        self.add_datatype("resec-ramp", "ramps", self.build_spike_path, mm.anatomy.mri.read_mri)
 
     def build_spike_path(self, root, subject, suffix, **kwargs):
         """Build paths for SPIKE derivative files."""
@@ -197,6 +199,14 @@ class SpikeManager(mm.io.DatasetManager):
 
         if suffix == "eeg-trans":
             return Path(".")
+
+        if suffix == "resec-ramp":
+            # Non-BIDS-conform RAMPS pipeline output - bypass BIDS entity
+            # resolution and build the path directly.
+            if not space or space.lower() not in ("orig", "pre"):
+                raise ValueError("resec-ramp requires a 'space' entity ('orig' or 'pre').")
+            folder = root / f"sub-{subject}" / "RAMPS_Resection_Mask_Output"
+            return folder / f"RAMP_The_resection_mask_in_{space.upper()}.nii.gz"
 
         if suffix == "eeg":
             if session is None or task is None or desc is None:

@@ -579,18 +579,53 @@ for m in methods:
 metrics.save(fmetrics)
 ```
 
-```{python filename="comparison_plots.py"}
+Plots of these results (spatial correlation over time, precision-recall at
+half-rising-phase/peak) live in `index.qmd`'s Results section
+(`results_simf_correlation.py`/`results_simf_precision.py`), not here - this
+file only produces the data (`results/sub-10_simf-metrics`) they read.
+
+```{python filename="spike_timing.py"}
+# | output: false
+
+from pathlib import Path
+
 import numpy as np
+import pandas as pd
+import mne
+from tqdm import tqdm
+
 import mindmap as mm
+from scripts.data_manager import SimfManager
+from scripts.utils import check_files
 
-metrics = mm.metric.MetricSuite.load(fmetrics)
+overwrite = False
 
-# fast path: collapses each (n_runs, n_points) stack to its mean before plotting,
-# avoiding materializing the full per-run table (~14k runs x 4 methods is slow to
-# plot directly - swap in `metrics.plot(...)` below for the full-resolution
-# version with a bootstrapped CI band, at the cost of ~20-50s per figure)
-summary = metrics.reduce(np.mean)
+# data manager
+dm = SimfManager("simf.config.yml")
+sub = "10"
 
-g = summary.plot(metrics=["correlation"], labels=methods, coord="times")
-g = summary.plot(metrics=["precision_hrp", "precision_pp"], labels=methods, coord="recall")
+# output file - per-run half-rising-phase/peak time of the simulated sensor
+# EEG, used to draw reference lines on the correlation-over-time plot in
+# index.qmd. Computed from the same sensor-level 'ave' each run already has
+# (not re-simulated), independent of source reconstruction method.
+fmetrics = Path(f"./results/sub-{sub}_simf-metrics")
+ftiming = Path(f"./results/sub-{sub}_simf_spike_timing.csv")
+
+if check_files([ftiming]) and not overwrite:
+  raise FileExistsError("Output already exists!")
+
+index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
+
+rows = []
+for run in tqdm(index["run"], desc="Computing spike timing"):
+  fave = dm.get_path(sub, "ave", task="spk", run=run)
+  ave = mne.read_evokeds(fave, verbose="warning")[0]
+
+  rows.append({
+    "run": run,
+    "hrp_time": mm.analysis.eeg.get_rising_phase(ave, ratio=0.5, as_idx=False),
+    "pp_time": mm.analysis.eeg.get_rising_phase(ave, ratio=1.0, as_idx=False),
+  })
+
+pd.DataFrame(rows).to_csv(ftiming, index=False)
 ```

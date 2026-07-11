@@ -663,7 +663,248 @@ plt.tight_layout()
 plt.show()
 ```
 
+```{python filename="results_resection_localization.py"}
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from scripts.data_manager import SpikeManager
 
+# fixed method order & categorical colors (dataviz palette slots 1-6, never cycled)
+METHODS = ["wcset", "cset", "mce", "sloreta", "dspm", "mne"]
+COLORS = {
+    "wcset":   "#2a78d6",  # blue
+    "cset":    "#1baf7a",  # aqua
+    "mce":     "#eda100",  # yellow
+    "sloreta": "#008300",  # green
+    "dspm":    "#4a3aa7",  # violet
+    "mne":     "#e34948",  # red
+}
+LINE_COLOR = "#898781"  # muted ink - carries no method identity, just the pairing
+
+# surgical outcome (ILAE, 1 year post-op): 1 = seizure-free, 2-6 = increasing
+# recurrence. Metrics on non-seizure-free patients are validated against a
+# resection that may not have targeted the true epileptogenic zone, so
+# outcome level is kept as its own facet rather than pooled away.
+dm = SpikeManager("spike.config.yml")
+participants = pd.read_csv(dm.roots["raw"]/"participants.tsv", sep="\t")
+ilae_by_sub = participants.set_index(
+    participants["participant_id"].str.removeprefix("sub-")
+)["ILAE"]
+
+ILAE_LABELS = {
+    1: "1 - seizure-free", 2: "2 - auras only", 3: "3 - rare seizures",
+    4: "4 - frequent seizures", 5: "5 - <50% reduction", 6: "6 - worse",
+}
+
+def draw_box_spaghetti(ax, wide):
+    """Per-subject lines across methods (background) + box outlines on top."""
+    for _, row in wide.iterrows():
+        ax.plot(range(len(METHODS)), row.values, color=LINE_COLOR, alpha=0.3, linewidth=1, zorder=1)
+        ax.scatter(range(len(METHODS)), row.values, color=LINE_COLOR, alpha=0.4, s=12, zorder=2)
+
+    bp = ax.boxplot(
+        [wide[m].dropna().values for m in METHODS],
+        positions=range(len(METHODS)),
+        patch_artist=True,
+        showfliers=False,
+        widths=0.5,
+        zorder=3,
+    )
+    for patch, m in zip(bp["boxes"], METHODS):
+        patch.set_facecolor("none")
+        patch.set_edgecolor(COLORS[m])
+        patch.set_linewidth(2)
+    for element in ["whiskers", "caps"]:
+        for i, item in enumerate(bp[element]):
+            item.set_color(COLORS[METHODS[i // 2]])
+    for median in bp["medians"]:
+        median.set_color("#0b0b0b")
+
+    ax.set_xticks(range(len(METHODS)))
+    ax.set_xticklabels(METHODS, rotation=45, ha="right")
+    ax.spines[["top", "right"]].set_visible(False)
+
+df = pd.read_csv("./results/spike_resection_metrics.csv")
+df = df[df["phase"] == "hrp"]  # 50% rising phase, the primary evaluation point
+df["cluster_fraction_pct"] = df["cluster_fraction_of_cortex"] * 100
+df["ILAE"] = df["subject"].map(ilae_by_sub)
+
+ilae_levels = sorted(df["ILAE"].dropna().unique())
+
+# chance level for cluster_fraction_pct: how much cortex a purely random
+# signal needs before ANY cluster reaches the 600 mm^2 size floor, ignoring
+# the "must touch the resection" requirement - a lower bound / reference,
+# not the true chance level (which is strictly harder to reach). See
+# chance_cluster_threshold.py in processing_spike.qmd.
+chance = pd.read_csv("./results/spike_chance_cluster_threshold.csv")
+chance_level_pct = chance["mean_fraction_of_cortex"].mean() * 100
+
+panels = [
+    ("peak_distance_mm", "Peak-to-resection\ndistance (mm)", None),
+    ("cluster_fraction_pct", "Earliest resection-touching cluster\n(% of cortex, lower is better)", chance_level_pct),
+]
+
+fig, axes = plt.subplots(
+    len(panels), len(ilae_levels),
+    figsize=(3.2 * len(ilae_levels), 4.5 * len(panels)),
+    sharey="row",
+)
+
+for row_i, (metric, ylabel, ref_line) in enumerate(panels):
+    for col_i, level in enumerate(ilae_levels):
+        ax = axes[row_i, col_i]
+        level_df = df[df["ILAE"] == level]
+        wide = level_df.pivot(index="subject", columns="method", values=metric).reindex(columns=METHODS)
+        draw_box_spaghetti(ax, wide)
+
+        if ref_line is not None:
+            ax.axhline(ref_line, color="#0b0b0b", linestyle="--", linewidth=1, alpha=0.6, zorder=0.5,
+                       label="chance level (any cluster ≥ 600 mm², ignoring resection)")
+
+        if row_i == 0:
+            ax.set_title(f"{ILAE_LABELS[int(level)]}\n(n={wide.shape[0]})", fontsize=10)
+        if col_i == 0:
+            ax.set_ylabel(ylabel)
+
+handles, labels = axes[1, 0].get_legend_handles_labels()
+fig.legend(handles, labels, loc="lower center", ncol=1, bbox_to_anchor=(0.5, -0.04))
+
+fig.suptitle("Resection localization by method and surgical outcome (half rising phase)", fontsize=13, fontweight="bold")
+plt.tight_layout()
+plt.show()
+```
+
+```{python filename="results_resection_precision.py"}
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# cluster_precision: whether the earliest resection-touching cluster actually
+# grew from inside the resection (high) or merely grazed it from outside
+# (low). New metric, not yet discussed in the text above.
+df = pd.read_csv("./results/spike_resection_metrics.csv")
+df = df[df["phase"] == "hrp"]
+df["ILAE"] = df["subject"].map(ilae_by_sub)
+
+ilae_levels = sorted(df["ILAE"].dropna().unique())
+
+fig, axes = plt.subplots(1, len(ilae_levels), figsize=(3.2 * len(ilae_levels), 5), sharey=True)
+
+for col_i, level in enumerate(ilae_levels):
+    ax = axes[col_i]
+    level_df = df[df["ILAE"] == level]
+    # NaN precision (no qualifying cluster ever found) breaks the line
+    # instead of interpolating through it - the gap itself is meaningful
+    wide = level_df.pivot(index="subject", columns="method", values="cluster_precision").reindex(columns=METHODS)
+    draw_box_spaghetti(ax, wide)
+
+    ax.set_title(f"{ILAE_LABELS[int(level)]}\n(n={wide.shape[0]})", fontsize=10)
+    if col_i == 0:
+        ax.set_ylabel("Cluster precision\n(fraction inside resection)")
+    ax.set_ylim(0, 1)
+
+fig.suptitle("Resection cluster precision by method and surgical outcome (half rising phase)", fontsize=13, fontweight="bold")
+plt.tight_layout()
+plt.show()
+```
+
+```{python filename="results_simf_correlation.py"}
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import mindmap as mm
+
+# transferred from processing_simf.qmd's comparison_plots.py - reimplemented
+# with plain matplotlib (rather than MetricSuite.plot()'s seaborn FacetGrid)
+# so it can use the same fixed method colors as the SPIKE resection figures;
+# MetricSuite.plot()'s relational path has no way to pass a custom hue palette
+# through to seaborn's FacetGrid.
+SIMF_METHODS = ["wcset", "cset", "sloreta", "dspm"]  # methods compared in this study (no mce/mne here)
+
+simf_metrics = mm.metric.MetricSuite.load("./results/sub-10_simf-metrics")
+
+# median + IQR band, not mean +/- SEM: with ~14190 runs a SEM-based CI would
+# collapse to a hairline and hide the real signal, which is genuine
+# run-to-run spread (different simulated source regions localize very
+# differently) rather than sampling noise about a population mean. Kept
+# un-reduced (raw per-run stack) here so the quantiles are computed directly,
+# unlike the mean curve used further below for precision-recall.
+corr_raw_df = simf_metrics.get_filtered_df(metrics="correlation")
+corr_band = (
+    corr_raw_df.groupby(["Label", "times"])["Value"]
+    .quantile([0.25, 0.5, 0.75])
+    .unstack()
+    .rename(columns={0.25: "q25", 0.5: "median", 0.75: "q75"})
+    .reset_index()
+)
+
+# median half-rising-phase / peak time of the simulated sensor EEG, pooled
+# across all runs - median again (not mean), since the same per-run spread
+# checked earlier showed a heavy tail that pulls the mean noticeably off
+# the typical crossing time (see conversation notes)
+timing = pd.read_csv("./results/sub-10_simf_spike_timing.csv")
+hrp_median = timing["hrp_time"].median()
+pp_median = timing["pp_time"].median()
+
+fig, ax = plt.subplots(figsize=(7, 5))
+
+for method in SIMF_METHODS:
+    sub = corr_band[corr_band["Label"] == method].sort_values("times")
+    ax.fill_between(sub["times"], sub["q25"], sub["q75"], color=COLORS[method], alpha=0.15, linewidth=0, zorder=1)
+    ax.plot(sub["times"], sub["median"], color=COLORS[method], label=method, linewidth=2, zorder=2)
+
+ax.axhline(0, color="#c3c2b7", linewidth=1, zorder=0)
+ax.axvline(hrp_median, color="#0b0b0b", linestyle="--", linewidth=1, alpha=0.6, zorder=0.5,
+           label=f"half rising phase (median, t={round(hrp_median*1000):.0f} ms)")
+ax.axvline(pp_median, color="#0b0b0b", linestyle=":", linewidth=1.2, alpha=0.6, zorder=0.5,
+           label=f"peak phase (median, t={round(pp_median*1000):.0f} ms)")
+
+ax.set_xlabel("Time (s)")
+ax.set_ylabel("Spatial correlation (ground truth vs. reconstruction)")
+ax.set_title("Simulation study: spatial correlation over time (sub-10)\nmedian ± IQR across simulated runs")
+ax.spines[["top", "right"]].set_visible(False)
+ax.legend(frameon=False, fontsize=9)
+plt.tight_layout()
+plt.show()
+```
+
+```{python filename="results_simf_precision.py"}
+import matplotlib.pyplot as plt
+
+# same median + IQR treatment as results_simf_correlation.py, for the same
+# reason: ~14190 runs per method makes a SEM/CI collapse to a hairline, and
+# the real per-run spread (some simulated regions localize far better than
+# others) is the thing worth showing, not sampling noise about the mean.
+prec_raw_df = simf_metrics.get_filtered_df(metrics=["precision_hrp", "precision_pp"])
+prec_band = (
+    prec_raw_df.groupby(["Metric", "Label", "recall"])["Value"]
+    .quantile([0.25, 0.5, 0.75])
+    .unstack()
+    .rename(columns={0.25: "q25", 0.5: "median", 0.75: "q75"})
+    .reset_index()
+)
+
+fig, axes = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
+
+panels = [("precision_hrp", "Half rising phase", axes[0]), ("precision_pp", "Peak phase", axes[1])]
+
+for metric, title, ax in panels:
+    sub_df = prec_band[prec_band["Metric"] == metric]
+    for method in SIMF_METHODS:
+        sub = sub_df[sub_df["Label"] == method].sort_values("recall")
+        ax.fill_between(sub["recall"], sub["q25"], sub["q75"], color=COLORS[method], alpha=0.15, linewidth=0, zorder=1)
+        ax.plot(sub["recall"], sub["median"], color=COLORS[method], label=method, linewidth=2, zorder=2)
+    ax.set_xlabel("Recall")
+    ax.set_title(title)
+    ax.spines[["top", "right"]].set_visible(False)
+
+axes[0].set_ylabel("Precision")
+handles, labels = axes[0].get_legend_handles_labels()
+fig.legend(handles, labels, loc="lower center", ncol=len(SIMF_METHODS), bbox_to_anchor=(0.5, -0.04))
+
+fig.suptitle("Simulation study: localization precision-recall (sub-10)\nmedian ± IQR across simulated runs", fontsize=13, fontweight="bold")
+plt.tight_layout()
+plt.show()
+```
 
 ### Simulations - dataset
 
