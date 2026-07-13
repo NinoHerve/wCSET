@@ -125,8 +125,8 @@ class IntraManager(mm.io.DatasetManager):
                 path = eeg_dir/f"sub-{subject}{task}{run}_eeg.vhdr"
 
             else:
-                ieeg_dir = root/f"sub-{subject}"/"eeg"
-                path = ieeg_dir/f"sub-{subject}{task}{run}_*_ieeg.vhdr"
+                ieeg_dir = root/f"sub-{subject}"/"ieeg"
+                path = ieeg_dir/f"sub-{subject}{task}{run}_ieeg.vhdr"
 
         elif suffix == "eeg-trans":
             path = Path(".")

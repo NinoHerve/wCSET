@@ -35,14 +35,37 @@ bibliography: references.bib
 
 # 1. Environment & Data Acquisition
 
+This file runs the full simulation-validation pipeline for a single subject
+(`sub-10`, one real anatomical template): build the anatomy/forward models,
+generate ~14,190 synthetic spike recordings (one per brain region x 30
+repetitions, propagated over the structural connectome), reconstruct them
+with every method, and save the comparison metrics that `index.qmd` plots.
 
 ## Data Procurment
 
+**FILL** (data source / acquisition details for sub-10 - dataset origin,
+modality availability, why this particular subject was chosen as the
+template for every simulation).
+
 ## Computational Environment
+
+**FILL** (software/environment specifics worth pinning down here, if any -
+e.g. SimNIBS/FreeSurfer/MNE versions this pipeline was validated against).
 
 # 3. Anatomical & Forward Modeling
 
 # Cortical Surface Modeling
+
+Generates the MultiConn-2022 cortical parcellation (scale 4) for `sub-10`,
+used downstream to mask the cortex, label simulated source regions, and
+build the tractography-based connectome.
+
+**Parameter choices:**
+
+- `margin = 2` (mm): white matter extension margin. **FILL**
+- `thresh = 0.05`: probability threshold used to discretize the
+  (probabilistic) thalamus atlas. **FILL**
+- `scale = "4"`: parcellation resolution/scale. **FILL**
 
 ```{python filename="MultiConn_parcellation.py"}
 # | output: false
@@ -80,6 +103,23 @@ multiconn.save(
   fclut,
 )
 ```
+
+Builds `sub-10`'s cortical source space and restricts it to the cortex mask
+from the parcellation above. This is the same source space used for both the
+simulation forward model and the reconstruction forward model further down,
+so simulated and reconstructed activity live on identical dipoles.
+
+**Parameter choices:**
+
+- `spacing = "oct6"`: dipole sampling density (icosahedral subdivision).
+  **FILL**
+- `surface = "white"`: source space built on the white matter surface rather
+  than pial. **FILL**
+- `add_dist = True`: precomputes inter-dipole distances, required by the
+  geometry-based connectivity step later in the pipeline (`connectivity.py`)
+  - not a free choice.
+- `n_jobs = 10`: parallelization for distance computation - compute resource
+  setting, not a modeling choice.
 
 ```{python filename="setup_source_space.py"}
 # | output: false
@@ -120,6 +160,14 @@ source_space = mm.anatomy.source_space.filter_dipoles_by_nifti_mask(source_space
 source_space.save(fsrc, overwrite=overwrite)
 ```
 
+
+Runs CHARM tissue segmentation on `sub-10`'s T1w, then builds the 3-layer BEM
+surfaces from the CHARM labels for the forward model.
+
+**Parameter choices:**
+
+- `n_smooth = 20`: smoothing iterations applied to the BEM layers built from
+  the segmentation. **FILL**
 
 ```{python filename="bem_layers.py"}
 # | output: false
@@ -189,6 +237,22 @@ mm.anatomy.forward.save_bem_as_freesurfer(folder, layers, vol_info, overwrite=Tr
 
 
 
+Simulations don't use a real EEG recording as sensor geometry - this builds a
+synthetic sensor template (fixed montage, no real data) and coregisters it
+onto `sub-10`'s head model, so the forward/simulated signals have a concrete
+sensor layout to be projected onto.
+
+**Parameter choices:**
+
+- `duration = 20` (s): template signal length. **FILL**
+- `frequency = 250` (Hz): template sampling rate. **FILL**
+- `montage = "spike"`: EGI 256-channel cap with cheek electrodes removed.
+  **FILL** (why this specific montage - e.g. to match the SPIKE dataset's
+  real acquisition montage?)
+- `iterations = 0`: no iterative refinement in the template-to-head
+  coregistration (rigid alignment only). **FILL** - worth double-checking
+  this is intentional and not simply left at a placeholder/default.
+
 ```{python filename="eeg_template_coregistration.py"}
 # | output: false
 
@@ -226,6 +290,28 @@ ave_tmp = mm.anatomy.forward.template_coregistration(
 ave_tmp.save(ftmp, overwrite=overwrite)
 ```
 
+
+Computes **two** forward solutions per subject: one used to *generate* the
+simulated EEG (`desc="sim"`), and a second, deliberately mismatched one used
+to *reconstruct* it (`desc="inv"`) - so that inversion isn't solved with the
+exact model that generated the data (avoiding an "inverse crime", which
+would artificially inflate every method's accuracy).
+
+**Parameter choices:**
+
+- `conductivity = [0.3, 0.006, 0.3]` S/m (brain, skull, scalp) for the
+  simulation forward model. **FILL** (source/reference for these specific
+  values)
+- `conductivity = [0.3, 0.012, 0.3]` S/m for the reconstruction forward
+  model: skull conductivity doubled relative to the simulation model, to
+  introduce the head-model mismatch above. ⚠ the inline comment says this is
+  meant to "generate 10% errors", but 0.006 → 0.012 is a 100% (2x) change in
+  the parameter itself - worth clarifying whether "10%" refers to some
+  downstream error metric (e.g. resulting dipole localization error) rather
+  than the conductivity value, or whether the intended change was smaller.
+  **FILL**
+- `ico = None`: forced by an MNE/`tris` compatibility issue (see inline
+  comment) - not a free modeling choice.
 
 ```{python filename="forward_problem.py"}
 # | output: false
@@ -318,6 +404,24 @@ mne.write_forward_solution(ffwd_inv, forward, overwrite, verbose="warning")
 ```
 
 
+Builds the structural connectome used both to drive spike propagation
+dynamics in the simulator, and (via its Laplacian eigenbasis) as the
+graph-spectral prior for the CSET/wCSET reconstructions. Tractography-derived
+connections are the primary source; geometry-based connections fill in gaps
+where tractography found nothing.
+
+**Parameter choices:**
+
+- `maximum_dist = 15` (mm), `maximum_neigh = 3`: geometry-based connectivity
+  fallback parameters. **FILL** - note these differ from the equivalent
+  SPIKE-study cell (`processing_spike.qmd`'s `atlas_connectivity.py`, which
+  uses `maximum_dist=22, maximum_neigh=35`); worth confirming whether that
+  difference is intentional (e.g. this source space is denser/sparser) or
+  should be reconciled.
+- `weights = True`: geometry connections weighted by geodesic distance.
+  **FILL**
+- `lap_type = "normalized"` (pygsp graph Laplacian type): **FILL**
+
 ```{python filename="connectivity.py"}
 # | output: false
 
@@ -382,6 +486,56 @@ mm.core.write_eig(feig, eigvec, eigval)
 
 
 ## Simulation
+
+Runs the actual spike simulations: for every region in the parcellation,
+simulates 30 repetitions of a spike originating in that region and
+propagating across the structural connectome to the sensors, at a fixed
+target SNR.
+
+⚠ **Unit note:** the inline comments below mark `width`/`onset`/`repeat` on
+`SpikeSignal` as **[ms]**, but `mindmap.analysis.simulation.SpikeSignal`
+actually consumes them in **seconds** (confirmed from source: it indexes the
+generated time array directly as `onset * sampling_rate`, and that time
+array is in seconds). So as written this is actually a 100 ms-wide spike, a
+0.5 s onset, and 1 s between repeats - not 0.1/0.5/1 ms. Worth fixing the
+comments, and double-checking these are the intended values once read under
+the *correct* units.
+
+**Parameter choices - spike waveform (`SpikeSignal`):**
+
+- `width = 0.1` (s): spike waveform width. **FILL**
+- `onset = 0.5` (s): spike onset within the generated raw signal. **FILL**
+- `repeat = 1` (s): interval between repeated spikes in the raw signal (only
+  one spike ends up inside a single ~0.9 s epoch, given `EpochConfig`
+  below). **FILL**
+- `scale = 1e-8` (A): source dipole moment scale. **FILL**
+
+**Parameter choices - epoch window (`EpochConfig`):**
+
+- `tmin=-0.45, tmax=0.45, baseline=(-0.45,-0.2), signal_window=(-0.1,0.45)`
+  (all in seconds): these are exactly `EpochConfig`'s own library defaults,
+  re-specified explicitly here rather than customized. **FILL** if there was
+  a reason to pin them explicitly (e.g. guard against a future default
+  change) vs. just omitting them and relying on the default.
+
+**Parameter choices - propagation (`PropagationConfig`):**
+
+- `conduction_speed = 30` (mm/ms, i.e. 30 m/s): within the physiological
+  range typically reported for white-matter conduction velocity. **FILL**
+  (specific literature source, if any)
+- `nodal_delay = 10` (ms): per-node relay delay - notably 100x the library
+  default (0.1 ms). **FILL**
+- `spatial_decay = 0.5`: matches the library default exactly. **FILL** if
+  intentional vs. just left untouched.
+- `jitter = 1` (ms): timing jitter added per repetition, vs. the library
+  default of 0. **FILL**
+
+**Parameter choices - dataset generation:**
+
+- `repetitions = 30`: repeats simulated per source region. **FILL**
+- `snr_target = 10.0`: target single-trial SNR. **FILL**
+- `base_seed = 42`: fixed seed for reproducibility - standard practice, not a
+  modeling choice.
 
 ```{python filename="simulation.py"}
 # | output: false
@@ -463,12 +617,40 @@ mm.analysis.simulation.generate_simulation_dataset(
 ```
 
 
+Runs source reconstruction (dSPM, sLORETA, CSET, wCSET) on every simulated
+run, in parallel, via `scripts/source_recon_sim.py`. Uses the
+*reconstruction* forward model (`fwd`, `desc="inv"`) from
+`forward_problem.py`, deliberately mismatched from the model that generated
+the data (see note above).
+
+**Parameter choices (set in `scripts/source_recon_sim.py`, not inline here):**
+
+- `lambda2 = [0.01, 0.01, 0.1, 0.1]` (for `[dspm, sloreta, cset, wcset]`
+  respectively): per-method regularization parameter. **FILL** - why
+  CSET/wCSET use 10x more regularization than dSPM/sLORETA.
+- `crop = [-0.01, 0.15]` (s): time window kept for reconstruction/evaluation.
+  **FILL**
+
 ```{python filename="source_reconstruction.py"}
 # | output: false
 # script to handle parallel processing
 %run scripts/source_recon_sim.py
 ```
 
+
+For every simulated run, computes (a) the spatial correlation between
+reconstruction and ground truth over time, and (b) precision-recall curves
+at the half-rising-phase/peak of the simulated EEG - one `MetricSuite` per
+subject, reloaded and plotted in `index.qmd`.
+
+**Parameter choices:**
+
+- `methods = ["dspm", "sloreta", "cset", "wcset"]`: excludes `mce`/`mne`,
+  unlike the SPIKE-cohort comparison. **FILL** - intentional, or should this
+  list match the SPIKE study's six methods?
+- `n_pr_points = 100`: resolution of the resampled precision-recall curve
+  grid (see `resample_pr_curve`) - a visualization/storage resolution
+  tradeoff rather than a modeling assumption.
 
 ```{python filename="comparison.py"}
 # | output: false
@@ -583,6 +765,13 @@ Plots of these results (spatial correlation over time, precision-recall at
 half-rising-phase/peak) live in `index.qmd`'s Results section
 (`results_simf_correlation.py`/`results_simf_precision.py`), not here - this
 file only produces the data (`results/sub-10_simf-metrics`) they read.
+
+Computes the per-run half-rising-phase (`ratio=0.5`) / peak (`ratio=1.0`)
+time of each simulated run's *sensor* EEG - used only for the reference
+lines drawn on the correlation plot in `index.qmd`, independent of source
+reconstruction method. `ratio` isn't a free parameter here: it's the same
+0.5/1.0 convention used everywhere else in this project to define "half
+rising phase" and "peak phase".
 
 ```{python filename="spike_timing.py"}
 # | output: false

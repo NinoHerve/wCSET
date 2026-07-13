@@ -6,11 +6,21 @@ DIR_MM: /media/nino/DATA/INTRA/derivatives/mindmap        # mindmap directory
 DIR_SPK: /media/nino/DATA/INTRA/derivatives/spike_trials  # EEG spike directory
 
 # templates
-STD_MNI: /media/nino/DATA/templates/mni_icbm152_nlin_asym_09c_nifti/mni_icbm152_nlin_asym_09c/mni_icbm152_t1_tal_nlin_asym_09c.nii    # MNI template
-STD_LAUSL: /media/nino/DATA/atlas/laus2018/lh.atlas-laus2018_desc-scale4.annot                                                        # Left cortical atlas
-STD_LAUSR: /media/nino/DATA/atlas/laus2018/rh.atlas-laus2018_desc-scale4.annot                                                        # Right cortical atlas
-STD_THAL: /media/nino/DATA/atlas/Thalamic_Nuclei/Thalamus_Nuclei-HCP-4DSPAMs.nii.gz                                                   # Thalamic nuclei atlas
-STD_THALclut: /media/nino/DATA/atlas/Thalamic_Nuclei/Thalamic_Nuclei-ColorLUT.txt                                                    # Thalamic nuclei color lut
+REF_MNI: /media/nino/DATA/templates/mni_icbm152_nlin_asym_09c_nifti/mni_icbm152_nlin_asym_09c/mni_icbm152_t1_tal_nlin_asym_09c.nii    # MNI template
+REF_LAUSL: /media/nino/DATA/atlas/laus2018/lh.atlas-laus2018_desc-scale4.annot                                                        # Left cortical atlas
+REF_LAUSR: /media/nino/DATA/atlas/laus2018/rh.atlas-laus2018_desc-scale4.annot                                                        # Right cortical atlas
+REF_THAL: /media/nino/DATA/atlas/Thalamic_Nuclei/Thalamus_Nuclei-HCP-4DSPAMs.nii.gz                                                   # Thalamic nuclei atlas
+REF_THALclut: /media/nino/DATA/atlas/Thalamic_Nuclei/Thalamic_Nuclei-ColorLUT.txt                                                    # Thalamic nuclei color lut
+REF_CON: /media/nino/DATA/atlas/probconnatlas/wm.connatlas.scale4.h5                                                                  # Population probabilistic tractography atlas (same file as spike.config.yml's REF_CON)
+
+# NOTE: the STD_* keys above are NOT accessible via dm.load_ref(...) - the
+# base DatasetManager filters references by the substring "REF" in the key
+# name (self.refs = {k: v for k, v in config.items() if "REF" in k}), and
+# "STD" doesn't match. REF_CON was added with the "REF" prefix specifically
+# so build_connectivity_intra.py's dm.load_ref("REF_CON") call works. This
+# inconsistency (STD_ vs REF_ prefixes) predates this change - not fixed
+# here since renaming the STD_* keys could affect other code that reads them
+# directly from config rather than via load_ref().
 
 # others
 FS_HOME: /home/nino/Softwares/freesurfer  # Freesurfer home directory

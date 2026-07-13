@@ -352,316 +352,10 @@ You should now be ready to run anything that comes ahead.
 
 
 
-```{python filename="intra_data.py"}
-
-import numpy as np
-import mindmap as mm
-from scripts.data_manager import IntraManager
-
-# data manager
-dm = IntraManager("intra.config.yml")
-methods = ["wcset", "sloreta", "dspm", "mne"]
-sub = "48"
-sr = dm.get_subject(sub)
-
-# load data (True iEEG and virtual iEEGs)
-iave = sr.load("i-ave", task="spk")
-vave = {m:sr.load("v-ave", task="spk", desc=m) for m in methods}
-
-# compute extent & spurious
-extent_mask = mm.core.get_spike_extent_mask(
-    iave.data.T, 
-    perc_max_amp=0.5
-)
-
-spurious_mask = mm.core.get_spurious_mask(
-    extent_mask,
-    mm.analysis.eeg.get_ch_positions(iave),
-    spurious_dist=0.01
-)
-
-# swith: standardize
-if False:
-  iave = mm.analysis.eeg.normalize_evoked(iave)
-  vave = {m:mm.analysis.eeg.normalize_evoked(vave[m]) for m in methods}
-
-# switch: standardize by baseline
-if True:
-  iave = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0,1))
-  vave = {m:mm.analysis.eeg.normalize_evoked_by_baseline(v, baseline=(0,1)) for m, v in vave.items()}
-
-# switch for absolute values
-if True:
-  iave.data = np.abs(iave.data)
-  for k in vave.keys():
-    vave[k].data = np.abs(vave[k].data)
-
-# plot
-%matplotlib qt
-mm.viz.plot_channel_grid(iave, vave, extent_mask=extent_mask, spurious_mask=spurious_mask, n_visible=4)
-```
-
-
-```{python filename="intra_corr.py"}
-
-import numpy as np
-import mindmap as mm
-from scripts.data_manager import IntraManager
-
-# data manager
-dm = IntraManager("intra.config.yml")
-methods = ["wcset", "sloreta", "dspm", "mne"]
-sub = "48"
-mode = "temporal"
-
-# load data (True iEEG and virtual iEEGs)
-iave = dm.load(sub, "i-ave", task="spk")
-vave = {m:dm.load(sub, "v-ave", task="spk", desc=m) for m in methods}
-
-# --------------
-# Preprocessing
-# --------------
-
-# switch: standardize
-if True:
-  iave = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0,1))
-  vave = {m:mm.analysis.eeg.normalize_evoked_by_baseline(v, baseline=(0,1)) for m, v in vave.items()}
-
-if True:
-  iave = mm.analysis.eeg.normalize_evoked(iave)
-  vave = {m:mm.analysis.eeg.normalize_evoked(v) for m, v in vave.items()}
-
-# switch for absolute values
-if False:
-  iave.data = np.abs(iave.data)
-  for m, v in vave.items():
-    v.data = np.abs(v.data)
-
-# binarize
-iave_bin = mm.analysis.eeg.binarize_evoked(iave, threshold=0.5, method="max")
-vave_bin = {m: mm.analysis.eeg.binarize_evoked(vave[m], threshold=0.5, method="max") for m in methods}
-
-# switch: crop
-if True:
-  tmin, tmax = mm.analysis.eeg.find_spike_window(iave, baseline=(0,1.0), gap_fill_ms=200)
-  iave = iave.crop(tmin, tmax)
-  iave_bin = iave_bin.crop(tmin, tmax)
-  vave = {m:v.crop(tmin, tmax) for m, v in vave.items()}
-  vave_bin = {m:v_bin.crop(tmin, tmax) for m, v_bin in vave_bin.items()}
-
-# -----------------
-# Compute Metrics
-# ----------------
-
-metrics = mm.metric.MetricSuite(f"Intracranial EEG, sub-{sub}")
-for m in methods:
-  # correlation
-  corr = mm.analysis.eeg.compute_evoked_correlation(
-    iave, vave[m],
-    mode = mode,
-    method = "log-envelope",
-  )
-
-  # cosine
-  cos = mm.analysis.eeg.compute_evoked_cosine(
-    iave, vave[m],
-    mode = mode,
-  )
-
-  # confusion
-  confusion = mm.analysis.eeg.compute_evoked_confusion(
-    iave_bin, vave_bin[m],
-    mode = mode,
-  )
-
-  # scores
-  scores = mm.analysis.eeg.compute_evoked_scores(
-    iave_bin, vave_bin[m],
-    mode = mode,
-  )
-
-  metrics.register(m, "correlation", corr, chan=iave.ch_names)
-  metrics.register(m, "cosine", cos, chan=iave.ch_names)
-  metrics.register(m, "tp", confusion["tp"], chan=iave.ch_names)
-  metrics.register(m, "tn", confusion["tn"], chan=iave.ch_names)
-  metrics.register(m, "fp", confusion["fp"], chan=iave.ch_names)
-  metrics.register(m, "fn", confusion["fn"], chan=iave.ch_names)
-  metrics.register(m, "accuracy", scores["accuracy"], chan=iave.ch_names)
-  metrics.register(m, "f1", scores["f1"], chan=iave.ch_names)
-  metrics.register(m, "precision", scores["precision"], chan=iave.ch_names)
-  metrics.register(m, "recall", scores["recall"], chan=iave.ch_names)
-
-# -----
-# Plot
-# -----
-
-%matplotlib qt
-metrics.plot(metrics=["correlation", "cosine"], kind="scatter")
-```
-
-
 ```{python filename="intra_cog.py"}
 
 ```
 
-
-
-
-```{python filename="evaluate_vieeg.py"}
-#| output: false
-
-from pathlib import Path
-import numpy as np
-import pandas as pd
-import mindmap as mm
-from scripts.utils import loop, check_files
-from scripts.data_manager import IntraManager
-
-# data manager
-dm = IntraManager("intra.config.yml")
-methods = ["wcset", "sloreta", "dspm", "mne"]
-
-# results file
-fgrova = Path("./results/grova.csv")
-fgrova.parent.mkdir(exist_ok=True)
-fcorr = lambda sub: Path(f"./results/sub-{sub}_correlation.npz")
-fcorr("").parent.mkdir(exist_ok=True)
-
-@loop(subjects=dm.subjects)
-def evaluate_vieeg(sub):
-  # load intracranial average (ground truth)
-  sr = dm.get_subject(sub)
-  iave = sr.load("i-ave", task="spk")
-
-  # standardize
-  iave = mm.analysis.eeg.normalize_evoked(iave, "global", "zscore")
-  #iave = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0,1))
-
-  grova = []
-  corr = {}
-
-  # iterate over methods
-  for m in methods:
-    # load virtual averages (estimates)
-    vave = sr.load("v-ave", task="spk", desc=m)
-
-    # standardize
-    vave = mm.analysis.eeg.normalize_evoked(vave, "global", "zscore")
-    #vave = mm.analysis.eeg.normalize_evoked_by_baseline(vave, baseline=(0,1))  # maybe delete this one
-
-    # grova metrics
-    g = {"subject": sub, "method": m}
-    g = g | mm.analysis.eeg.compute_grova_metrics(
-      iave, vave,
-      true_extent = 0.5,      # spike area = channels reaching above 70% max power
-      spurious_dist = 0.01,   # spurious area = 10mm from spike area
-    )
-    grova.append(g)
-
-    # temporal correlation
-    corr[m] = mm.analysis.eeg.compute_evoked_correlation(
-      iave, vave, 
-      axis = 0,                 # correlation along channels (n_timepoints,) 
-      method = "log-envelope"   # correlation of absolute values
-    )
-    
-  # save
-  grova = pd.DataFrame(grova)
-  mm.core.write_csv_row(fgrova, grova, index_cols=["subject", "method"], write_new=True)
-  np.savez(fcorr(sub), **corr)
-
-evaluate_vieeg()
-```
-
-```{python filename="compute_correlation_matrices.py"}
-#| output: false
-
-import numpy as np
-import mindmap as mm
-from scripts.utils import loop, check_files
-from scripts.data_manager import IntraManager
-
-# alias
-corr = mm.analysis.eeg.compute_evoked_corr_matrix
-
-# data manager
-dm = IntraManager("intra.config.yml")
-methods = ["wcset", "sloreta", "dspm", "mne"]
-
-# output file
-fcorr = lambda sub: f"./results/sub-{sub}_matrix_correlation.npz"
-
-# loop
-for sub in dm.subjects:
-  sr = dm.get_subject(sub)
-
-  # load ground truth
-  iave = sr.load("i-ave", task="spk")
-
-  # ground truth vs ground truth correlations
-  corr_matrices = {"true": corr(iave, iave, window=(1.5, 3.0))}
-
-  # correlation matrices
-  for i,m in enumerate(methods):
-    vave = sr.load("v-ave", task="spk", desc=m)
-
-    # estimation vs estimation correlations
-    corr_matrices[f"{m}_est"] = corr(vave, vave, window=(1.5, 3.0))
-
-    # ground truth vs estimation correlations
-    corr_matrices[f"{m}_eval"] = corr(iave, vave, window=(1.5, 3.0))
-
-  np.savez(fcorr(sub), **corr_matrices)
-```
-
-```{python filename="results_grova.py"}
-import pandas as pd
-from itables import show
-import itables.options as opt
-
-df = pd.read_csv("./results/grova.csv")
-df = df.sort_values("subject")
-
-options = {
-  # grouping
-  "rowGroup": {"dataSrc":0},
-  "orderFixed": [[0, "asc"]],
-  "columnDefs": [{"visible": False, "targets": [0]}],
-
-  # scroll option
-  #"scrollY": "400px",
-  "scrollCollapse": True,
-  "paging": False,
-}
-
-show(df.sort_values("subject"), **options)
-```
-
-
-```{python filename="results_correlation.py"}
-import numpy as np
-import matplotlib.pyplot as plt
-from scripts.data_manager import IntraManager
-
-dm = IntraManager("intra.config.yml")
-methods = ["wcset", "sloreta", "dspm", "mne"]
-
-fig, axes = plt.subplots(2, 2, figsize=(14, 8), sharex=True)
-
-for ax, sub in zip(axes.flat, dm.subjects):
-    corr = np.load(f"./results/sub-{sub}_correlation.npz")
-    for method, series in corr.items():
-        ax.plot(series, label=method)
-    ax.set(title=f"sub-{sub}: iave-vave correlation", xlabel="Timepoint", ylabel="Correlation", ylim=(-1, 1))
-
-# Single shared legend outside the grid
-handles, labels = axes[0, 0].get_legend_handles_labels()
-fig.legend(handles, labels, loc="lower center", ncol=len(methods), bbox_to_anchor=(0.5, -0.05))
-
-plt.suptitle("iave-vave correlation", fontsize=14, fontweight="bold")
-plt.tight_layout()
-plt.show()
-```
 
 ```{python filename="results_resection_localization.py"}
 import numpy as np
@@ -906,236 +600,209 @@ plt.tight_layout()
 plt.show()
 ```
 
+```{python filename="results_intra_vieeg_fidelity.py"}
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+import mindmap as mm
+
+# reuses METHODS/COLORS/LINE_COLOR already defined above in
+# results_resection_localization.py, so method colors stay consistent with
+# every other figure in this document. Does NOT reuse draw_box_spaghetti --
+# see below for why.
+
+# one MetricSuite per subject, saved by evaluate_vieeg_fidelity_intra.py in
+# processing_intra.qmd; load_study() combines every sub-*/ subfolder into one
+vieeg_metrics = mm.metric.MetricSuite.load_study("./results/intra_vieeg_metrics")
+
+# array-valued entries (correlation_spatial/temporal, cosine_spatial/temporal
+# carry one value per time point / channel) are reduced to their mean here,
+# so every metric ends up as one (Subject, Method) scalar; the metrics that
+# were already scalar (correlation/cosine_spatio-temporal, explained_variance)
+# are unaffected since they already have a single value per group. The raw,
+# un-reduced dataframe is reused as-is (not through this mean) by the
+# win-rate matrices in results_intra_vieeg_winrate.py below, which need the
+# actual per-channel/per-timepoint values rather than their average.
+summary = vieeg_metrics.dataframe.groupby(["Metric", "Label", "Subject"])["Value"].mean().reset_index()
+
+panels = [
+    ("correlation_spatial", "Spatial correlation\n(mean over time)"),
+    ("correlation_temporal", "Temporal correlation\n(mean over channels)"),
+    ("correlation_spatio-temporal", "Spatio-temporal\ncorrelation"),
+    ("cosine_spatial", "Spatial cosine\n(mean over time)"),
+    ("cosine_temporal", "Temporal cosine\n(mean over channels)"),
+    ("cosine_spatio-temporal", "Spatio-temporal\ncosine"),
+    ("explained_variance", "Explained variance"),
+    ("rem_correlation_temporal", "REM correlation\n(mean over channels)"),
+    ("rem_correlation_spatial", "REM correlation\n(mean over time)"),
+]
+
+# Only 4 subjects total (fixed), and 2 of them (12, 50) have deep sources with
+# no visible spike on scalp EEG -- their EEG-derived source reconstruction
+# (and therefore virtual iEEG) starts from an inherently less reliable signal
+# than 34/48's. Columns are ordered so the two reliability tiers stay
+# visually grouped, and the two less-reliable subjects are flagged directly
+# in their column title -- the same reliability distinction
+# results_resection_localization.py draws via ILAE outcome facets, just
+# expressed here as column order/titling instead of a hard figure split.
+SUBJECT_ORDER = ["34", "48", "12", "50"]
+SUBJECT_TITLES = {
+    "34": "sub-34",
+    "48": "sub-48",
+    "12": "sub-12\n(no visible EEG spike)",
+    "50": "sub-50\n(no visible EEG spike)",
+}
+
+# Per-subject Cleveland dot plot: rows = metric, columns = subject. Each cell
+# shows all 6 methods (matches estimate_ieeg_intra.py/evaluate_vieeg_fidelity_intra.py --
+# unlike tutorials/analysis/eeg/virtual_ieeg.ipynb, mne/wMNE is kept in here)
+# as colored dots on a single horizontal line -- so "which method wins this
+# metric, for this subject" is just "which dot sits furthest along the
+# line", with no per-subject connecting line to imply a (nonexistent)
+# ordering across methods. sharex="row" keeps a metric's scale comparable
+# across the 4 subject columns, while leaving each row free to use a scale
+# appropriate to that metric (correlation/cosine are roughly bounded,
+# explained variance is not, etc. -- forcing one shared x-axis across all 9
+# rows would make most rows unreadable).
+fig, axes = plt.subplots(
+    len(panels), len(SUBJECT_ORDER),
+    figsize=(2.4 * len(SUBJECT_ORDER), 1.1 * len(panels)),
+    sharex="row",
+)
+
+for row_i, (metric, ylabel) in enumerate(panels):
+    for col_i, subject in enumerate(SUBJECT_ORDER):
+        ax = axes[row_i, col_i]
+        sub_df = summary[(summary["Metric"] == metric) & (summary["Subject"] == subject)]
+
+        # faint reference rule spanning the row -- a static reading guide,
+        # not a line connecting data points, so it doesn't reintroduce the
+        # earlier spaghetti-line problem
+        ax.axhline(0, color=LINE_COLOR, alpha=0.3, linewidth=1, zorder=1)
+
+        for m in METHODS:
+            val = sub_df.loc[sub_df["Label"] == m, "Value"]
+            if not val.empty:
+                ax.scatter(val.values[0], 0, color=COLORS[m], s=45, zorder=2,
+                           edgecolors="#0b0b0b", linewidths=0.5)
+
+        ax.set_yticks([])
+        ax.set_ylim(-1, 1)
+        ax.spines[["top", "right", "left"]].set_visible(False)
+        ax.tick_params(axis="x", labelsize=7)
+
+        if col_i == 0:
+            # metric name shown once per row (leftmost column) -- sharex="row"
+            # means every column in this row already carries the same scale
+            ax.set_ylabel(ylabel, fontsize=8, rotation=0, ha="right", va="center")
+        else:
+            plt.setp(ax.get_xticklabels(), visible=False)
+
+        if row_i == 0:
+            ax.set_title(SUBJECT_TITLES[subject], fontsize=9)
+
+# shared method-color legend -- the only place method identity is decoded
+# now that it's no longer spelled out via x-tick labels
+legend_handles = [
+    Line2D([0], [0], marker="o", color="none", markerfacecolor=COLORS[m],
+           markeredgecolor="#0b0b0b", markeredgewidth=0.5, markersize=8, label=m)
+    for m in METHODS
+]
+fig.legend(handles=legend_handles, loc="upper center", ncol=len(METHODS),
+           bbox_to_anchor=(0.5, 1.02), fontsize=9, frameon=False)
+
+fig.suptitle(
+    "Study 3: virtual-iEEG fidelity vs. true intracranial recording, by subject and method",
+    fontsize=13, fontweight="bold", y=1.05,
+)
+plt.tight_layout()
+plt.show()
+```
+
+```{python filename="results_intra_vieeg_winrate.py"}
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# win-rate matrix: for every pair of methods, what fraction of channels (or
+# timepoints) does the row-method beat the column-method on -- compresses all
+# C(6,2)=15 pairwise per-channel/per-timepoint comparisons into one view per
+# metric, catching improvements an averaged score (the dot plot above) can
+# hide. Kept subject-wise rather than pooled, for the same reliability reason
+# as the dot plot above: 12/50 have no visible EEG spike and shouldn't be
+# blended with 34/48. Reuses METHODS/COLORS/SUBJECT_ORDER/SUBJECT_TITLES from
+# results_resection_localization.py / results_intra_vieeg_fidelity.py above.
+
+# per-channel metrics (pivoted on "channel") vs. per-timepoint metrics
+# (pivoted on "times") -- matches tutorials/analysis/eeg/virtual_ieeg.ipynb's
+# per_channel_metrics/per_timepoint_metrics split. Note the per-timepoint
+# version is a coarser summary: timepoints within the window are highly
+# autocorrelated (unlike channels, which are more independent spatial
+# units), so it says "how often" a method wins, not "when".
+WINRATE_BLOCKS = [
+    ("channel", ["correlation_temporal", "cosine_temporal", "rem_correlation_temporal"]),
+    ("times", ["correlation_spatial", "cosine_spatial", "rem_correlation_spatial"]),
+]
+
+
+def compute_win_rate(pivoted):
+    """Fraction of rows where the row-method's value beats the column-method's, for every method pair."""
+    win_rate = pd.DataFrame(index=METHODS, columns=METHODS, dtype=float)
+    for row_method in METHODS:
+        for col_method in METHODS:
+            win_rate.loc[row_method, col_method] = (
+                np.nan if row_method == col_method
+                else (pivoted[row_method] > pivoted[col_method]).mean()
+            )
+    return win_rate
+
+
+for coord, metric_names in WINRATE_BLOCKS:
+    fig, axes = plt.subplots(
+        len(SUBJECT_ORDER), len(metric_names),
+        figsize=(4 * len(metric_names), 3.5 * len(SUBJECT_ORDER)),
+    )
+
+    for row_i, subject in enumerate(SUBJECT_ORDER):
+        # raw, un-reduced per-channel/per-timepoint values -- NOT the
+        # mean-reduced `summary` from results_intra_vieeg_fidelity.py, since
+        # win-rate needs the actual per-point values, not their average
+        df_sub = vieeg_metrics.get_filtered_df(metrics=metric_names, subjects=subject)
+
+        for col_i, metric_name in enumerate(metric_names):
+            ax = axes[row_i, col_i]
+            sub_df = df_sub[df_sub["Metric"] == metric_name]
+            pivoted = sub_df.pivot(index=coord, columns="Label", values="Value")[METHODS]
+
+            win_rate = compute_win_rate(pivoted)
+            sns.heatmap(win_rate, annot=True, fmt=".2f", cmap="RdYlGn", vmin=0, vmax=1,
+                        ax=ax, cbar=False, square=True)
+
+            if col_i == 0:
+                ax.set_ylabel(f"{SUBJECT_TITLES[subject]}\nrow method", fontsize=8)
+            else:
+                ax.set_ylabel("")
+            ax.set_xlabel("beats (column)" if row_i == len(SUBJECT_ORDER) - 1 else "")
+            if row_i == 0:
+                ax.set_title(metric_name, fontsize=10)
+
+    fig.suptitle(
+        f"Study 3: pairwise method win-rate, per {'channel' if coord == 'channel' else 'timepoint'}",
+        fontsize=13, fontweight="bold",
+    )
+    plt.tight_layout()
+    plt.show()
+```
+
 ### Simulations - dataset
 
 For simulations we use a sample subject (sub-10) from the Vepcon dataset (REFERENCE THIS PROPERLY). The sample contains a T1 weighted MRI (MORE INFO) and the tractograms processed from diffusion MRI (MORE INFO).
 
 
-```{python}
-#| echo: false
-import mindmap as mm
-from scripts.dataset_readers import SimfReader
-
-# -------------
-# Load data
-# -------------
-
-subject = 10
-reader  = SimfReader("wcset_simf.config.yml")
-data    = reader(subject, "src", "tkras2ras", "parc")
-
-# ------------
-# Parameters
-# ------------
-
-# brain regions
-dipoles = mm.get_dipole_positions(data["src"])*1000
-dipoles = mm.align_freesurfer2subject(dipoles, data["tkras2ras"])
-
-labels = data["parc"].label_points(dipoles)
-labels = np.unique(labels)
-
-# simulation parameters
-params = {
-    "duration":20,
-    "frequency":250,
-    "source":{
-        "waveform_width":0.1,
-        "onset":0.5,
-        "offset":None,
-        "repeat":1,
-    },
-    "headmodel":{
-        "synaptic_delay":0.01,
-        "axonal_speed":1e5,
-    },
-    "simulator":{
-        "w":0.5,
-        "snr":10,
-    }
-}
-
-# ----------------
-# Run simulations
-# ----------------
-
-root = reader.config["DS_DIR"]/"eeg"
-if root.exist():
-    raise FileExistsError("There is already an eeg directory in your dataset.")
-
-mm.simulation.make_sim_datset(reader, subject, labels, params, repetition=30)
-```
-
-
-
-
-
-
-```{python filename="spatial_correlation_threshold.py"}
-import numpy as np
-import matplotlib.pyplot as plt
-import mindmap as mm
-from scripts.data_manager import IntraManager
-
-# data manager
-dm = IntraManager("intra.config.yml")
-sub = "48"
-
-# load data
-sr = dm.get_subject(sub)
-iave = sr.load("i-ave", task="spk")
-vave = {m:sr.load("v-ave", task="spk", desc=m)
-        for m in ["wcset", "sloreta", "mne", "dspm"]}
-        
-# normalize (to count in std)
-iave = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0,1.0))
-for k in vave.keys():
-  vave[k] = mm.analysis.eeg.normalize_evoked_by_baseline(vave[k], baseline=(0,1.0))
-
-# compute correlation
-corr = {m:[] for m in vave.keys()}
-corr_avg = {m:[] for m in vave.keys()}
-for k in vave.keys():
-  c, times = mm.analysis.eeg.compute_evoked_correlation(iave, vave[k], mode="temporal", method="log-envelope", threshold=0)
-  corr[k] = c
-  corr_avg[k] = np.mean(c)
-  
-# plot
-plt.figure()
-for k in vave.keys():
-  plt.plot(iave.ch_names, corr[k])
-
-print(f"Average: {corr_avg}")
-```
-
 # temporal correlation
-
-```{python filename="correlation_matrices.py"}
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from scripts.data_manager import IntraManager
-
-# data manager
-dm = IntraManager("intra.config.yml")
-sub = "48"
-
-# load data
-sr = dm.get_subject(sub)
-iave = sr.load("i-ave", task="spk")
-matrices = np.load(f"results/sub-{sub}_matrix_correlation.npz", allow_pickle=True)
-
-# extract data
-ch_names = iave.ch_names
-plot_names = matrices.files
-values = [np.abs(matrices[n]) for n in plot_names]
-
-
-def visualize_correlations(matrices, channel_names, titles=None):
-  """
-  Visualizes a list of matrices in separate interactive windows.
-  """
-  minimum = 0
-  for m in matrices:
-    minimum = min(m.min(), minimum)
-
-  for i, matrix in enumerate(matrices):
-    # create new figure
-    fig, ax = plt.subplots(figsize=(8, 7))
-
-    # fixed colormap from -1 to 1 or 0 to 1
-    if minimum < 0:
-      im = ax.imshow(matrix, cmap='RdBu_r', vmin=-1, vmax=1)
-    else:
-      im = ax.imshow(matrix, cmap="Reds", vmin=0, vmax=1)
-
-    # add colorbar
-    cbar = fig.colorbar(im, ax=ax)
-    cbar.set_label("Correlation ($r$)", rotation=270, labelpad=15)
-
-    # set titles
-    title = titles[i] if titles else f"Correlation Matrix {i+1}"
-    ax.set_title(title)
-
-    # Handle Tick labels
-    ticks = np.arange(len(channel_names))
-    ax.set_xticks(ticks)
-    ax.set_yticks(ticks)
-    ax.set_xticklabels(channel_names, rotation=90, fontsize=8)
-    ax.set_yticklabels(channel_names, fontsize=8)
-
-    # optional: grid lines to help distinguish cells
-    ax.set_xticks(ticks - 0.5, minor=True)
-    ax.set_yticks(ticks - 0.5, minor=True)
-    ax.grid(which="minor", color="w", linestyle="-", linewidth=0.5)
-    ax.tick_params(which="minor", bottom=False, left=False)
-
-    plt.tight_layout()
-
-  plt.show()
-
-%matplotlib qt
-visualize_correlations(values, ch_names, plot_names)
-```
-
-# global field power
-
-```{python filename="global_field_power.py"}
-import mindmap as mm
-from scripts.data_manager import IntraManager
-
-# data manager 
-dm = IntraManager("intra.config.yml")
-sub = "48"
-
-# load data
-sr = dm.get_subject(sub)
-iave = sr.load("i-ave", task="spk")
-vave = {m:sr.load("v-ave", task="spk", desc=m)
-        for m in ["wcset", "sloreta", "mne", "dspm"]}
-
-# plot global field power
-%matplotlib qt
-mm.viz.plot_gfp_comparison(iave, vave, norm_baseline=(0,1.0)).show()
-```
 
 
 # Relative Energy Map
-
-
-```{python filenam="relative_energy_map.py"}
-import mindmap as mm
-
-from scripts.data_manager import IntraManager
-
-# data manager
-dm = IntraManager("intra.config.yml")
-sub = "48"
-
-# load data
-sr = dm.get_subject(sub)
-iave = sr.load("i-ave", task="spk")
-vave = {m:sr.load("v-ave", task="spk", desc=m) for m in ["wcset", "sloreta", "mne", "dspm"]}
-
-tmin, tmax = mm.analysis.eeg.find_spike_window(iave, baseline=(0,1.0), gap_fill_ms=200)
-print(f"Estimated spike window: {tmin:.3f} - {tmax:.3f}")
-
-# combine evokeds
-evokeds = vave.copy()
-evokeds["True iEEG"] = iave
-
-# normalize
-for k in evokeds.keys():
-  evokeds[k] = mm.analysis.eeg.normalize_evoked_by_baseline(evokeds[k], baseline=(0,1.0))
-
-# visualize relative energy map
-%matplotlib qt
-for k, evk in evokeds.items():
-  fig, ax = mm.viz.plot_evoked_rem(iave, evk, rng=(tmin, tmax), mode="spatial")
-  fig.suptitle(f"sub-{sub}: {k}")
-plt.show()
-```
-
 
 
 ```{python filename="center_of_gravity.py"}
@@ -1165,70 +832,4 @@ for k in vave.keys():
 # visualize center of gravity
 mm.viz.plot_evoked_cog(evokeds, ref_name="True iEEG", source_space=src, rng=(1.9, 2.5), center_ref=False).show()
 ```
-
-
-
-
-```{python filename="center_of_gravity.py"}
-import numpy as np
-import matplotlib.pyplot as plt
-import mindmap as mm
-from scripts.data_manager import IntraManager
-
-# data manager
-dm = IntraManager("intra.config.yml")
-sub = "34"
-
-# load data
-sr = dm.get_subject(sub)
-iave = sr.load("i-ave", task="spk")
-vave = {m:sr.load("v-ave", task="spk", desc=m)
-        for m in ["wcset", "sloreta", "mne", "dspm"]}
-        
-# normalize (to count in std)
-iave = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0,1.0))
-for k in vave.keys():
-  vave[k] = mm.analysis.eeg.normalize_evoked_by_baseline(vave[k], baseline=(0,1.0))
-
-# compute correlation
-corr = {m:[] for m in vave.keys()}
-corr_avg = {m:[] for m in vave.keys()}
-for k in vave.keys():
-  c, times = mm.analysis.eeg.compute_evoked_correlation(iave, vave[k], mode="spatial", method="pearson", threshold=3)
-  corr[k] = c
-  corr_avg[k] = np.mean(c)
-  
-# plot
-plt.figure()
-for k in vave.keys():
-  plt.plot(times, corr[k])
-
-print(f"Average: {corr_avg}")
-```
-
-```{python filename="spatial_correlation_threshold.py"}
-import numpy as np
-import matplotlib.pyplot as plt
-import mindmap as mm
-from scripts.data_manager import IntraManager
-
-# data manager
-dm = IntraManager("intra.config.yml")
-sub = "34"
-
-# load data
-sr = dm.get_subject(sub)
-iave = sr.load("i-ave", task="spk")
-vave = {m:sr.load("v-ave", task="spk", desc=m)
-        for m in ["wcset", "sloreta", "mne", "dspm"]}
-        
-# normalize (to count in std)
-iave = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0,1.0))
-for k in vave.keys():
-  vave[k] = mm.analysis.eeg.normalize_evoked_by_baseline(vave[k], baseline=(0,1.0))
-
-%matplotlib qt 
-mm.viz.plot_channel_grid(iave, vave).show()
-```
-
 

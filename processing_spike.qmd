@@ -1,5 +1,32 @@
 
 
+# 1. EEG Preprocessing
+
+Preprocesses every patient's spike-triggered-average EEG (from Cartool) into
+a cleaned evoked response + ad-hoc noise covariance, ready for forward/inverse
+modeling. Notch filtering, referencing, and baseline windows are all applied
+per-subject via hardcoded subject lists (presumably from earlier per-subject
+QC), not a single global setting.
+
+**Parameter choices:**
+
+- 50 Hz / 100 Hz notch filters applied only to specific subject lists
+  (`pat12, pat20, pat22, pat26, pat27, pat30, pat44, pat02, pat05, pat10` /
+  `pat26, pat02, pat03, pat10`): presumably subjects where line noise was
+  visible on inspection. **FILL** (exact QC criterion used to build these
+  two lists)
+- `trans_bandwidth = 10.0`, `filter_length = data.shape[-1]`: forced by the
+  short (~1 s) evoked window - not a free choice (see inline comment).
+- Average referencing (`ref_channels="average"`): **FILL** (why average
+  reference over e.g. a REST/infinity reference or a bipolar montage)
+- Baseline windows vary by subject (`[0, 0.05]` for 8 subjects, `[0, 0.1]`
+  for `pat43`, `[0, 0.2]` for everyone else): **FILL** (what determines
+  which subjects get the shorter baseline - presumably a shorter usable
+  pre-spike window in their recording, but worth confirming)
+- Noise covariance is ad-hoc (`mne.make_ad_hoc_cov`), not empirical: forced
+  because the input is already spike-triggered-averaged, so there's no raw
+  data left to estimate noise from - not a free choice.
+
 ```{python filename="eeg_processing.py"}
 # | output: false
 
@@ -81,6 +108,17 @@ process_eeg(overwrite=True)
 
 ## MultiConn Parcellation
 
+Generates the MultiConn-2022 cortical parcellation (scale 4) for every
+subject in this cohort - same tool, same parameter values as
+`processing_simf.qmd`'s `MultiConn_parcellation.py`, applied per-subject
+here via `@loop` instead of to a single subject.
+
+**Parameter choices:**
+
+- `margin = 2` (mm), `thresh = 0.05`, `scale = "4"`: same values as the
+  simulation study. **FILL** (motivation - presumably shared across both
+  studies, but confirm)
+
 ```{python filename="MultiConn_parcellation.py"}
 # | output: false
 
@@ -125,11 +163,31 @@ generate_multiconn_parcellation(overwrite=False)
 
 # Cortical Surface Modeling
 
+Runs FreeSurfer's standard `recon-all -all` per subject (via
+`scripts/fsrecon.sh`) on the pre-op T1w - no custom `recon-all` flags (no
+`-parallel`, `-qcache`, expert options, etc.), just the default full
+pipeline. Not really a "parameter choice" section - flagged only in case a
+custom flag was intended but never added. **FILL**
+
 ```{python filename="brain_surface_reconstruction.py"}
 %%bash
 bash scripts/fsrecon.sh spike.config.yml
 ```
 
+Builds each subject's cortical source space and removes the medial wall,
+using the FreeSurfer cortex-vertex label list (`vertex-ctx`) rather than a
+nifti mask. Note `processing_simf.qmd`'s equivalent cell
+(`setup_source_space.py`) instead uses a nifti-mask-based cortex filter
+(`filter_dipoles_by_nifti_mask`) rather than this id-list-based one
+(`filter_dipoles_by_id_list`); both should produce an equivalent cortex
+restriction, just via a different mechanism - worth confirming that's
+intentional rather than incidental drift between the two files.
+
+**Parameter choices:**
+
+- `spacing = "oct6"`, `surface = "white"`, `add_dist = True`, `n_jobs = 10`:
+  same values as `processing_simf.qmd`'s `setup_source_space.py` - see that
+  file's notes, same answers should apply here. **FILL**
 
 ```{python filename="setup_source_space_intra.py"}
 # | output: false
@@ -175,6 +233,15 @@ setup_source_space(overwrite=True)
 
 
 ## Tissue Segmentation & Mesh Generation (SimNIBS)
+
+Runs CHARM tissue segmentation per subject, then builds the 3-layer BEM
+surfaces from the CHARM labels - same as `processing_simf.qmd`'s
+`bem_layers.py`, but looped over the full cohort here instead of a single
+subject.
+
+**Parameter choices:**
+
+- `n_smooth = 20`: same value as the simulation study. **FILL**
 
 ```{python filename="head_segmentation.py"}
 # | output: false
@@ -232,6 +299,20 @@ segment_head(overwrite=True)
 
 
 
+Computes a **single** forward solution per subject - unlike the simulation
+study, which needs two (one to generate synthetic data, and a deliberately
+mismatched one to invert it, to avoid an "inverse crime"). That concern
+doesn't apply to real patient data: there's nothing this pipeline itself
+generated to protect against, so there's only one forward model to build.
+
+**Parameter choices:**
+
+- `conductivity = [0.3, 0.006, 0.3]` S/m (brain, skull, scalp): same values
+  as `processing_simf.qmd`'s simulation forward model. **FILL**
+  (source/reference for these specific values)
+- `ico = None`: forced by an MNE/`tris` compatibility issue (see inline
+  comment) - not a free modeling choice.
+
 ```{python filename="forward_problem.py"}
 # | output: false
 
@@ -285,6 +366,29 @@ def compute_fwd(sub, overwrite):
 compute_fwd(overwrite=False)
 ```
 
+
+Builds each subject's structural connectome from a **population-average
+probabilistic tractography atlas** (`REF_CON`), with a geometry-based
+fallback for gaps - unlike the simulation study, which builds its connectome
+from `sub-10`'s own individual tractography. **FILL** (presumably because
+these SPIKE patients don't have usable individual diffusion MRI, but worth
+confirming explicitly). The resulting connectome eigenbasis is the
+graph-spectral prior used by CSET/wCSET in `solve_inverse.py`.
+
+**Parameter choices:**
+
+- `consistency > 65`: threshold on the atlas's tract consistency (0-100
+  scale, presumably) required to keep an edge. **FILL**
+- `sparsity = 0.14`, `deterministic = True` (in `connectome_from_atlas`):
+  **FILL**
+- `maximum_dist = 22` (mm), `maximum_neigh = 35` (geometry-based fallback):
+  **FILL** - note these differ substantially from `processing_simf.qmd`'s
+  equivalent step (`maximum_dist=15, maximum_neigh=3`); worth confirming
+  whether that's intentional (e.g. the atlas-based connectome is much
+  sparser to begin with, so the geometric fallback needs to reach
+  further/wider to fill gaps) or should be reconciled.
+- `lap_type = "normalized"` (pygsp graph Laplacian): same as the simulation
+  study. **FILL**
 
 ```{python filename="atlas_connectivity.py"}
 import numpy as np
@@ -367,6 +471,26 @@ def build_connectivity(sub, overwrite):
 build_connectivity(overwrite=True)
 ```
 
+
+Runs all six source reconstruction methods (wCSET, CSET, MCE, sLORETA, dSPM,
+MNE) per subject, regularized per-subject via an SNR estimate from the
+evoked baseline window (same per-subject baseline windows as
+`eeg_processing.py` above).
+
+**Parameter choices:**
+
+- `lambda2 = max(0.01, 1/snr**2)`: regularization derived from estimated
+  SNR, floored at `0.01` (i.e. an SNR ceiling of 10). **FILL** (why this
+  specific floor)
+- `depth = 0.8` (wCSET, CSET, MCE, and also passed to
+  `mne.minimum_norm.make_inverse_operator` for sLORETA/dSPM/MNE). **FILL** -
+  ⚠ `processing_simf.qmd`'s equivalent step (`scripts/source_recon_sim.py`)
+  calls `make_inverse_operator` with `depth=None` for the same three
+  MNE-native methods (sLORETA/dSPM/MNE) - worth confirming whether this
+  depth-weighting difference between the two studies is intentional.
+- `harm = 0.7` (wCSET's harmonic weighting): **FILL**
+- `fixed = True` (fixed-orientation dipoles, for the `mne.minimum_norm`
+  inverse operator): **FILL**
 
 ```{python filename="solve_inverse.py"}
 # | output: false
@@ -475,6 +599,12 @@ source_recon(overwrite=True)
 
 
 # Resection Masks (RAMPS)
+
+Builds each subject's resection mask via RAMPS, using the hemisphere from
+`participants.tsv` and a hand-filled resected-lobe letter per subject (see
+the inline comments below for the labeling methodology - already documented
+in detail there, not repeated here - and the Quality Assessment section
+further down for known issues with specific subjects).
 
 ```{python filename="resection_masks.py"}
 # | output: false

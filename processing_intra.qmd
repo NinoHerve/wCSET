@@ -58,10 +58,41 @@ pip install .
 ```
 You should now be ready to run anything that comes ahead.
 
+✅ **Fixed:** every cell below used to call `dm.build_path(...)`, which
+doesn't exist on `IntraManager`/`mm.io.DatasetManager` (only `get_path`
+does, confirmed in `mindmap/io/dataset.py` and `scripts/data_manager.py`,
+and consistent with how both sibling files - `processing_spike.qmd`,
+`processing_simf.qmd` - call it). This would have raised `AttributeError` on
+the first call in every cell. All occurrences in this file have been renamed
+to `dm.get_path(...)`.
+
+This runs the pipeline validating source reconstruction against real
+**intracranial** EEG recorded simultaneously with scalp EEG (a small cohort,
+unlike the large SPIKE cohort or the single-subject SIMF study) - the
+"ground truth" here is real intracranial activity, not a resection or a
+simulated source.
+
 # 2. Signal Processing (Electrophysiology)
 
 ## Scalp EEG Conditioning
 
+Preprocesses the scalp EEG recorded concurrently with intracranial EEG.
+Unlike the SPIKE study's spike-triggered averages, this is closer to a
+standard evoked-response pipeline: average reference, baseline correction,
+then an **empirical** noise covariance estimated directly from the data
+(possible here because, unlike SPIKE, the input isn't already
+pre-averaged).
+
+**Parameter choices:**
+
+- `baseline = [0, 1.5]` (s): same window used for both baseline correction
+  and the noise covariance's `tmax` below. **FILL**
+- `ref_channels = "average"`: same average-reference choice as
+  `processing_spike.qmd`/`processing_simf.qmd` - **FILL** applies
+  consistently across all three files.
+- `mne.compute_covariance(eeg, tmax=1.5, method="empirical")`: empirical
+  (sample) covariance rather than a shrinkage/regularized estimator (e.g.
+  `"shrunk"`, `"auto"`). **FILL**
 
 ```{python filename="eeg_preprocessing_intra.py"}
 # | output: false
@@ -80,8 +111,8 @@ report_dir.mkdir(exist_ok=True)
 @loop(subjects=dm.subjects)
 def process_eeg(sub, overwrite):
     # ouput files
-    fave = dm.build_path(sub, "ave", task="spk")
-    fcov = dm.build_path(sub, "cov", task="spk")
+    fave = dm.get_path(sub, "ave", task="spk")
+    fcov = dm.get_path(sub, "cov", task="spk")
 
     if check_files([fave, fcov]) and not overwrite:
         return
@@ -108,6 +139,13 @@ process_eeg(overwrite=False)
 
 ## iEEG Ground Truth Preparation
 
+Builds the intracranial "ground truth" evoked response each method's
+projected virtual iEEG (`estimate_ieeg_intra.py`, further down) is later
+compared against. Just averages the epochs directly - no filtering or
+referencing shown here, so this assumes the intracranial data arrives
+already clean. **FILL** (confirm no upstream cleaning step is expected
+before this point)
+
 ```{python filename="ieeg_preprocessing_intra.py"}
 # | output: false
 
@@ -125,7 +163,7 @@ report_dir.mkdir(exist_ok=True)
 @loop(subjects=dm.subjects)
 def process_ieeg(sub, overwrite):
     # Output files
-    fiave = dm.build_path(sub, "i-ave", task="spk")
+    fiave = dm.get_path(sub, "i-ave", task="spk")
 
     if check_files([fiave]) and not overwrite:
         return
@@ -145,13 +183,80 @@ process_ieeg(overwrite=False)
 
 # 3. Anatomical & Forward Modeling
 
+## MultiConn Parcellation
+
+New section, added so `build_connectivity_intra.py` below can build an
+atlas-based connectome the same way `processing_spike.qmd` does - this
+parcellation didn't exist for the INTRA cohort before. Same tool, same
+parameter values as the other two files' `MultiConn_parcellation.py`.
+
+**Parameter choices:**
+
+- `margin = 2` (mm), `thresh = 0.05`, `scale = "4"`: same values as
+  `processing_spike.qmd`/`processing_simf.qmd`. **FILL** (see the same note
+  in those files)
+
+```{python filename="MultiConn_parcellation_intra.py"}
+# | output: false
+
+import mindmap as mm
+from scripts.utils import loop, check_files
+from scripts.data_manager import IntraManager
+
+overwrite = False
+
+# data manager
+fconfig = "intra.config.yml"
+dm = IntraManager(fconfig)
+
+@loop(subjects=dm.subjects)
+def generate_multiconn_parcellation(sub, overwrite):
+    # output files
+    entities = dict(segmentation="multiconn2022", scale="4")
+    fseg = dm.get_path(sub, "dseg", **entities)
+    fclut = dm.get_path(sub, "dseg", extension=".txt", **entities)
+
+    if check_files([fseg, fclut]) and not overwrite:
+        return
+
+    # 1. Run the MultiConn parcellation pipeline
+    multiconn = mm.anatomy.parcellation.parcellate_multiconn(
+        sub = sub,
+        fconfig = fconfig,
+        margin = 2,       # White matter extension in [mm]
+        thresh = 0.05,    # Probability threshold to discretize thalamus atlas
+        verbose = 1,
+    )
+
+    # 2. Save data
+    multiconn.save(
+        fseg,
+        fclut,
+    )
+
+generate_multiconn_parcellation(overwrite=False)
+```
+
 ## Cortical Surface Modeling (FreeSurfer)
+
+Same as `processing_spike.qmd`'s `brain_surface_reconstruction.py`: runs
+FreeSurfer's default `recon-all -all` per subject, no custom flags. See that
+file's note.
 
 ```{python filename="brain_surface_reconstruction.py"}
 %%bash
 bash scripts/fsrecon.sh intra.config.yml
 ```
 
+Builds each subject's cortical source space and removes the medial wall -
+identical cell (same filename, same code) to `processing_spike.qmd`'s
+`setup_source_space_intra.py`.
+
+**Parameter choices:**
+
+- `spacing = "oct6"`, `surface = "white"`, `add_dist = True`, `n_jobs = 10`:
+  same values as the other two files. **FILL** (see the same note in
+  `processing_simf.qmd`/`processing_spike.qmd`)
 
 ```{python filename="setup_source_space_intra.py"}
 # | output: false
@@ -167,7 +272,7 @@ dm = IntraManager("intra.config.yml")
 @loop(subjects=dm.subjects)
 def setup_source_space(sub, overwrite):
     # output files
-    fsrc = dm.build_path(sub, "src")
+    fsrc = dm.get_path(sub, "src")
 
     if check_files([fsrc]) and not overwrite:
         return
@@ -198,6 +303,13 @@ setup_source_space(overwrite=False)
 
 ## Tissue Segmentation & Mesh Generation (SimNIBS)
 
+Same CHARM segmentation + BEM layer construction as
+`processing_spike.qmd`'s `head_segmentation.py`.
+
+**Parameter choices:**
+
+- `n_smooth = 20`: same value as the other two files. **FILL**
+
 ```{python filename="head_segmentation_intra.py"}
 # | output: false
 
@@ -212,15 +324,15 @@ dm = IntraManager("intra.config.yml")
 @loop(subjects=dm.subjects)
 def segment_head(sub, overwrite):
     # output file
-    fseg = dm.build_path(sub, "seg")
-    fbem = dm.build_path(sub, "bem")
+    fseg = dm.get_path(sub, "seg")
+    fbem = dm.get_path(sub, "bem")
 
     # ---------------------
     # Tissue segmentation
     # ---------------------
 
     # input files
-    ft1 = dm.build_path(sub, "T1w")
+    ft1 = dm.get_path(sub, "T1w")
 
     # 1. run charm pipeline
     mm.anatomy.segmentation.run_charm(
@@ -255,6 +367,17 @@ segment_head(overwrite=False)
 
 ## Lead Field Computation
 
+Computes a single forward solution per subject - same conductivity values
+and same `ico=None` constraint as `processing_spike.qmd`'s
+`forward_problem.py`.
+
+**Parameter choices:**
+
+- `conductivity = [0.3, 0.006, 0.3]` S/m: same as the SPIKE/SIMF studies.
+  **FILL** (see the same note in the other two files)
+- `ico = None`: forced by the same MNE/`tris` compatibility issue - not a
+  free choice.
+
 ```{python filename="forward_problem_intra.py"}
 # | output: false
 
@@ -270,7 +393,7 @@ dm = IntraManager("intra.config.yml")
 @loop(subjects=dm.subjects)
 def compute_fwd(sub, overwrite):
     # output files
-    ffwd = dm.build_path(sub, "fwd")
+    ffwd = dm.get_path(sub, "fwd")
 
     if check_files([ffwd]) and not overwrite:
         return
@@ -312,58 +435,138 @@ compute_fwd(overwrite=False)
 
 # Connectomics
 
-## Build geometry connectivity graph and compute its eigensystem
+## Build atlas-based connectivity graph and compute its eigensystem
+
+Changed to match `processing_spike.qmd`'s `atlas_connectivity.py`: builds
+each subject's connectome from the population probabilistic tractography
+atlas (`REF_CON`, newly added to `intra.config.yml` - see its note), with a
+geometry-based fallback for gaps, instead of the previous geometry-only
+approach - this cohort doesn't have individual diffusion MRI either (same
+situation as SPIKE), so the population atlas is used here too.
+
+**This produces new output files (`atlas="probcon"`) rather than
+overwriting the old geometry-only ones (`desc="geom"`)** - both versions now
+coexist on disk, so nothing from the previous approach is lost and this is
+easy to revert (just point consumers back at the `desc="geom"` files).
+⚠ **`solve_inverse_intra.py` still loads the old `desc="geom"` eigensystem**
+(`eig = dm.load(sub, "eig", desc="geom")`) - it hasn't been switched to the
+new `atlas="probcon"` one, since that's a separate decision about which
+connectome to actually use for reconstruction, not part of this change.
+
+**Parameter choices:** identical to `processing_spike.qmd`'s
+`atlas_connectivity.py` - `consistency > 65`, `sparsity = 0.14`,
+`deterministic = True`, `maximum_dist = 22`, `maximum_neigh = 35`,
+`lap_type = "normalized"`. **FILL** (see that file's notes - same questions
+apply here)
 
 ```{python filename="build_connectivity_intra.py"}
 # | output: false
 
 import numpy as np
-import pygsp
 import mindmap as mm
 from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
+import pygsp
 
 # data manager
 dm = IntraManager("intra.config.yml")
 
-# create geometries
+# --- process atlas ---
+probcon = dm.load_ref("REF_CON")
+
+consistency = probcon["matrices"]["consistency"][:,:]
+length = probcon["matrices"]["length"][:,:]
+number = probcon["matrices"]["numbStlines"][:,:]
+
+# Correct NaNs to 0
+consistency = np.nan_to_num(consistency)
+length = np.nan_to_num(length)
+number = np.nan_to_num(number)
+
+atlas = np.bitwise_and(
+    consistency > 65,
+    length > 0,
+)
+atlas = np.bitwise_and(
+    atlas,
+    number > 0,
+)
+
+atlas = length * atlas  # weight = avg fiber lengths
+
+# --- build atlas-based connectivity matrix ---
 @loop(subjects=dm.subjects)
-def create_geometry(sub, overwrite):
+def build_connectivity(sub, overwrite):
     # output files
-    fcon = dm.build_path("con", desc="geom")
-    feig = dm.build_path("eig", desc="geom")
+    fcon = dm.get_path(sub, "con", atlas="multicon")
+    feig = dm.get_path(sub, "eig", atlas="multicon")
 
     if check_files([fcon, feig]) and not overwrite:
         return
 
-    # 0. Load data
-    fwd = dm.load("fwd")
+    # Start: Load data
+    src = dm.load(sub, "fwd")["src"]
+    parc = dm.load(sub, "dseg", segmentation="multiconn2022", scale="4")
+    ras2tkras = dm.load(sub, "ras2tkras")
 
-    # 1. Create geometry
-    geom = mm.analysis.connectivity.connectome_from_geometry(
-        source_space = fwd["src"], 
-        weights = True,
-        inter_hemi_dist = 5,
+    # 1. Generate atlas-based connectivity
+    con_atlas = mm.analysis.connectivity.connectome_from_atlas(
+        src, parc, atlas, ras2tkras,
+        sparsity = 0.14,
+        deterministic = True,
     )
 
-    # 2. Compute spectral properties
-    graph = pygsp.graphs.Graph(geom, lap_type="normalized")
-    graph.compute_fourier_basis()
+    # 2. Generate geometry-based connectivity
+    con_geom = mm.analysis.connectivity.connectome_from_geometry(
+        src,
+        maximum_dist = 22,
+        maximum_neigh = 35,
+        weights = True,
+    )
 
-    eigvec = graph.U    # eigenvectors
-    eigval = graph.e    # eigenvalues
+    # 3. Fuse connectivities
+    con = con_atlas.copy()
+    fill_idx = np.argwhere((con_geom > 0) & (con_atlas == 0))
+    con[fill_idx[:,0], fill_idx[:,1]] = con_geom[fill_idx[:,0], fill_idx[:,1]]
 
-    # 3. Save outputs
-    np.save(fcon, geom)
-    mm.core.io.write_eig(feig, eigvec, eigval)
+    # 4. Compute Spectral properties
+    inv_con = np.divide(1, con, out=np.zeros_like(con), where=con>0)    # weight according to length
+    G = pygsp.graphs.Graph(inv_con, lap_type="normalized")
+    eigval, eigvec = np.linalg.eigh(G.L.toarray())
+    eigval[0] = 0
 
-create_geometry(overwrite=False)
+    # End: Save
+    np.save(fcon, con)
+    mm.core.write_eig(feig, eigvec, eigval)
+
+build_connectivity(overwrite=True)
 ```
 
 
 # Inverse problem
 
 ## Solve inverse problem
+
+Runs all six source reconstruction methods (wCSET, CSET, MCE, sLORETA, dSPM,
+MNE), matching `processing_spike.qmd`'s `solve_inverse.py` - CSET/MCE were
+previously missing (only a commented-out, already-broken leftover line
+referenced them: `#fcset = sr.get_path(...)`, using an undefined `sr`
+variable from an older version of this code; deleted rather than fixed,
+since the working pattern from `processing_spike.qmd` replaces it anyway).
+
+**Parameter choices:**
+
+- `lambda2 = max(0.01, 1/snr**2)`: same floor as `processing_spike.qmd`.
+  **FILL** (why this specific floor)
+- `depth = 0.8` (wCSET, CSET, MCE, and also passed to
+  `mne.minimum_norm.make_inverse_operator` for sLORETA/dSPM/MNE): same value
+  as `processing_spike.qmd`. **FILL** (see the same depth-weighting
+  cross-study note there)
+- `harm = 0.7` (wCSET): same value as `processing_spike.qmd`. **FILL**
+- `noise_norm = None` (wCSET): not present in `processing_spike.qmd`'s
+  wCSET call. **FILL** (intentional difference, or should the two calls
+  match?)
+- `fixed = True`: same as `processing_spike.qmd`. **FILL**
 
 ```{python filename="solve_inverse_intra.py"}
 # | output: false
@@ -380,20 +583,21 @@ dm = IntraManager("intra.config.yml")
 @loop(subjects=dm.subjects)
 def source_recon(sub, overwrite=True):
     # outputs files
-    fwcset = dm.build_path(sub, "stc", task="spk", desc="wcset")
-    #fcset = sr.get_path("stc", task="spk", desc="cset")
-    fsloreta = dm.build_path(sub, "stc", task="spk", desc="sloreta")
-    fdspm = dm.build_path(sub, "stc", task="spk", desc="dspm")
-    fmne = dm.build_path(sub, "stc", task="spk", desc="mne")
+    fwcset = dm.get_path(sub, "stc", task="spk", desc="wcset")
+    fcset = dm.get_path(sub, "stc", task="spk", desc="cset")
+    fmce = dm.get_path(sub, "stc", task="spk", desc="mce")
+    fsloreta = dm.get_path(sub, "stc", task="spk", desc="sloreta")
+    fdspm = dm.get_path(sub, "stc", task="spk", desc="dspm")
+    fmne = dm.get_path(sub, "stc", task="spk", desc="mne")
 
-    if check_files([fwcset, fsloreta, fdspm, fmne]) and not overwrite:
+    if check_files([fwcset, fcset, fmce, fsloreta, fdspm, fmne]) and not overwrite:
         return
 
     # 0. Load data
     fwd = dm.load(sub, "fwd")                    # forward solution
     ave = dm.load(sub, "ave", task="spk")        # averaged EEG
     ncov = dm.load(sub, "cov", task="spk")       # EEG noise covariance
-    eig = dm.load(sub, "eig", desc="geom")       # Connectome eigensystem
+    eig = dm.load(sub, "eig", atlas="multicon")  # Connectome eigensystem
 
     # 1. Estimate regularizer parameter
     snr, _ = mm.analysis.eeg.estimate_evoked_snr(ave, baseline=(0,1.5), noise_cov=ncov)
@@ -402,6 +606,8 @@ def source_recon(sub, overwrite=True):
 
     print(f"Estimated SNR: {snr:.3f}")
     print(f"Estimated lambda2: {lambda2:.3f}")
+
+    lambda2 = max(0.01, lambda2)
 
     # ---------------------------------
     # 2. Run source reconstructions <3
@@ -419,18 +625,39 @@ def source_recon(sub, overwrite=True):
     )
     wcset = inv.solve(ave, lambda2)
 
-    # 2.2 sLORETA
+    # 2.2 CSET
+    inv = mm.analysis.inverse.CSET(
+        forward = fwd,
+        noise_cov = ncov,
+        depth = 0.8,
+        eigenvectors = eig["vec"],
+    )
+
+    cset = inv.solve(ave, lambda2=lambda2)
+
+    # 2.3 MCE
+    inv = mm.analysis.inverse.MCE(
+        forward = fwd,
+        noise_cov = ncov,
+        depth = 0.8,
+    )
+
+    mce = inv.solve(ave, lambda2=lambda2)
+
+    # 2.4 sLORETA
     inv = mne.minimum_norm.make_inverse_operator(ave.info, fwd, ncov, depth=0.8, fixed=True)
     sloreta = mne.minimum_norm.apply_inverse(ave, inv, lambda2, method="sLORETA")
 
-    # 2.3 dSPM
+    # 2.5 dSPM
     dspm = mne.minimum_norm.apply_inverse(ave, inv, lambda2, method="dSPM")
 
-    # 2.4 MNE
+    # 2.6 MNE
     mne_ = mne.minimum_norm.apply_inverse(ave, inv, lambda2, method="MNE")
 
     # 3. Save
     wcset.save(fwcset, overwrite=overwrite, verbose="warning")
+    cset.save(fcset, overwrite=overwrite, verbose="warning")
+    mce.save(fmce, overwrite=overwrite, verbose="warning")
     sloreta.save(fsloreta, overwrite=overwrite, verbose="warning")
     dspm.save(fdspm, overwrite=overwrite, verbose="warning")
     mne_.save(fmne, overwrite=overwrite, verbose="warning")
@@ -443,6 +670,21 @@ source_recon(overwrite=True)
 
 ## Project source images to intracranial channels
 
+Projects each method's source estimate onto virtual intracranial electrode
+positions, so it can be compared directly to the real intracranial recording
+(`i-ave`) from the ground-truth-preparation step above - this is the actual
+validation step this whole study exists for. Now covers all six methods
+computed by `solve_inverse_intra.py` (`wcset, cset, mce, sloreta, dspm,
+mne`) - previously only 4 of the 6 were projected here.
+
+**Parameter choices (`compute_virtual_ieeg`):**
+
+- `conductivity = 0.25` S/m: infinite homogeneous-space conductivity used
+  for the point-source-to-electrode projection. **FILL**
+- `threshold = 0.003` (m, i.e. 3 mm): minimal source-to-electrode distance
+  before the projection's `1/distance`-type falloff is capped, to avoid a
+  blow-up at zero distance. **FILL** (why exactly 3 mm)
+
 ```{python filename="estimate_ieeg_intra.py"}
 # | output: false
 
@@ -453,12 +695,12 @@ from scripts.data_manager import IntraManager
 
 # data manager
 dm = IntraManager("intra.config.yml")
-methods = ["wcset", "sloreta", "dspm", "mne"]
+methods = ["wcset", "cset", "mce", "sloreta", "dspm", "mne"]
 
 @loop(subjects=dm.subjects)
 def compute_vieeg(sub, overwrite):
     # output files
-    files = [dm.build_path(sub, "v-ave", task="spk", desc=m) for m in methods]
+    files = [dm.get_path(sub, "v-ave", task="spk", desc=m) for m in methods]
 
     if check_files(files) and not overwrite:
         return
@@ -489,156 +731,113 @@ def compute_vieeg(sub, overwrite):
 compute_vieeg(overwrite=True)
 ```
 
+## Fidelity metrics
 
+Compares each method's virtual iEEG (`v-ave`, from the projection step
+above) against the true intracranial recording (`i-ave`), using the
+fidelity metric set from `tutorials/analysis/eeg/virtual_ieeg.ipynb`:
+correlation and cosine similarity (spatial, temporal, and spatio-temporal),
+explained variance, and relative-energy-map (REM) correlation - computed
+both temporally (per channel) and spatially (per timepoint). Computed over
+the GFP-detected spike window only (`find_spike_window`), not the whole
+baseline+spike epoch, matching the tutorial. Compares all 6 methods
+projected by `estimate_ieeg_intra.py` above (`wcset, sloreta, cset, dspm,
+mce, mne`) - the tutorial itself only compares 5 (drops `mne`/wMNE), but
+`mne` is kept in here. One `MetricSuite` per subject is saved to
+`results/intra_vieeg_metrics/sub-{sub}/`, reloaded and combined across
+subjects in `index.qmd`.
 
+**Parameter choices:**
 
+- `baseline = (0, 1.0)` (s): window used both for
+  `normalize_evoked_by_baseline` and as `find_spike_window`'s noise
+  reference - same convention already used elsewhere in this study (e.g.
+  `intra_corr.py` in `index.qmd`). **FILL**
+- `polarity_invariant = True` (correlation, cosine, explained variance):
+  virtual-channel polarity is an arbitrary reference/orientation convention
+  here, not a meaningful failure mode, so an overall sign flip shouldn't
+  score worse than a perfectly in-phase match - matches the tutorial
+  notebook. Not available for REM correlation - it's already
+  polarity-invariant by construction, being built from squared energy.
+- No more `pattern_geometry_correlation`/`ssim` - dropped from the tutorial's
+  metric set since the version this was first built from.
 
-```{python filename="radiology_day_slide1.py"}
+```{python filename="evaluate_vieeg_fidelity_intra.py"}
+# | output: false
 
-import mindmap as mm
-from scripts.data_manager import IntraManager
-
-from mindmap.viz.utils import BaseMesh, BrainMesh, SourceMesh, ChannelMesh, HeadMesh
-from mindmap.viz.fancy import create_mesh_animation, create_dynamic_eeg_plot
-
-# data
-dm = IntraManager("intra.config.yml")
-
-sub = "48"
-channels = ["68", "253", "224", "201", "122"]
-
-src = dm.load(sub, "fwd")["src"]
-head = dm.load(sub, "bem")["skin"]
-ave = dm.load(sub, "ave", task="spk")
-sloreta = dm.load(sub, "stc", task="spk", desc="sloreta")
-wcset = dm.load(sub, "stc", task="spk", desc="wcset")
-
-
-# crop time
-tmin = 1.1
-tmax = 3.5
-ave = ave.crop(tmin=tmin, tmax=tmax)
-sloreta = sloreta.crop(tmin=tmin, tmax=tmax)
-wcset = wcset.crop(tmin=tmin, tmax=tmax)
-
-# adjust bem scaling
-head.points = head.points/1000
-
-# mesh objects
-bm_sloreta = SourceMesh(src, sloreta)
-bm_wcset = SourceMesh(src, wcset)
-cm = ChannelMesh(ave)
-hm = HeadMesh(head, line_width=0.01)
-
-# EEG
-create_dynamic_eeg_plot(
-    ave,
-    picks = channels,
-    total_duration = 10.0,
-    save_path = "eeg.mp4",
-)
-
-# sloreta
-create_mesh_animation(
-    bm_sloreta,
-    addons = [cm, hm],
-    total_duration = 10.0,
-    camera_position = mm.viz.get_brain_view("Lateral Left"),
-    save_path = "sloreta.mp4",
-)
-
-# wcset
-create_mesh_animation(
-    bm_wcset,
-    addons=[cm, hm],
-    total_duration = 10.0,
-    camera_position = mm.viz.get_brain_view("Lateral Left"),
-    save_path = "wcset.mp4",
-)
-```
-
-
-```{python filename="radiology_day_slide2.py"}
-import pyvista as pv
+from pathlib import Path
 
 import mindmap as mm
+from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
-from mindmap.viz.utils import BaseMesh, BrainMesh, SourceMesh, ChannelMesh, HeadMesh
-from mindmap.viz.fancy import create_mesh_animation, create_dynamic_eeg_plot
-
-# data
+# data manager
 dm = IntraManager("intra.config.yml")
+methods = ["wcset", "sloreta", "cset", "dspm", "mce", "mne"]
 
-sub = "48"
-channels = ["68", "253", "224", "201", "122"]
+@loop(subjects=dm.subjects)
+def evaluate_vieeg_fidelity(sub, overwrite):
+    # output folder (one per subject - MetricSuite.load_study-compatible layout)
+    fmetrics = Path(f"./results/intra_vieeg_metrics/sub-{sub}")
 
-src = dm.load(sub, "fwd")["src"]
-head = dm.load(sub, "bem")["skin"]
-ave = dm.load(sub, "ave", task="spk")
-iave = dm.load(sub, "i-ave", task="spk")
-sloreta = dm.load(sub, "v-ave", task="spk", desc="sloreta")
-dspm = dm.load(sub, "v-ave", task="spk", desc="dspm")
-wcset = dm.load(sub, "v-ave", task="spk", desc="wcset")
+    if check_files([fmetrics/"meta.json"]) and not overwrite:
+        return
 
-# adjust bem scaling
-head.points = head.points/1000
+    # 1. Load data
+    iave = dm.load(sub, "i-ave", task="spk")
+    vave = {m: dm.load(sub, "v-ave", task="spk", desc=m) for m in methods}
 
-# standardize
-iave = mm.analysis.eeg.normalize_evoked(iave)
-sloreta = mm.analysis.eeg.normalize_evoked(sloreta)
-dspm = mm.analysis.eeg.normalize_evoked(dspm)
-wcset = mm.analysis.eeg.normalize_evoked(wcset)
+    # 2. Preprocess: baseline-normalize, then restrict to the GFP-detected
+    # spike window only (not the whole baseline+spike epoch)
+    iave_norm = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0, 1.0))
+    vave_norm = {m: mm.analysis.eeg.normalize_evoked_by_baseline(v, baseline=(0, 1.0)) for m, v in vave.items()}
 
-# HEAD MODEL WITH INTRA ELECTRODES
-bm = BrainMesh(src, color="white", opacity=0.3) # add white transparency?
-head = HeadMesh(head, line_width=0.01, color="white", style="wireframe")
-eeg = ChannelMesh(ave, color="black")
-ieeg = ChannelMesh(iave, color="green")
+    tmin, tmax = mm.analysis.eeg.find_spike_window(iave, baseline=(0, 1.0))
 
-plotter = pv.Plotter()
-plotter.add_mesh(bm.hemi_l, **bm.plot_kwargs)
-plotter.add_mesh(bm.hemi_r, **bm.plot_kwargs)
-plotter.add_mesh(head.polydata, **head.plot_kwargs)
-plotter.add_mesh(eeg.polydata, **eeg.plot_kwargs)
-plotter.add_mesh(ieeg.polydata, **ieeg.plot_kwargs)
-plotter.show()
+    iave_win = iave_norm.copy().crop(tmin, tmax)
+    vave_win = {m: v.copy().crop(tmin, tmax) for m, v in vave_norm.items()}
 
-# I-AVE RECONSTRUCTIONS
+    # 3. Compute fidelity metrics
+    metrics = mm.metric.MetricSuite(f"Intra vIEEG fidelity, sub-{sub}", subject=sub)
 
-# crop time and channels
-%matplotlib widget
-mm.viz.plot_channel_grid(
-    iave,
-    {"wcset": wcset, "sloreta": sloreta, "dspm": dspm},
-    n_visible = 2,
-)
+    for m in methods:
+        v_win = vave_win[m]
 
-# TEMPORAL CORRELATIONS
+        # polarity_invariant=True: channel polarity is an arbitrary reference/
+        # orientation convention here, not a meaningful failure mode -- an
+        # overall sign flip shouldn't score worse than a perfectly in-phase match
+        for mode, coords in [
+            ("spatial", {"times": v_win.times}),
+            ("temporal", {"channel": v_win.ch_names}),
+            ("spatio-temporal", {}),
+        ]:
+            metrics.register(
+                m, f"correlation_{mode}",
+                mm.analysis.eeg.compute_evoked_correlation(iave_win, v_win, mode=mode, polarity_invariant=True),
+                **coords,
+            )
+            metrics.register(
+                m, f"cosine_{mode}",
+                mm.analysis.eeg.compute_evoked_cosine(iave_win, v_win, mode=mode, polarity_invariant=True),
+                **coords,
+            )
 
+        metrics.register(m, "explained_variance",
+                          mm.analysis.eeg.compute_evoked_explained_variance(iave_win, v_win, polarity_invariant=True))
 
+        # rem_correlation_{mode}: mirrors correlation_{mode}/cosine_{mode}'s naming --
+        # REM has no polarity_invariant option (already polarity-invariant by
+        # construction, being built from squared energy)
+        metrics.register(m, "rem_correlation_temporal",
+                          mm.analysis.eeg.compute_evoked_rem_correlation(iave_win, v_win, mode="temporal"),
+                          channel=v_win.ch_names)
+        metrics.register(m, "rem_correlation_spatial",
+                          mm.analysis.eeg.compute_evoked_rem_correlation(iave_win, v_win, mode="spatial"),
+                          times=v_win.times)
+
+    # 4. Save
+    metrics.save(fmetrics, overwrite=overwrite)
+
+evaluate_vieeg_fidelity(overwrite=True)
 ```
 
-```{python}
-# crop time
-tmin, tmax = mm.analysis.eeg.find_spike_window(iave, baseline=(0,1.0), gap_fill_ms=200)
-iave = iave.crop(tmin, tmax)
-sloreta = sloreta.crop(tmin, tmax)
-dspm = dspm.crop(tmin, tmax)
-wcset = wcset.crop(tmin, tmax)
-
-metrics = mm.metric.MetricSuite(f"Intracranial EEG, sub-{sub}")
-
-for name, vave in {"sloreta":sloreta, "dspm":dspm, "wcset": wcset}.items():
-    corr = mm.analysis.eeg.compute_evoked_correlation(
-        iave, vave,
-        mode = "temporal",
-        method = "log-envelope",
-    )
-
-    metrics.register(name, "correlation", corr, chan=iave.ch_names)
-
-target_ch, _ = iave.get_peak(mode="abs")
-distances = mm.analysis.eeg.get_channel_distances(iave, target_ch)
-
-```
