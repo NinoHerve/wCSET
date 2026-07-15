@@ -27,7 +27,7 @@ QC), not a single global setting.
   because the input is already spike-triggered-averaged, so there's no raw
   data left to estimate noise from - not a free choice.
 
-```{python filename="eeg_processing.py"}
+```{python filename="eeg_preprocessing.py"}
 # | output: false
 
 from pathlib import Path
@@ -99,7 +99,7 @@ def process_eeg(sub, overwrite):
     # 7. make report
     mm.viz.create_pipeline_report(ave, ncov, sub, report_dir/f"sub-{sub}_desc-spike_ave.html")
 
-process_eeg(overwrite=True)
+process_eeg(overwrite=False)
 ```
 
 
@@ -189,7 +189,7 @@ intentional rather than incidental drift between the two files.
   same values as `processing_simf.qmd`'s `setup_source_space.py` - see that
   file's notes, same answers should apply here. **FILL**
 
-```{python filename="setup_source_space_intra.py"}
+```{python filename="setup_source_space.py"}
 # | output: false
 
 import mne
@@ -228,7 +228,7 @@ def setup_source_space(sub, overwrite):
     # 3. Save
     source_space.save(fsrc, overwrite=overwrite, verbose="warning")
 
-setup_source_space(overwrite=True)
+setup_source_space(overwrite=False)
 ```
 
 
@@ -236,7 +236,7 @@ setup_source_space(overwrite=True)
 
 Runs CHARM tissue segmentation per subject, then builds the 3-layer BEM
 surfaces from the CHARM labels - same as `processing_simf.qmd`'s
-`bem_layers.py`, but looped over the full cohort here instead of a single
+`head_segmentation.py`, but looped over the full cohort here instead of a single
 subject.
 
 **Parameter choices:**
@@ -294,7 +294,7 @@ def segment_head(sub, overwrite):
     folder.mkdir(exist_ok=True)
     mm.anatomy.forward.save_bem_as_freesurfer(folder, layers, vol_info, overwrite=True)
 
-segment_head(overwrite=True)
+segment_head(overwrite=False)
 ```
 
 
@@ -390,7 +390,7 @@ graph-spectral prior used by CSET/wCSET in `solve_inverse.py`.
 - `lap_type = "normalized"` (pygsp graph Laplacian): same as the simulation
   study. **FILL**
 
-```{python filename="atlas_connectivity.py"}
+```{python filename="connectivity.py"}
 import numpy as np
 import mindmap as mm
 from scripts.utils import loop, check_files
@@ -468,14 +468,14 @@ def build_connectivity(sub, overwrite):
     np.save(fcon, con)
     mm.core.write_eig(feig, eigvec, eigval)
 
-build_connectivity(overwrite=True)
+build_connectivity(overwrite=False)
 ```
 
 
 Runs all six source reconstruction methods (wCSET, CSET, MCE, sLORETA, dSPM,
 MNE) per subject, regularized per-subject via an SNR estimate from the
 evoked baseline window (same per-subject baseline windows as
-`eeg_processing.py` above).
+`eeg_preprocessing.py` above).
 
 **Parameter choices:**
 
@@ -594,7 +594,7 @@ def source_recon(sub, overwrite=True):
     dspm.save(fdspm, overwrite=overwrite, verbose="warning")
     mne_.save(fmne, overwrite=overwrite, verbose="warning")
 
-source_recon(overwrite=True)
+source_recon(overwrite=False)
 ```
 
 

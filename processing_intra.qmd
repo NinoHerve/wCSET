@@ -94,7 +94,7 @@ pre-averaged).
   (sample) covariance rather than a shrinkage/regularized estimator (e.g.
   `"shrunk"`, `"auto"`). **FILL**
 
-```{python filename="eeg_preprocessing_intra.py"}
+```{python filename="eeg_preprocessing.py"}
 # | output: false
 
 from pathlib import Path
@@ -140,13 +140,13 @@ process_eeg(overwrite=False)
 ## iEEG Ground Truth Preparation
 
 Builds the intracranial "ground truth" evoked response each method's
-projected virtual iEEG (`estimate_ieeg_intra.py`, further down) is later
+projected virtual iEEG (`estimate_ieeg.py`, further down) is later
 compared against. Just averages the epochs directly - no filtering or
 referencing shown here, so this assumes the intracranial data arrives
 already clean. **FILL** (confirm no upstream cleaning step is expected
 before this point)
 
-```{python filename="ieeg_preprocessing_intra.py"}
+```{python filename="ieeg_preprocessing.py"}
 # | output: false
 
 from pathlib import Path
@@ -185,7 +185,7 @@ process_ieeg(overwrite=False)
 
 ## MultiConn Parcellation
 
-New section, added so `build_connectivity_intra.py` below can build an
+New section, added so `connectivity.py` below can build an
 atlas-based connectome the same way `processing_spike.qmd` does - this
 parcellation didn't exist for the INTRA cohort before. Same tool, same
 parameter values as the other two files' `MultiConn_parcellation.py`.
@@ -196,7 +196,7 @@ parameter values as the other two files' `MultiConn_parcellation.py`.
   `processing_spike.qmd`/`processing_simf.qmd`. **FILL** (see the same note
   in those files)
 
-```{python filename="MultiConn_parcellation_intra.py"}
+```{python filename="MultiConn_parcellation.py"}
 # | output: false
 
 import mindmap as mm
@@ -250,7 +250,7 @@ bash scripts/fsrecon.sh intra.config.yml
 
 Builds each subject's cortical source space and removes the medial wall -
 identical cell (same filename, same code) to `processing_spike.qmd`'s
-`setup_source_space_intra.py`.
+`setup_source_space.py`.
 
 **Parameter choices:**
 
@@ -258,7 +258,7 @@ identical cell (same filename, same code) to `processing_spike.qmd`'s
   same values as the other two files. **FILL** (see the same note in
   `processing_simf.qmd`/`processing_spike.qmd`)
 
-```{python filename="setup_source_space_intra.py"}
+```{python filename="setup_source_space.py"}
 # | output: false
 
 import mne
@@ -310,7 +310,7 @@ Same CHARM segmentation + BEM layer construction as
 
 - `n_smooth = 20`: same value as the other two files. **FILL**
 
-```{python filename="head_segmentation_intra.py"}
+```{python filename="head_segmentation.py"}
 # | output: false
 
 import mindmap as mm
@@ -378,7 +378,7 @@ and same `ico=None` constraint as `processing_spike.qmd`'s
 - `ico = None`: forced by the same MNE/`tris` compatibility issue - not a
   free choice.
 
-```{python filename="forward_problem_intra.py"}
+```{python filename="forward_problem.py"}
 # | output: false
 
 import mne
@@ -437,7 +437,7 @@ compute_fwd(overwrite=False)
 
 ## Build atlas-based connectivity graph and compute its eigensystem
 
-Changed to match `processing_spike.qmd`'s `atlas_connectivity.py`: builds
+Changed to match `processing_spike.qmd`'s `connectivity.py`: builds
 each subject's connectome from the population probabilistic tractography
 atlas (`REF_CON`, newly added to `intra.config.yml` - see its note), with a
 geometry-based fallback for gaps, instead of the previous geometry-only
@@ -448,18 +448,18 @@ situation as SPIKE), so the population atlas is used here too.
 overwriting the old geometry-only ones (`desc="geom"`)** - both versions now
 coexist on disk, so nothing from the previous approach is lost and this is
 easy to revert (just point consumers back at the `desc="geom"` files).
-⚠ **`solve_inverse_intra.py` still loads the old `desc="geom"` eigensystem**
+⚠ **`solve_inverse.py` still loads the old `desc="geom"` eigensystem**
 (`eig = dm.load(sub, "eig", desc="geom")`) - it hasn't been switched to the
 new `atlas="probcon"` one, since that's a separate decision about which
 connectome to actually use for reconstruction, not part of this change.
 
 **Parameter choices:** identical to `processing_spike.qmd`'s
-`atlas_connectivity.py` - `consistency > 65`, `sparsity = 0.14`,
+`connectivity.py` - `consistency > 65`, `sparsity = 0.14`,
 `deterministic = True`, `maximum_dist = 22`, `maximum_neigh = 35`,
 `lap_type = "normalized"`. **FILL** (see that file's notes - same questions
 apply here)
 
-```{python filename="build_connectivity_intra.py"}
+```{python filename="connectivity.py"}
 # | output: false
 
 import numpy as np
@@ -539,7 +539,7 @@ def build_connectivity(sub, overwrite):
     np.save(fcon, con)
     mm.core.write_eig(feig, eigvec, eigval)
 
-build_connectivity(overwrite=True)
+build_connectivity(overwrite=False)
 ```
 
 
@@ -568,7 +568,7 @@ since the working pattern from `processing_spike.qmd` replaces it anyway).
   match?)
 - `fixed = True`: same as `processing_spike.qmd`. **FILL**
 
-```{python filename="solve_inverse_intra.py"}
+```{python filename="solve_inverse.py"}
 # | output: false
 
 import mne
@@ -662,7 +662,7 @@ def source_recon(sub, overwrite=True):
     dspm.save(fdspm, overwrite=overwrite, verbose="warning")
     mne_.save(fmne, overwrite=overwrite, verbose="warning")
 
-source_recon(overwrite=True)
+source_recon(overwrite=False)
 ```
 
 
@@ -674,7 +674,7 @@ Projects each method's source estimate onto virtual intracranial electrode
 positions, so it can be compared directly to the real intracranial recording
 (`i-ave`) from the ground-truth-preparation step above - this is the actual
 validation step this whole study exists for. Now covers all six methods
-computed by `solve_inverse_intra.py` (`wcset, cset, mce, sloreta, dspm,
+computed by `solve_inverse.py` (`wcset, cset, mce, sloreta, dspm,
 mne`) - previously only 4 of the 6 were projected here.
 
 **Parameter choices (`compute_virtual_ieeg`):**
@@ -685,7 +685,7 @@ mne`) - previously only 4 of the 6 were projected here.
   before the projection's `1/distance`-type falloff is capped, to avoid a
   blow-up at zero distance. **FILL** (why exactly 3 mm)
 
-```{python filename="estimate_ieeg_intra.py"}
+```{python filename="estimate_ieeg.py"}
 # | output: false
 
 import mne
@@ -728,7 +728,7 @@ def compute_vieeg(sub, overwrite):
     for i, m in enumerate(methods):
         vieeg[i].save(files[i], overwrite=overwrite, verbose="warning")
 
-compute_vieeg(overwrite=True)
+compute_vieeg(overwrite=False)
 ```
 
 ## Fidelity metrics
@@ -741,7 +741,7 @@ explained variance, and relative-energy-map (REM) correlation - computed
 both temporally (per channel) and spatially (per timepoint). Computed over
 the GFP-detected spike window only (`find_spike_window`), not the whole
 baseline+spike epoch, matching the tutorial. Compares all 6 methods
-projected by `estimate_ieeg_intra.py` above (`wcset, sloreta, cset, dspm,
+projected by `estimate_ieeg.py` above (`wcset, sloreta, cset, dspm,
 mce, mne`) - the tutorial itself only compares 5 (drops `mne`/wMNE), but
 `mne` is kept in here. One `MetricSuite` per subject is saved to
 `results/intra_vieeg_metrics/sub-{sub}/`, reloaded and combined across
@@ -762,7 +762,7 @@ subjects in `index.qmd`.
 - No more `pattern_geometry_correlation`/`ssim` - dropped from the tutorial's
   metric set since the version this was first built from.
 
-```{python filename="evaluate_vieeg_fidelity_intra.py"}
+```{python filename="evaluate_vieeg_fidelity.py"}
 # | output: false
 
 from pathlib import Path
@@ -838,6 +838,6 @@ def evaluate_vieeg_fidelity(sub, overwrite):
     # 4. Save
     metrics.save(fmetrics, overwrite=overwrite)
 
-evaluate_vieeg_fidelity(overwrite=True)
+evaluate_vieeg_fidelity(overwrite=False)
 ```
 

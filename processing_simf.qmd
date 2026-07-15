@@ -12,7 +12,7 @@ author:
   - name: Patric Hagmann
 
 number-sections: true
-format: 
+format:
   html:
     code-fold: true
 
@@ -41,7 +41,7 @@ generate ~14,190 synthetic spike recordings (one per brain region x 30
 repetitions, propagated over the structural connectome), reconstruct them
 with every method, and save the comparison metrics that `index.qmd` plots.
 
-## Data Procurment
+## Data Procurement
 
 **FILL** (data source / acquisition details for sub-10 - dataset origin,
 modality availability, why this particular subject was chosen as the
@@ -54,7 +54,7 @@ e.g. SimNIBS/FreeSurfer/MNE versions this pipeline was validated against).
 
 # 3. Anatomical & Forward Modeling
 
-# Cortical Surface Modeling
+## MultiConn Parcellation
 
 Generates the MultiConn-2022 cortical parcellation (scale 4) for `sub-10`,
 used downstream to mask the cortex, label simulated source regions, and
@@ -74,35 +74,39 @@ import mindmap as mm
 from scripts.utils import check_files
 from scripts.data_manager import SimfManager
 
-overwrite = False
-
 # data manager
 fconfig = "simf.config.yml"
 dm = SimfManager(fconfig)
 
-# output files
-entities = dict(space="fs", segmentation="multiconn2022", scale="4")
-fseg = dm.get_path("10", "dseg", **entities)
-fclut = dm.get_path("10", "dseg", extension=".txt", **entities)
+def run_multiconn_parcellation(overwrite=False):
+  # output files
+  entities = dict(space="fs", segmentation="multiconn2022", scale="4")
+  fseg = dm.get_path("10", "dseg", **entities)
+  fclut = dm.get_path("10", "dseg", extension=".txt", **entities)
 
-if check_files([fseg, fclut]) and not overwrite:
-  raise FileExistsError("Output file already exists!")
+  if check_files([fseg, fclut]) and not overwrite:
+    print("Already exists, skipping.")
+    return
 
-# 1. Run the MultiConn parcellation pipeline
-multiconn = mm.anatomy.parcellation.parcellate_multiconn(
-  sub = "10",
-  fconfig = fconfig,
-  margin = 2,       # White matter extension in [mm]
-  thresh = 0.05,    # Probability threshold to discretize thalamus atlas
-  verbose = 1,
-)
+  # 1. Run the MultiConn parcellation pipeline
+  multiconn = mm.anatomy.parcellation.parcellate_multiconn(
+    sub = "10",
+    fconfig = fconfig,
+    margin = 2,       # White matter extension in [mm]
+    thresh = 0.05,    # Probability threshold to discretize thalamus atlas
+    verbose = 1,
+  )
 
-# 2. Save data
-multiconn.save(
-  fseg,
-  fclut,
-)
+  # 2. Save data
+  multiconn.save(
+    fseg,
+    fclut,
+  )
+
+run_multiconn_parcellation(overwrite=False)
 ```
+
+## Cortical Surface Modeling
 
 Builds `sub-10`'s cortical source space and restricts it to the cortex mask
 from the parcellation above. This is the same source space used for both the
@@ -129,37 +133,43 @@ import mindmap as mm
 from scripts.utils import check_files
 from scripts.data_manager import SimfManager
 
-overwrite = True
 sub = "10"
 
 # data manager
 dm = SimfManager("simf.config.yml")
 
-# output files
-fsrc = dm.get_path(sub, "src")
+def run_setup_source_space(overwrite=True):
+  # output files
+  fsrc = dm.get_path(sub, "src")
 
-if check_files([fsrc]) and not overwrite:
-  raise FileExistsError("Output file already exists!")
+  if check_files([fsrc]) and not overwrite:
+    print("Already exists, skipping.")
+    return
 
-# 0. Load data
-ctx = dm.load(sub, "ctx", space="fs", segmentation="multiconn2022", scale="4")
-ras2tkras = dm.load(sub, "ras2tkras")
+  # Start. Load data
+  ctx = dm.load(sub, "ctx", space="fs", segmentation="multiconn2022", scale="4")
+  ras2tkras = dm.load(sub, "ras2tkras")
 
-source_space = mne.setup_source_space(
-  subject = f"sub-{sub}",
-  spacing = "oct6",
-  surface = "white",
-  add_dist = True,
-  subjects_dir = dm.config["DIR_FS"],
-  n_jobs = 10,
-  verbose = "warning",
-)
+  # 1. Create source space
+  source_space = mne.setup_source_space(
+    subject = f"sub-{sub}",
+    spacing = "oct6",
+    surface = "white",
+    add_dist = True,
+    subjects_dir = dm.config["DIR_FS"],
+    n_jobs = 10,
+    verbose = "warning",
+  )
 
-source_space = mm.anatomy.source_space.filter_dipoles_by_nifti_mask(source_space, ctx, ras2tkras)
+  source_space = mm.anatomy.source_space.filter_dipoles_by_nifti_mask(source_space, ctx, ras2tkras)
 
-source_space.save(fsrc, overwrite=overwrite)
+  # End. Save
+  source_space.save(fsrc, overwrite=overwrite)
+
+run_setup_source_space(overwrite=False)
 ```
 
+## Tissue Segmentation & Mesh Generation (SimNIBS)
 
 Runs CHARM tissue segmentation on `sub-10`'s T1w, then builds the 3-layer BEM
 surfaces from the CHARM labels for the forward model.
@@ -169,73 +179,61 @@ surfaces from the CHARM labels for the forward model.
 - `n_smooth = 20`: smoothing iterations applied to the BEM layers built from
   the segmentation. **FILL**
 
-```{python filename="bem_layers.py"}
+```{python filename="head_segmentation.py"}
 # | output: false
 
-import ants
 import mindmap as mm
 from scripts.utils import check_files
 from scripts.data_manager import SimfManager
-
-# options
-overwrite = True
 
 # data manager
 dm = SimfManager("simf.config.yml")
 sub = "10"
 
-# output files
-fseg = dm.get_path(sub, "seg")
+# segment head
+def run_bem_layers(overwrite=False):
+  # output file
+  fseg = dm.get_path(sub, "seg")
+  fbem = dm.get_path(sub, "bem")
 
-if check_files([fseg]) and not overwrite:
-  raise FileExistsError("Output file already exists!")
+  # ---------------------
+  # Tissue segmentation
+  # ---------------------
 
-# ---------------------
-# Tissue segmentation
-# ---------------------
+  # input files
+  ft1 = dm.get_path(sub, "T1w")
 
-# input files
-ft1 = dm.get_path(sub, "T1w")
+  # 1. run charm pipeline
+  mm.anatomy.segmentation.run_charm(
+    sub,
+    ft1,
+    charm_dir = dm.roots["charm"],
+    overwrite = overwrite,
+  )
 
-# 1. Run charm pipeline
-mm.anatomy.segmentation.run_charm(
-  subject = sub,
-  t1_file = ft1,
-  charm_dir = dm.roots["charm"],
-  overwrite = overwrite,
-)
+  # ----------------
+  # Mesh generation
+  # ----------------
 
-# -----------------
-# Mesh generation
-# -----------------
+  # 0. Load data
+  seg = dm.load(sub, "seg")             # charm segmentation
+  ras2tkras = dm.load(sub, "ras2tkras") # ras to tkras transform
+  vol_info = dm.load(sub, "vol-info")   # volume information (to save surfaces in FreeSurfer format)
+  bem_labels = dm.get_bem_labels()      # charm labels needed for each BEM layer
 
-# 0. Load data
-#brain = dm.load(sub, "brain.mgz")
-charm = dm.load(sub, "seg")
-ras2tkras = dm.load(sub, "ras2tkras")
-vol_info = dm.load(sub, "vol-info")
-bem_labels = dm.get_bem_labels()
+  # 1. Build BEM layers from CHARM segmentation
+  layers = mm.anatomy.forward.build_bem_layers(seg, bem_labels, n_smooth=20)
+  layers = mm.anatomy.forward.bem_transform(layers, ras2tkras)
 
-# 1. brain surface (used to force inner skull to be outside of brain mask)
-#brain_mask = mm.anatomy.mri.nibabel_to_ants(brain)
-#brain_mask = ants.threshold_image(brain_mask, low_thresh=0.5, high_thresh=None, inval=1, outval=0)
-#brain_mask = brain_mask.morphology("close", radius=10)
+  # 2. save layers in freesurfer/{subject}/bem
+  folder = dm.roots["fs"]/f"sub-{sub}"/"bem"
+  folder.mkdir(exist_ok=True)
+  mm.anatomy.forward.save_bem_as_freesurfer(folder, layers, vol_info, overwrite=True)
 
-#brain_surf, brain_interop = mm.anatomy.forward.fit_surface_to_mri_mask(brain_mask, n_smooth=20)
-#brain_surf = mm.geometry.polydata_transform(brain_surf, ras2tkras)
-
-
-# 2. Build BEM layers from CHARM segmentation
-layers = mm.anatomy.forward.build_bem_layers(charm, bem_labels, n_smooth=20)
-layers = mm.anatomy.forward.bem_transform(layers, ras2tkras)
-
-# 2. Save layers in freesurfer/{subject}/bem
-folder = dm.roots["fs"]/f"sub-{sub}"/"bem"
-folder.mkdir(exist_ok=True)
-mm.anatomy.forward.save_bem_as_freesurfer(folder, layers, vol_info, overwrite=True)
+run_bem_layers(overwrite=False)
 ```
 
-
+## Lead Field Computation
 
 Simulations don't use a real EEG recording as sensor geometry - this builds a
 synthetic sensor template (fixed montage, no real data) and coregisters it
@@ -260,36 +258,37 @@ import mindmap as mm
 from scripts.utils import check_files
 from scripts.data_manager import SimfManager
 
-overwrite = True
-
 # data manager
 dm = SimfManager("simf.config.yml")
 sub = "10"
 
-# output files
-ftmp = dm.get_path(sub, "ave-temp")
+def run_eeg_template_coregistration(overwrite=True):
+  # output files
+  ftmp = dm.get_path(sub, "ave-temp")
 
-if check_files([ftmp]) and not overwrite:
-  raise FileExistsError("Output file already exists!")
+  if check_files([ftmp]) and not overwrite:
+    print("Already exists, skipping.")
+    return
 
-# Make template and coregister to head model
-ave_tmp = mm.analysis.functional.eeg.build_eeg_template(
-  duration = 20,         # in [s]
-  frequency = 250,
-  montage = "spike",    # EGI 256 channel cap with removed cheeks
-)
+  # Make template and coregister to head model
+  ave_tmp = mm.analysis.functional.eeg.build_eeg_template(
+    duration = 20,         # in [s]
+    frequency = 250,
+    montage = "spike",    # EGI 256 channel cap with removed cheeks
+  )
 
-ave_tmp = mm.anatomy.forward.template_coregistration(
-  ave_tmp,
-  f"sub-{sub}",
-  dm.roots["fs"],
-  iterations = 0
-)
+  ave_tmp = mm.anatomy.forward.template_coregistration(
+    ave_tmp,
+    f"sub-{sub}",
+    dm.roots["fs"],
+    iterations = 0
+  )
 
-# save coregistered template
-ave_tmp.save(ftmp, overwrite=overwrite)
+  # save coregistered template
+  ave_tmp.save(ftmp, overwrite=overwrite)
+
+run_eeg_template_coregistration(overwrite=False)
 ```
-
 
 Computes **two** forward solutions per subject: one used to *generate* the
 simulated EEG (`desc="sim"`), and a second, deliberately mismatched one used
@@ -321,88 +320,181 @@ import mindmap as mm
 from scripts.utils import check_files
 from scripts.data_manager import SimfManager
 
-overwrite = True
+# data manager
+dm = SimfManager("simf.config.yml")
+sub = "10"
+
+def run_forward_problem(overwrite=True):
+  # output files
+  ffwd_sim = dm.get_path(sub, "fwd", desc="sim")
+  ffwd_inv = dm.get_path(sub, "fwd", desc="inv")
+
+  if check_files([ffwd_sim, ffwd_inv]) and not overwrite:
+    print("Already exists, skipping.")
+    return
+
+  # 0. Load data
+  ave = dm.load(sub, "ave-temp")
+  trans = dm.load(sub, "eeg-trans")
+  src = dm.load(sub, "src")
+
+  # ----------------------------------------------------
+  # 1. Compute forward for simulations
+  # ¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+  # Use default conductivities.
+  # ----------------------------------------------------
+
+  # 1.1 Assemble BEM
+  model = mne.make_bem_model(
+    subject = f"sub-{sub}",
+    subjects_dir = dm.roots["fs"],
+    conductivity = [0.3, 0.006, 0.3],
+    ico = None,
+    verbose = "warning",
+  )
+
+  bem = mne.make_bem_solution(model)
+
+  # 1.2 Compute forward solution
+  forward = mne.make_forward_solution(
+    info = ave.info,
+    trans = trans,
+    src = src,
+    bem = bem,
+    meg = False,
+    eeg = True,
+    verbose = "warning",
+  )
+
+  # 1.3 Save solution
+  mne.write_forward_solution(ffwd_sim, forward, overwrite, verbose="warning")
+
+  # ----------------------------------------------------
+  # 2. Compute forward for source reconstruction
+  # ¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+  # Change skull conductivity to introduce model errors
+  # and avoid commiting  "inverse crimes".
+  # ----------------------------------------------------
+
+  # 2.1 Assemble BEM
+  model = mne.make_bem_model(
+    subject = f"sub-{sub}",
+    subjects_dir = dm.roots["fs"],
+    conductivity = [0.3, 0.012, 0.3],   # -> different skull conductivity to generate 10% errors
+    ico = None,
+    verbose = "warning",
+  )
+
+  bem = mne.make_bem_solution(model)
+
+  # 2.2 Compute forward solution
+  forward = mne.make_forward_solution(
+    info = ave.info,
+    trans = trans,
+    src = src,
+    bem = bem,
+    meg = False,
+    eeg = True,
+    verbose = "warning",
+  )
+
+  # 2.3 Save solution
+  mne.write_forward_solution(ffwd_inv, forward, overwrite, verbose="warning")
+
+run_forward_problem(overwrite=False)
+```
+
+# Probe-Set Selection
+
+Shared groundwork for the connectome/noise-robustness experiments (§3.1.2 in
+`index.qmd`): a probe set of source regions spatially spread across the
+cortex, reused by every degradation/surrogate/noise condition below so
+region identity never confounds a condition comparison.
+
+Selects a spatially uniform subset of source regions via greedy
+farthest-point sampling over region centroids
+(`mm.anatomy.parcellation.select_uniform_regions`), reused across every
+robustness experiment below.
+
+⚠ Supersedes an earlier version of this cell that instead ranked all 473
+regions by wCSET peak-phase accuracy, split them into performance terciles
+(low/medium/high), and sampled ~20/tercile, with hand-rolled hemisphere/lobe
+sanity-check parsing (`DK_LOBE`/`parse_hemi`/`parse_lobe`). Replaced with
+`select_uniform_regions` for a simpler, purely-spatial selection - the probe
+set no longer deliberately spans the wCSET performance range, only spatial
+coverage of the cortex (hemisphere/lobe balance now follows from the FPS
+geometry rather than being tracked/printed separately).
+
+⚠ Region identities changed as a result: Experiment 1.2's already-computed
+surrogate reconstructions/metrics
+(`results/sub-10_simf-metrics_{surrogate}`, from `surrogate_reconstruction.py`
+/`surrogate_comparison.py`) were computed against the *old* probe set and are
+now stale - they need to be regenerated against the new one (flagged in
+`TODO_simf_robustness.md`).
+
+**Parameter choices:**
+
+- `n_regions = 60`: unchanged from the previous tercile-based scheme's total
+  (20/tercile x 3), to keep the same probe-set size and downstream compute
+  budget (Experiment 1.2's 5-reps-per-region reconstruction, Experiment 2's
+  10-reps-per-region noise sweep).
+- `cortex_only = True` (function default): matches the previous scheme, which
+  in practice only ever sampled `ctx-` regions.
+- `seed = base_seed = 42`: project convention; controls the farthest-point
+  sampling's starting region.
+
+```{python filename="probe_set_selection.py"}
+from pathlib import Path
+
+import pandas as pd
+
+import mindmap as mm
+from scripts.data_manager import SimfManager
+from scripts.utils import check_files
 
 # data manager
 dm = SimfManager("simf.config.yml")
 sub = "10"
 
-# output files
-ffwd_sim = dm.get_path(sub, "fwd", desc="sim")
-ffwd_inv = dm.get_path(sub, "fwd", desc="inv")
+n_regions = 60
+base_seed = 42
 
-if check_files([ffwd_sim, ffwd_inv]) and not overwrite:
-  raise FileExistsError("Output file already exists!")
+def run_probe_set_selection(overwrite=False):
+  # output file
+  fprobe = Path(f"./results/sub-{sub}_probe-set.csv")
 
-# 0. Load data
-ave = dm.load(sub, "ave-temp")
-trans = dm.load(sub, "eeg-trans")
-src = dm.load(sub, "src")
+  if check_files([fprobe]) and not overwrite:
+    print("Already exists, skipping.")
+    return
 
-# ----------------------------------------------------
-# 1. Compute forward for simulations
-# ¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
-# Use default conductivities.
-# ----------------------------------------------------
+  # 0. Load shared inputs (same pattern as surrogate_connectivity.py)
+  src = dm.load(sub, "fwd", desc="sim")["src"]
+  parc = dm.load(sub, "dseg", space="fs", segmentation="multiconn2022", scale="4")
+  ras2tkras = dm.load(sub, "ras2tkras")
 
-# 1.1 Assemble BEM 
-model = mne.make_bem_model(
-  subject = f"sub-{sub}",
-  subjects_dir = dm.roots["fs"],
-  conductivity = [0.3, 0.006, 0.3],
-  ico = None,
-  verbose = "warning",
-)
+  # 1. Spatially uniform region selection (greedy farthest-point sampling
+  # over cortical region centroids)
+  regions = mm.anatomy.parcellation.select_uniform_regions(
+    source_space = src,
+    parcellation = parc,
+    ras2tkras = ras2tkras,
+    n_regions = n_regions,
+    seed = base_seed,
+  )
 
-bem = mne.make_bem_solution(model)
+  probe_set = pd.DataFrame({"region": regions})
 
-# 1.2 Compute forward solution
-forward = mne.make_forward_solution(
-  info = ave.info,
-  trans = trans,
-  src = src,
-  bem = bem,
-  meg = False,
-  eeg = True,
-  verbose = "warning",
-)
+  print(f"Probe set: {len(probe_set)} regions (spatially uniform, cortex-only)")
 
-# 1.3 Save solution
-mne.write_forward_solution(ffwd_sim, forward, overwrite, verbose="warning")
+  # 2. Save
+  probe_set.to_csv(fprobe, index=False)
 
-# ----------------------------------------------------
-# 2. Compute forward for source reconstruction
-# ¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
-# Change skull conductivity to introduce model errors
-# and avoid commiting  "inverse crimes".
-# ----------------------------------------------------
-
-# 2.1 Assemble BEM 
-model = mne.make_bem_model(
-  subject = f"sub-{sub}",
-  subjects_dir = dm.roots["fs"],
-  conductivity = [0.3, 0.012, 0.3],   # -> different skull conductivity to generate 10% errors
-  ico = None,
-  verbose = "warning",
-)
-
-bem = mne.make_bem_solution(model)
-
-# 2.2 Compute forward solution
-forward = mne.make_forward_solution(
-  info = ave.info,
-  trans = trans,
-  src = src,
-  bem = bem,
-  meg = False,
-  eeg = True,
-  verbose = "warning",
-)
-
-# 2.3 Save solution
-mne.write_forward_solution(ffwd_inv, forward, overwrite, verbose="warning")
+run_probe_set_selection(overwrite=False)
 ```
 
+# Connectomics
+
+## Build tractography-based connectivity graph and compute its eigensystem
 
 Builds the structural connectome used both to drive spike propagation
 dynamics in the simulator, and (via its Laplacian eigenbasis) as the
@@ -410,82 +502,323 @@ graph-spectral prior for the CSET/wCSET reconstructions. Tractography-derived
 connections are the primary source; geometry-based connections fill in gaps
 where tractography found nothing.
 
+⚠ Updated to match the latest tractography-to-connectome method, per
+`tutorials/analysis/connectomic/connectome-empirical.ipynb` in the `mindmap`
+repo (dipole-resolution radius-based endpoint assignment, replacing the
+older nearest-neighbor construction this cell used before), and the latest
+connectome-spectrum-transform method, per
+`tutorials/analysis/connectomic/connectome_spectrum.ipynb`. Three fixes came
+out of that comparison, not just a style refresh:
+
+- **This cell would have raised an `AssertionError` if rerun as it was.**
+  `connectome_from_tracts` now asserts `radius is not None` whenever
+  `regions` is a source space (`mindmap/analysis/connectivity/process.py`) -
+  the old call here never passed `radius` at all, since the parameter didn't
+  exist yet when this cell was written.
+- **Fuse-logic bug**: the old merge step overwrote tractography-derived
+  edges wherever a geometry-based edge also existed at the same dipole pair
+  (`con[geom_idx] = con_geom[geom_idx]`, unfiltered by whether `con_tracto`
+  already had a value there) - the opposite of this cell's own stated intent
+  ("geometry-based connections fill in gaps where tractography found
+  nothing"). Fixed to only fill where tractography has nothing
+  (`(con_geom > 0) & (con_tracto == 0)`), matching the already-correct fuse
+  step in `surrogate_connectivity.py` further below and in the reference
+  notebook.
+- **Outdated spectral step**: this cell used to build the Fourier basis
+  directly from `con` (un-inverted) via `pygsp`'s own
+  `compute_fourier_basis()`. The reference notebook (and
+  `surrogate_connectivity.py` further below, which already followed the
+  SPIKE-study convention) instead invert edge weights first (distances ->
+  similarity: `inv_con = 1/con`) and use a dense `np.linalg.eigh` with the
+  first eigenvalue pinned to exactly 0 - now wrapped in
+  `mm.analysis.connectivity.compute_cst(connectome)`, which takes whatever
+  adjacency matrix it's handed (the inversion is still the caller's
+  responsibility, per its docstring) and does the same
+  `pygsp`-Laplacian-then-`eigh`-then-pin-eigenvalue-to-0 steps internally.
+  This resolves the "two different conventions coexist in this codebase"
+  note that used to sit in `surrogate_connectivity.py`'s own prose - both
+  cells now compute the spectrum the same way.
+
 **Parameter choices:**
 
-- `maximum_dist = 15` (mm), `maximum_neigh = 3`: geometry-based connectivity
-  fallback parameters. **FILL** - note these differ from the equivalent
-  SPIKE-study cell (`processing_spike.qmd`'s `atlas_connectivity.py`, which
-  uses `maximum_dist=22, maximum_neigh=35`); worth confirming whether that
-  difference is intentional (e.g. this source space is denser/sparser) or
-  should be reconciled.
+- `radius = 4` (mm): maximum distance a streamline endpoint may reach to
+  connect to a dipole (soft assignment - every dipole within reach connects,
+  weighted). Adapted to this source space's own dipole spacing at its
+  current resolution (oct6), not a fixed/literature value - a coarser or
+  finer source space would need a different radius to keep the same
+  soft-assignment behavior (enough margin that streamline endpoints reliably
+  reach a dipole, without being so wide it blurs across unrelated
+  structure). The reference notebook's own comment instead derives a smaller
+  value (`2.5`, from a different/older measured endpoint-to-dipole scatter),
+  but its actual executed code already uses `4`, consistent with this
+  dipole-spacing rationale - this cell follows the executed code.
+- `maximum_dist = 15` (mm), `maximum_neigh = 8`: geometry-based connectivity
+  fallback parameters. `maximum_neigh` raised from `3` to `8` per explicit
+  instruction, matching the reference notebook's comment (dipole density
+  roughly tripled at this resolution vs. the older 15mm/3-neighbor tuning,
+  so `3` became a much more aggressive relative thinning than before; scaled
+  up to preserve similar relative local coverage) - note the notebook's own
+  executed code still uses `3` for this parameter (unlike `radius` above,
+  where the executed code was authoritative, here the *comment*'s value is
+  used instead, per instruction). **FILL** - note these still differ from
+  the equivalent SPIKE-study cell (`processing_spike.qmd`'s `connectivity.py`,
+  which uses `maximum_dist=22, maximum_neigh=35`); worth confirming whether
+  that difference is intentional (e.g. this source space is denser/sparser)
+  or should be reconciled.
 - `weights = True`: geometry connections weighted by geodesic distance.
   **FILL**
-- `lap_type = "normalized"` (pygsp graph Laplacian type): **FILL**
+- `lap_type = "normalized"` (pygsp graph Laplacian type, applied inside
+  `compute_cst`): **FILL**
+- Spectral step: `inv_con = 1/con` computed here (weight semantics are the
+  caller's decision, per `compute_cst`'s docstring), then
+  `mm.analysis.connectivity.compute_cst(inv_con)` for the Laplacian
+  eigendecomposition - see note above.
 
 ```{python filename="connectivity.py"}
 # | output: false
 
 import numpy as np
-import pygsp
 import mindmap as mm
 from scripts.utils import check_files
 from scripts.data_manager import SimfManager
-
-overwrite = True
 
 # data manager
 dm = SimfManager("simf.config.yml")
 sub = "10"
 
-# output files
-fcon = dm.get_path(sub, "con")
-feig = dm.get_path(sub, "eig")
+def run_connectivity(overwrite=True):
+  # output files
+  fcon = dm.get_path(sub, "con")
+  feig = dm.get_path(sub, "eig")
 
-if check_files([fcon, feig]) and not overwrite:
-  raise FileExistsError("Output file already exists!")
+  if check_files([fcon, feig]) and not overwrite:
+    print("Already exists, skipping.")
+    return
 
-# 0. load data
-src = dm.load(sub, "fwd", desc="sim")["src"]
-tracto = dm.load(sub, "tractogram")
-t12diff = dm.load(sub, "t12diff")
-ctx = dm.load(sub, "ctx", space="fs", segmentation="multiconn2022", scale="4")
-ras2tkras = dm.load(sub, "ras2tkras")
+  # Start. load data
+  src = dm.load(sub, "fwd", desc="sim")["src"]
+  tracto = dm.load(sub, "tractogram")
+  t12diff = dm.load(sub, "t12diff")
+  ctx = dm.load(sub, "ctx", space="fs", segmentation="multiconn2022", scale="4")
+  ras2tkras = dm.load(sub, "ras2tkras")
 
-# 1. build (length) connectivity matrix from tractography
-pruned_tracto = mm.anatomy.tractogram.prune_tracts(tracto, ctx, t12diff)
-con_tracto = mm.analysis.connectivity.connectome_from_tracts(
-  pruned_tracto,
-  src,
-  t12diff,
-  ras2tkras, 
-  lengths = True
-)
+  # 1. build (length) connectivity matrix from tractography
+  pruned_tracto = mm.anatomy.tractogram.prune_tracts(tracto, ctx, t12diff)
+  con_tracto = mm.analysis.connectivity.connectome_from_tracts(
+    pruned_tracto,
+    src,
+    t12diff,
+    ras2tkras,
+    lengths = True,
+    radius = 4,   # max [mm] a streamline endpoint may reach to connect to a dipole
+  )
 
-# 2. merge geometry connectivity
-con_geom = mm.analysis.connectivity.connectome_from_geometry(
-  src,
-  maximum_dist = 15,   # maximum distance to establish connection
-  maximum_neigh = 3,  # maximum number of neighbor to consider
-  weights = True,     # Use geodesic distance as weight
-)
+  # 2. merge geometry connectivity - tractography takes priority; geometry
+  # only fills where tractography found nothing
+  con_geom = mm.analysis.connectivity.connectome_from_geometry(
+    src,
+    maximum_dist = 15,   # maximum distance to establish connection
+    maximum_neigh = 8,   # maximum number of neighbor to consider
+    weights = True,      # Use geodesic distance as weight
+  )
 
-con = con_tracto.copy()
-geom_idx = np.argwhere(con_geom > 0)
-con[geom_idx[:,0], geom_idx[:,1]] = con_geom[geom_idx[:,0], geom_idx[:,1]]
+  con = con_tracto.copy()
+  fill_idx = np.argwhere((con_geom > 0) & (con_tracto == 0))
+  con[fill_idx[:,0], fill_idx[:,1]] = con_geom[fill_idx[:,0], fill_idx[:,1]]
 
-# 3. compute Connectome Spectrum Transform
-G = pygsp.graphs.Graph(con, lap_type="normalized")
-G.compute_fourier_basis()
-eigvec = G.U
-eigval = G.e
+  # 3. compute Connectome Spectrum Transform: invert lengths into similarity
+  # weights, then the shared eigendecomposition helper (dense eigh,
+  # eigval[0] pinned to exactly 0)
+  inv_con = np.divide(1, con, out=np.zeros_like(con), where=con>0)
+  eigvec, eigval = mm.analysis.connectivity.compute_cst(inv_con)
 
-# 4. Save outputs
-np.save(fcon, con, allow_pickle=True)
-mm.core.write_eig(feig, eigvec, eigval)
+  # End. Save outputs
+  np.save(fcon, con, allow_pickle=True)
+  mm.core.write_eig(feig, eigvec, eigval)
+
+run_connectivity(overwrite=False)
 ```
 
+## Build atlas-based surrogate connectivity graphs and compute their eigensystems (Experiment 1.2)
 
-## Simulation
+Builds the connectome surrogates used to test CSET/wCSET reconstruction
+against connectome *construction method* (Experiment 1.2, `index.qmd`
+§2.3.3), so CSET/wCSET can later be reconstructed on the probe-set runs with
+each surrogate in place of the original tractography-based connectome. No
+new simulation is needed: only the reconstruction-side connectome changes
+(connectome degradation is a separate, not-yet-implemented experiment - see
+`TODO_simf_robustness.md` §1), so this cell only produces `con`/`eig` pairs,
+not new `ave`/`gold` files.
+
+⚠ Updated to match
+`tutorials/analysis/inverse/connectome_surrogates.ipynb` in the `mindmap`
+repo (see its companion `connectome_surrogates_plan.md` for the full
+empirical justification behind each choice below) - a newer, wider set of
+surrogates than this cell used before:
+
+- **`fused`** (renamed from this cell's old `atlas-s2s`; same recipe,
+  unchanged: `sparsity = 0.14` atlas connectome, geometry-filled) and its
+  **binary** version `fused-bin` (`(con > 0).astype(float)`).
+- **`geom-atlas`** (renamed from this cell's old `geom-only`; same
+  `maximum_dist=22, maximum_neigh=35` params, but now with
+  `inter_hemi_mirror = True`) and its **binary** version `geom-atlas-bin`.
+  ⚠ Behavior change, not just a rename: without `inter_hemi_mirror`,
+  `connectome_from_geometry` builds each hemisphere as an independent KNN
+  graph with zero interhemispheric edges, so the old `geom-only` surrogate
+  was two disconnected components by construction. `inter_hemi_mirror=True`
+  additionally connects each node to its homotopic (mirror-symmetric)
+  partner in the other hemisphere - real callosal white matter is
+  predominantly homotopic, so this is a principled fix, empirically
+  confirmed (in the reference notebook) to reach a single connected
+  component. `connectome_from_geometry` gained this parameter after this
+  cell was first written.
+- **`atlas-a2a`** (all-to-all, `sparsity = 1.0`) - **kept as explicitly
+  instructed**, alongside a new **binary** version `atlas-a2a-bin`. Not the
+  same as the reference notebook's dropped "atlas-only" case: that case had
+  *no* geometry fill at all (known to leave isolated nodes); this cell's
+  `atlas-a2a` has always been geometry-filled like the others, just at
+  `sparsity=1.0` instead of `0.14` - a different, still well-formed
+  surrogate the reference notebook simply didn't include in its own
+  comparison.
+- **Dropped** (per the reference notebook, not carried over): atlas-only
+  with no geometric fill (leaves isolated nodes - never used in this cell
+  either), and geometry-only at the *empirical* `15mm/8neigh` params (this
+  cell never had that variant - its geometry-only surrogate always used the
+  atlas `22mm/35neigh` params, now `geom-atlas`).
+
+Six surrogates total now: `atlas-a2a`, `atlas-a2a-bin`, `fused`,
+`fused-bin`, `geom-atlas`, `geom-atlas-bin`. ⚠ `surrogate_reconstruction.py`
+and `surrogate_comparison.py` further below both hardcode the surrogate list
+to match - updated together with this cell, since they'd otherwise try to
+load `desc="atlas-s2s"`/`desc="geom-only"` files this cell no longer writes.
+
+**Parameter choices:**
+
+- `consistency > 65`: aligned with `processing_spike.qmd`'s working code
+  (not `index.qmd` §2.3.3's currently-stale `>60` - fixed there too, see
+  below).
+- All-to-all: `sparsity = 1.0`. Fused: `sparsity = 0.14` (same value used
+  for the SPIKE cohort). `deterministic = True` for both.
+- Geometry fill for the atlas-based surrogates (`atlas-a2a`, `fused`):
+  `maximum_dist = 22`, `maximum_neigh = 35`, `weights = True`, no
+  `inter_hemi_mirror` - the SPIKE study's parameters, reused here as
+  instructed, unchanged by the interhemispheric-mirror fix (that fix is
+  additive/independent and only applied to the standalone `geom-atlas`
+  surrogate, per the reference notebook's own plan: "do not change the
+  fused recipe's own geometric gap-fill call").
+- `geom-atlas`'s own geometry connectome: same `22mm/35neigh` params, plus
+  `inter_hemi_mirror = True` (see note above).
+- Fuse rule (atlas surrogates only): geometry fills a dipole pair only where
+  the atlas surrogate left it unconnected (`con_atlas == 0`) - atlas edges
+  are never overwritten by geometry. `geom-atlas` skips the atlas term and
+  this fuse step entirely.
+- Spectral step: `inv_con = 1/con` (distances -> similarity weights) before
+  `mm.analysis.connectivity.compute_cst(inv_con)` - matches the main simf
+  connectome cell (`connectivity.py`, further above), which now uses the
+  same shared helper instead of a manual `pygsp`+`eigh` call.
+- Each surrogate's `con`/`eig` is saved under its own `desc` entity - the
+  original tractography-based `con`/`eig` (no `desc`) is never touched.
+
+```{python filename="surrogate_connectivity.py"}
+# | output: false
+
+import numpy as np
+
+import mindmap as mm
+from scripts.data_manager import SimfManager
+from scripts.utils import check_files
+
+# data manager
+dm = SimfManager("simf.config.yml")
+sub = "10"
+
+def run_surrogate_connectivity(overwrite=False):
+  # 0. Load shared inputs (same pattern as processing_spike.qmd's connectivity.py)
+  src = dm.load(sub, "fwd", desc="sim")["src"]
+  parc = dm.load(sub, "dseg", space="fs", segmentation="multiconn2022", scale="4")
+  ras2tkras = dm.load(sub, "ras2tkras")
+  probcon = dm.load_ref("REF_CON")
+
+  consistency = np.nan_to_num(probcon["matrices"]["consistency"][:, :])
+  length = np.nan_to_num(probcon["matrices"]["length"][:, :])
+  number = np.nan_to_num(probcon["matrices"]["numbStlines"][:, :])
+
+  atlas = np.bitwise_and(consistency > 65, length > 0)
+  atlas = np.bitwise_and(atlas, number > 0)
+  atlas = length * atlas  # weight = avg fiber lengths
+
+  # 1. Geometry connectivity, two variants:
+  # - con_geom_fill: gap-filler for the atlas-based surrogates below,
+  #   unmirrored (exact connectome-atlas.ipynb recipe - not touched by the
+  #   interhemispheric-mirror fix, which is only for the standalone surrogate)
+  # - con_geom_atlas: the standalone geometry-only surrogate, with
+  #   inter_hemi_mirror=True (homotopic mirror-matching) so it doesn't ship
+  #   as two disconnected hemispheres - the plain Euclidean inter_hemi_dist
+  #   threshold leaves it fragmented (see connectome_surrogates_plan.md)
+  con_geom_fill = mm.analysis.connectivity.connectome_from_geometry(
+    src,
+    maximum_dist = 22,   # SPIKE study's parameters, reused here as instructed
+    maximum_neigh = 35,
+    weights = True,
+  )
+  con_geom_atlas = mm.analysis.connectivity.connectome_from_geometry(
+    src,
+    maximum_dist = 22,
+    maximum_neigh = 35,
+    weights = True,
+    inter_hemi_mirror = True,
+  )
+
+  surrogates = {}
+
+  # 2. All-to-all atlas surrogate (kept as explicitly instructed) + binary
+  con_a2a = mm.analysis.connectivity.connectome_from_atlas(
+    src, parc, atlas, ras2tkras,
+    sparsity = 1.0,
+    deterministic = True,
+  )
+  fill_idx = np.argwhere((con_geom_fill > 0) & (con_a2a == 0))
+  con_a2a[fill_idx[:,0], fill_idx[:,1]] = con_geom_fill[fill_idx[:,0], fill_idx[:,1]]
+  surrogates["atlas-a2a"] = con_a2a
+  surrogates["atlas-a2a-bin"] = (con_a2a > 0).astype(float)
+
+  # 3. Fused surrogate (some-to-some atlas + geometry fill) + binary
+  con_fused = mm.analysis.connectivity.connectome_from_atlas(
+    src, parc, atlas, ras2tkras,
+    sparsity = 0.14,
+    deterministic = True,
+  )
+  fill_idx = np.argwhere((con_geom_fill > 0) & (con_fused == 0))
+  con_fused[fill_idx[:,0], fill_idx[:,1]] = con_geom_fill[fill_idx[:,0], fill_idx[:,1]]
+  surrogates["fused"] = con_fused
+  surrogates["fused-bin"] = (con_fused > 0).astype(float)
+
+  # 4. Geometry-only surrogate, atlas params, homotopic interhemispheric
+  # connections (no atlas term, no fuse) + binary
+  surrogates["geom-atlas"] = con_geom_atlas
+  surrogates["geom-atlas-bin"] = (con_geom_atlas > 0).astype(float)
+
+  # 5. Spectral decomposition + save, per surrogate
+  for desc, con in surrogates.items():
+    fcon = dm.get_path(sub, "con", desc=desc)
+    feig = dm.get_path(sub, "eig", desc=desc)
+
+    if check_files([fcon, feig]) and not overwrite:
+      print(f"[{desc}] already exists, skipping.")
+      continue
+
+    inv_con = np.divide(1, con, out=np.zeros_like(con), where=con>0)
+    eigvec, eigval = mm.analysis.connectivity.compute_cst(inv_con)
+
+    np.save(fcon, con)
+    mm.core.write_eig(feig, eigvec, eigval)
+
+run_surrogate_connectivity(overwrite=False)
+```
+
+# Simulation
+
+## Flagship Dataset
 
 Runs the actual spike simulations: for every region in the parcellation,
 simulates 30 repetitions of a spike originating in that region and
@@ -536,6 +869,14 @@ the *correct* units.
 - `snr_target = 10.0`: target single-trial SNR. **FILL**
 - `base_seed = 42`: fixed seed for reproducibility - standard practice, not a
   modeling choice.
+- `n_jobs = -1`: `generate_simulation_dataset` now parallelizes execution
+  internally via `joblib.Parallel` (same addition already used in
+  `noise_sweep_simulation.py`'s call). Every run's `run_seed` and output
+  paths are still precomputed up front in submission order before dispatch,
+  so the result is reproducible for a given `base_seed` regardless of
+  `n_jobs` - parallelizing only changes when each run executes, not what it
+  computes. `-1` matches the convention already used for the other
+  `joblib.Parallel` calls in this file.
 
 ```{python filename="simulation.py"}
 # | output: false
@@ -544,78 +885,301 @@ import mindmap as mm
 from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
-overwrite = False
+# data manager
+dm = SimfManager("simf.config.yml")
+sub = "10"
+
+def run_simulation(overwrite=False):
+  # output folder
+  fsim = dm.roots["sim"]
+  if check_files([fsim]) and not overwrite:
+    print("Simulation folder already exists, skipping.")
+    return
+
+  # load data
+  fwd = dm.load(sub, "fwd", desc="sim")
+  con = dm.load(sub, "con")
+  eeg = dm.load(sub, "ave-temp")
+  parc = dm.load(sub, "dseg", space="fs", segmentation="multiconn2022", scale="4")
+  ras2tkras = dm.load(sub, "ras2tkras")
+
+  # build simulation
+  spike = mm.analysis.simulation.SpikeSignal(
+    width = 0.1,    # in [ms]
+    onset = 0.5,    # in [ms]
+    repeat = 1,     # in [ms]
+    scale = 1e-8,   # in [A]
+    event_id = 1,
+  )
+
+  # head model
+  head_model = mm.analysis.simulation.HeadModel(
+    sensors = eeg,
+    forward = fwd,
+    connectivity_weights = con > 0,
+    connectivity_lengths = con,
+    parcellation = parc,
+    ras2tkras = ras2tkras,
+  )
+
+  # Epoch configuration
+  epoch_config = mm.analysis.simulation.EpochConfig(
+    tmin = -0.45,                   # in [s]
+    tmax = 0.45,                    # in [s]
+    baseline = (-0.45, -0.2),       # in [s]
+    signal_window = (-0.1, 0.45),   # in [s]
+  )
+
+  # Propagation configuration
+  prop_config = mm.analysis.simulation.PropagationConfig(
+    conduction_speed = 30,          # in [mm/ms]
+    nodal_delay = 10,               # in [ms]
+    spatial_decay = 0.5,            # [0-1]
+    jitter = 1,                     # in [ms]
+  )
+
+  sim = mm.analysis.simulation.Simulator(head_model, epoch_config)
+
+  # run 30 simulations for every brain region
+  brain_regions = parc.clut["Label name"]
+  sources = [mm.analysis.simulation.Source([br], spike) for br in brain_regions]
+
+  mm.analysis.simulation.generate_simulation_dataset(
+    dm = dm,
+    subject = sub,
+    simulator = sim,
+    sources = sources,
+    prop_config = prop_config,
+    repetitions = 30,
+    snr_targets = [10.0],
+    base_seed = 42,
+    entities = {"task":"spk"},
+    n_jobs = -1,
+  )
+
+run_simulation(overwrite=True)
+```
+
+## Noise/SNR Sweep Dataset (Experiment 2)
+
+Generates a new simulation dataset spanning 5 SNR levels for the probe-set
+regions, so noise robustness can be evaluated the same way Experiment 1
+evaluates connectome robustness. Unlike Experiment 1, the connectome/forward
+model stay fixed here (that's Experiment 1's axis) - only `snr_target`
+varies, so this cell produces genuinely new `ave`/`cov`/`gold` files (not
+just a new reconstruction pass on existing ones). Reconstruction and metric
+computation are separate follow-up steps, not part of this cell - see
+"Experiment 2: Noise/SNR Sweep Reconstruction & Validation" further below.
+
+⚠ This is a corrected rewrite of an earlier draft of this cell that was never
+run. The earlier draft (a) called `generate_simulation_dataset` with a
+`snr_target` singular kwarg that doesn't exist in the installed `mindmap` API
+(would have raised `TypeError` immediately), and (b) reused `subject=sub`
+(`"10"`) - the same subject id as the flagship 14,190-run dataset - which
+would have silently overwritten the flagship dataset's `simulation_index.tsv`
+on first run, since `generate_simulation_dataset` writes that file to
+`sub-{subject}/` keyed only by `subject`, not by `task`. Both are fixed below.
+
+**Parameter choices:**
+
+- Regions: the same probe set as Experiment 1
+  (`results/sub-10_probe-set.csv`, 60 regions) - not a new noise-specific
+  sample, so the two experiments stay directly comparable region-for-region.
+- `snr_levels = [20, 10, 5, 2.5, 1.25]`: log2-spaced. SNR is a ratio and
+  accuracy-vs-SNR curves are typically threshold-shaped, so geometric
+  spacing resolves the transition zone better than linear steps would.
+- `n_reps = 10` (vs. 5 for the connectome-degradation experiments): higher
+  because per-trial noise-draw variance is specifically what needs
+  averaging out here, unlike the connectome sweep where the connectome
+  perturbation itself dominates run-to-run variance.
+- Total volume: 60 regions x 5 levels x 10 reps = 3,000 runs (~21% the size
+  of the original single-level 14,190-run flagship dataset).
+- `subject = f"{sub}-noisesweep"` (i.e. `"10-noisesweep"`), distinct from the
+  flagship dataset's `sub="10"` - required to avoid the `simulation_index.tsv`
+  collision described above (mirrors the reference notebook's
+  `simf10`/`simf10-noisesweep` split in
+  `tutorials/analysis/simulations/simulation_spike.ipynb`).
+- One `generate_simulation_dataset` call for the whole sweep: `snr_targets`
+  already accepts a list (current installed
+  `mindmap.analysis.simulation.pipeline.generate_simulation_dataset`
+  signature), looping `source -> snr -> rep` internally and writing one
+  `simulation_index.tsv` with a `target_snr` column per row - no per-level
+  `task` tagging or snapshot-and-concat step needed, unlike the superseded
+  draft plan.
+- ⚠ Noise pairing: this one-call design does **not** give paired noise draws
+  across SNR levels. `generate_simulation_dataset` seeds a single RNG once
+  per call and draws sequentially in `source -> snr -> rep` order, so each
+  `(region, snr, rep)` triple gets an independent draw - not the same
+  underlying noise realization reused across levels with only the signal
+  scaled. The original plan for this experiment (see TODO §3) wanted that
+  literal pairing for a repeated-measures comparison; that would require five
+  separate calls, each re-seeding `base_seed=42` and each writing to its own
+  `subject` (e.g. `f"{sub}-noisesweep-snr{tag}"`), plus a concat step -
+  deliberately not done here in favor of the simpler, upstream-idiomatic
+  one-call sweep. Downstream analysis should treat the 5 levels as
+  independent samples, not matched pairs.
+- `base_seed = 42`: project convention, reused as the single seed for this
+  call (see pairing note above - it no longer produces paired draws the way
+  it did in the superseded multi-call plan).
+- `n_jobs = -1`: `generate_simulation_dataset` now parallelizes execution
+  internally via `joblib.Parallel` (previously a plain sequential loop, see
+  TODO §3). Every run's `run_seed` and output paths are still precomputed up
+  front in submission order before dispatch, so the result is reproducible
+  for a given `base_seed` regardless of `n_jobs` - parallelizing only changes
+  when each run executes, not what it computes. `-1` matches the convention
+  already used for the other `joblib.Parallel` calls in this file
+  (`comparison.py`, `surrogate_reconstruction.py`, `surrogate_comparison.py`).
+
+⚠ **`QUICK_TEST` toggle:** this cell has never been run, so `QUICK_TEST = True`
+below shrinks it to the first 3 probe-set regions x 2 SNR levels x 2
+reps = 12 runs, to validate the pipeline (paths, API call, index output)
+without paying for the full 3,000-run sweep while still fixing bugs. Quick
+runs land in their own `subject` (`10-noisesweep-test`) and `results/` file
+(`..._index_test.tsv`), so they never collide with or block the full run.
+The full parameters (`FULL_PARAMS` below) are exactly what §3's design above
+specifies - once a quick run completes cleanly end-to-end, flip
+`QUICK_TEST = False` and rerun for the real sweep. The `10-noisesweep-test`
+subject folder and `..._index_test.tsv` file are safe to delete afterward;
+nothing downstream reads them.
+
+```{python filename="noise_sweep_simulation.py"}
+# | output: false
+
+import shutil
+from pathlib import Path
+
+import mindmap as mm
+import pandas as pd
+from scripts.data_manager import SimfManager
+from scripts.utils import check_files
 
 # data manager
 dm = SimfManager("simf.config.yml")
 sub = "10"
 
-# output folder
-fsim = dm.roots["sim"]
-if check_files([fsim]) and not overwrite:
-  raise ValueError("Simulation folder already exists.")
+# ----------------------------------------------------------------------
+# QUICK_TEST: set to False once the pipeline runs clean end-to-end, to swap
+# back to the full sweep - both parameter sets are kept here so nothing
+# needs to be retyped/re-derived (see prose above).
+# ----------------------------------------------------------------------
+QUICK_TEST = True
 
-# load data
-fwd = dm.load(sub, "fwd", desc="sim")
-con = dm.load(sub, "con")
-eeg = dm.load(sub, "ave-temp")
-parc = dm.load(sub, "dseg", space="fs", segmentation="multiconn2022", scale="4")
-ras2tkras = dm.load(sub, "ras2tkras")
-
-# build simulation
-spike = mm.analysis.simulation.SpikeSignal(
-  width = 0.1,    # in [ms]
-  onset = 0.5,    # in [ms]
-  repeat = 1,     # in [ms]
-  scale = 1e-8,   # in [A]
-  event_id = 1,
+FULL_PARAMS = dict(
+  snr_levels = [20, 10, 5, 2.5, 1.25],
+  n_reps = 10,
+  n_test_regions = None,   # None = full 60-region probe set
+  subject_suffix = "noisesweep",
 )
 
-# head model
-head_model = mm.analysis.simulation.HeadModel(
-  sensors = eeg,
-  forward = fwd,
-  connectivity_weights = con > 0,
-  connectivity_lengths = con,
-  parcellation = parc,
-  ras2tkras = ras2tkras,
+QUICK_PARAMS = dict(
+  snr_levels = [20, 5],            # two levels spanning the sweep's extremes
+  n_reps = 2,
+  n_test_regions = 3,              # enough to exercise every code path, not
+                                    # to draw conclusions from
+  subject_suffix = "noisesweep-test",
 )
 
-# Epoch configuration
-epoch_config = mm.analysis.simulation.EpochConfig(
-  tmin = -0.45,                   # in [s]
-  tmax = 0.45,                    # in [s]
-  baseline = (-0.45, -0.2),       # in [s]
-  signal_window = (-0.1, 0.45),   # in [s]
-)
+params = QUICK_PARAMS if QUICK_TEST else FULL_PARAMS
+snr_levels = params["snr_levels"]
+n_reps = params["n_reps"]
+noisesweep_subject = f"{sub}-{params['subject_suffix']}"
+base_seed = 42
+n_jobs = -1   # compute resource setting, not a modeling choice - see prose above
 
-# Propagation configuration
-prop_config = mm.analysis.simulation.PropagationConfig(
-  conduction_speed = 30,          # in [mm/ms]
-  nodal_delay = 10,               # in [ms]
-  spatial_decay = 0.5,            # [0-1]
-  jitter = 1,                     # in [ms]
-)
+def run_noise_sweep_simulation(overwrite=QUICK_TEST):
+  # output: convenience copy of the sweep's simulation_index.tsv under
+  # results/, so downstream cells don't need to know the noisesweep subject id.
+  # Quick-test runs get their own suffixed filename so they never collide
+  # with / block the full run's output.
+  suffix = "_test" if QUICK_TEST else ""
+  findex = Path(f"./results/sub-{sub}_noise-sweep_index{suffix}.tsv")
+  fsim_index = dm.roots["sim"]/f"sub-{noisesweep_subject}"/"simulation_index.tsv"
 
-sim = mm.analysis.simulation.Simulator(head_model, epoch_config)
+  if check_files([findex]) and not overwrite:
+    print("Already exists, skipping.")
+    return
 
-# run 30 simulations for every brain region
-brain_regions = parc.clut["Label name"]
-sources = [mm.analysis.simulation.Source([br], spike) for br in brain_regions]
+  # 0. Probe-set regions (shared with Experiment 1 - see probe_set_selection.py)
+  probe_set = pd.read_csv(f"./results/sub-{sub}_probe-set.csv")
+  probe_regions = probe_set["region"].tolist()
 
-mm.analysis.simulation.generate_simulation_dataset(
-  dm = dm,
-  subject = sub,
-  simulator = sim,
-  sources = sources,
-  prop_config = prop_config,
-  repetitions = 30,
-  snr_target = 10.0,
-  base_seed = 42,
-  entities = {"task":"spk"},
-)
+  if params["n_test_regions"] is not None:
+    # select_uniform_regions builds its output greedily (farthest-point
+    # sampling), so the first N entries are already a spatially spread subset
+    # on their own - no extra stratification needed for a quick smoke test
+    probe_regions = probe_regions[:params["n_test_regions"]]
+
+  # 1. Load shared simulation inputs - same original connectome/forward as
+  # the flagship dataset (simulation.py): only noise varies across levels
+  # here, not the connectome (that's Experiment 1's axis)
+  fwd = dm.load(sub, "fwd", desc="sim")
+  con = dm.load(sub, "con")
+  eeg = dm.load(sub, "ave-temp")
+  parc = dm.load(sub, "dseg", space="fs", segmentation="multiconn2022", scale="4")
+  ras2tkras = dm.load(sub, "ras2tkras")
+
+  spike = mm.analysis.simulation.SpikeSignal(
+    width = 0.1,    # in [ms]
+    onset = 0.5,    # in [ms]
+    repeat = 1,     # in [ms]
+    scale = 1e-8,   # in [A]
+    event_id = 1,
+  )
+
+  head_model = mm.analysis.simulation.HeadModel(
+    sensors = eeg,
+    forward = fwd,
+    connectivity_weights = con > 0,
+    connectivity_lengths = con,
+    parcellation = parc,
+    ras2tkras = ras2tkras,
+  )
+
+  epoch_config = mm.analysis.simulation.EpochConfig(
+    tmin = -0.45,                   # in [s]
+    tmax = 0.45,                    # in [s]
+    baseline = (-0.45, -0.2),       # in [s]
+    signal_window = (-0.1, 0.45),   # in [s]
+  )
+
+  prop_config = mm.analysis.simulation.PropagationConfig(
+    conduction_speed = 30,          # in [mm/ms]
+    nodal_delay = 10,               # in [ms]
+    spatial_decay = 0.5,            # [0-1]
+    jitter = 1,                     # in [ms]
+  )
+
+  sim = mm.analysis.simulation.Simulator(head_model, epoch_config)
+
+  sources = [mm.analysis.simulation.Source([br], spike) for br in probe_regions]
+
+  # 2. One call sweeps every SNR level: `snr_targets` takes a list, looping
+  # source -> snr -> rep internally and writing a single simulation_index.tsv
+  # with `target_snr` per row - see prose above for why this replaces the
+  # superseded multi-call/snapshot/concat plan, and why `noisesweep_subject`
+  # (not `sub`) is required here.
+  mm.analysis.simulation.generate_simulation_dataset(
+    dm = dm,
+    subject = noisesweep_subject,
+    simulator = sim,
+    sources = sources,
+    prop_config = prop_config,
+    repetitions = n_reps,
+    snr_targets = snr_levels,
+    base_seed = base_seed,
+    entities = {"task": "spk"},
+    n_jobs = n_jobs,
+  )
+
+  # 3. Convenience copy under results/ (see output note above)
+  shutil.copy(fsim_index, findex)
+
+run_noise_sweep_simulation(overwrite=QUICK_TEST)
 ```
 
+# Inverse Problem
+
+## Solve Inverse Problem
 
 Runs source reconstruction (dSPM, sLORETA, CSET, wCSET) on every simulated
 run, in parallel, via `scripts/source_recon_sim.py`. Uses the
@@ -631,12 +1195,13 @@ the data (see note above).
 - `crop = [-0.01, 0.15]` (s): time window kept for reconstruction/evaluation.
   **FILL**
 
-```{python filename="source_reconstruction.py"}
+```{python filename="solve_inverse.py"}
 # | output: false
 # script to handle parallel processing
 %run scripts/source_recon_sim.py
 ```
 
+## Validation Metrics
 
 For every simulated run, computes (a) the spatial correlation between
 reconstruction and ground truth over time, and (b) precision-recall curves
@@ -667,8 +1232,6 @@ import mindmap as mm
 from scripts.data_manager import SimfManager
 from scripts.utils import check_files, resample_pr_curve
 
-overwrite = False
-
 # data manager
 dm = SimfManager("simf.config.yml")
 sub = "10"
@@ -676,89 +1239,91 @@ sub = "10"
 methods = ["dspm", "sloreta", "cset", "wcset"]
 n_pr_points = 100   # points kept per resampled precision-recall curve
 
-# one MetricSuite folder regroups every metric of this study (raw per-run
-# curves + context) and is reloaded in a single call from comparison_plots.py
-results_dir = Path("./results")
-fmetrics = results_dir/f"sub-{sub}_simf-metrics"
+def run_comparison(overwrite=False):
+  # one MetricSuite folder regroups every metric of this study (raw per-run
+  # curves + context) and is reloaded in a single call from comparison_plots.py
+  results_dir = Path("./results")
+  fmetrics = results_dir/f"sub-{sub}_simf-metrics"
 
-if check_files([fmetrics/"meta.json"]) and not overwrite:
-  raise FileExistsError("Output already exists!")
+  if check_files([fmetrics/"meta.json"]) and not overwrite:
+    print("Already exists, skipping.")
+    return
 
-# one row per simulation run
-index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
+  # one row per simulation run
+  index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
 
-# resolve every file path in the main process: `dm` wraps a pybids BIDSLayout
-# (SQLAlchemy-backed) that joblib/loky cannot pickle to ship to worker
-# processes, so workers must never close over `dm` itself - only plain paths
-run_paths = [
-  {
-    "gold": dm.get_path(sub, "gold", task="spk", run=run),
-    "ave": dm.get_path(sub, "ave", task="spk", run=run),
-    "stc": {m: dm.get_path(sub, "stc", task="spk", run=run, desc=m) for m in methods},
-  }
-  for run in index["run"]
-]
+  # resolve every file path in the main process: `dm` wraps a pybids BIDSLayout
+  # (SQLAlchemy-backed) that joblib/loky cannot pickle to ship to worker
+  # processes, so workers must never close over `dm` itself - only plain paths
+  run_paths = [
+    {
+      "gold": dm.get_path(sub, "gold", task="spk", run=run),
+      "ave": dm.get_path(sub, "ave", task="spk", run=run),
+      "stc": {m: dm.get_path(sub, "stc", task="spk", run=run, desc=m) for m in methods},
+    }
+    for run in index["run"]
+  ]
 
+  def process_run(paths):
+    """Compute validation metrics for a single simulation run, for every method."""
+    gold = mne.read_source_estimate(paths["gold"])
+    ave = mne.read_evokeds(paths["ave"], verbose="warning")[0]
 
-def process_run(paths):
-  """Compute validation metrics for a single simulation run, for every method."""
-  gold = mne.read_source_estimate(paths["gold"])
-  ave = mne.read_evokeds(paths["ave"], verbose="warning")[0]
+    corr = {}
+    prec_hrp = {}
+    prec_pp = {}
 
-  corr = {}
-  prec_hrp = {}
-  prec_pp = {}
+    for m in methods:
+      stc = mne.read_source_estimate(paths["stc"][m])
+
+      # align ground truth/sensor data to the reconstruction's (cropped) time window
+      ground = gold.copy().crop(tmin=stc.times[0], tmax=stc.times[-1])
+      data = ave.copy().crop(tmin=stc.times[0], tmax=stc.times[-1])
+
+      # ------------------------------------------------
+      # Spatial correlation over time
+      # ------------------------------------------------
+      corr[m] = mm.analysis.inverse.compute_stc_correlation(
+        ground, stc, mode="spatial", method="pearson"
+      )
+
+      # ------------------------------------------------
+      # Precision-recall curves @ 50% rising phase / peak phase
+      # ------------------------------------------------
+      for phase_name, ratio, store in [("hrp", 0.5, prec_hrp), ("pp", 1.0, prec_pp)]:
+        idx = mm.analysis.eeg.get_rising_phase(data, ratio=ratio, as_idx=True)
+        activity_mask = ground.data[:, idx] > 0
+        estimated = stc.data[:, idx]
+
+        curves = mm.core.calc_pr_curve(activity_mask, estimated)
+        precision, recall = curves["precision"], curves["recall"]
+        store[m], recall_grid = resample_pr_curve(precision, recall, n_points=n_pr_points)
+
+    return corr, prec_hrp, prec_pp, stc.times, recall_grid
+
+  # run across the whole simulation dataset
+  results = Parallel(n_jobs=-1)(
+    delayed(process_run)(paths)
+    for paths in tqdm(run_paths, desc="Computing validation metrics")
+  )
+
+  corr_runs, prhrp_runs, prpp_runs, times, recall_grid = zip(*results)
+
+  # one MetricSuite regroups every metric of this study. Each metric is registered
+  # as a single (n_runs, n_points) stack and kept as an array internally, which is
+  # what makes register/save/reload cheap even at this scale (see mindmap's
+  # MetricSuite.register/.save for details, and scripts/utils.py:resample_pr_curve
+  # for why the PR curves are pre-downsampled onto a common recall grid)
+  metrics = mm.metric.MetricSuite(f"sub-{sub} simulation validation")
 
   for m in methods:
-    stc = mne.read_source_estimate(paths["stc"][m])
+    metrics.register(m, "correlation", np.stack([r[m] for r in corr_runs]), times=times[0])
+    metrics.register(m, "precision_hrp", np.stack([r[m] for r in prhrp_runs]), recall=recall_grid[0])
+    metrics.register(m, "precision_pp", np.stack([r[m] for r in prpp_runs]), recall=recall_grid[0])
 
-    # align ground truth/sensor data to the reconstruction's (cropped) time window
-    ground = gold.copy().crop(tmin=stc.times[0], tmax=stc.times[-1])
-    data = ave.copy().crop(tmin=stc.times[0], tmax=stc.times[-1])
+  metrics.save(fmetrics)
 
-    # ------------------------------------------------
-    # Spatial correlation over time
-    # ------------------------------------------------
-    corr[m] = mm.analysis.inverse.compute_stc_correlation(
-      ground, stc, mode="spatial", method="pearson"
-    )
-
-    # ------------------------------------------------
-    # Precision-recall curves @ 50% rising phase / peak phase
-    # ------------------------------------------------
-    for phase_name, ratio, store in [("hrp", 0.5, prec_hrp), ("pp", 1.0, prec_pp)]:
-      idx = mm.analysis.eeg.get_rising_phase(data, ratio=ratio, as_idx=True)
-      activity_mask = ground.data[:, idx] > 0
-      estimated = stc.data[:, idx]
-
-      curves = mm.core.calc_performance_curves(activity_mask, estimated)
-      precision, recall = curves["pr"]["precision"], curves["pr"]["recall"]
-      store[m], recall_grid = resample_pr_curve(precision, recall, n_points=n_pr_points)
-
-  return corr, prec_hrp, prec_pp, stc.times, recall_grid
-
-
-# run across the whole simulation dataset
-results = Parallel(n_jobs=-1)(
-  delayed(process_run)(paths)
-  for paths in tqdm(run_paths, desc="Computing validation metrics")
-)
-
-corr_runs, prhrp_runs, prpp_runs, times, recall_grid = zip(*results)
-
-# one MetricSuite regroups every metric of this study. Each metric is registered
-# as a single (n_runs, n_points) stack and kept as an array internally, which is
-# what makes register/save/reload cheap even at this scale (see mindmap's
-# MetricSuite.register/.save for details, and scripts/utils.py:resample_pr_curve
-# for why the PR curves are pre-downsampled onto a common recall grid)
-metrics = mm.metric.MetricSuite(f"sub-{sub} simulation validation")
-
-for m in methods:
-  metrics.register(m, "correlation", np.stack([r[m] for r in corr_runs]), times=times[0])
-  metrics.register(m, "precision_hrp", np.stack([r[m] for r in prhrp_runs]), recall=recall_grid[0])
-  metrics.register(m, "precision_pp", np.stack([r[m] for r in prpp_runs]), recall=recall_grid[0])
-
-metrics.save(fmetrics)
+run_comparison(overwrite=False)
 ```
 
 Plots of these results (spatial correlation over time, precision-recall at
@@ -787,34 +1352,514 @@ import mindmap as mm
 from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
-overwrite = False
+# data manager
+dm = SimfManager("simf.config.yml")
+sub = "10"
+
+def run_spike_timing(overwrite=False):
+  # output file - per-run half-rising-phase/peak time of the simulated sensor
+  # EEG, used to draw reference lines on the correlation-over-time plot in
+  # index.qmd. Computed from the same sensor-level 'ave' each run already has
+  # (not re-simulated), independent of source reconstruction method.
+  ftiming = Path(f"./results/sub-{sub}_simf_spike_timing.csv")
+
+  if check_files([ftiming]) and not overwrite:
+    print("Already exists, skipping.")
+    return
+
+  index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
+
+  rows = []
+  for run in tqdm(index["run"], desc="Computing spike timing"):
+    fave = dm.get_path(sub, "ave", task="spk", run=run)
+    ave = mne.read_evokeds(fave, verbose="warning")[0]
+
+    rows.append({
+      "run": run,
+      "hrp_time": mm.analysis.eeg.get_rising_phase(ave, ratio=0.5, as_idx=False),
+      "pp_time": mm.analysis.eeg.get_rising_phase(ave, ratio=1.0, as_idx=False),
+    })
+
+  pd.DataFrame(rows).to_csv(ftiming, index=False)
+
+run_spike_timing(overwrite=False)
+```
+
+## Experiment 1.2: Surrogate-Connectome Reconstruction & Validation
+
+Reconstructs CSET & wCSET (only - dSPM/sLORETA don't depend on the
+connectome, so their original-connectome probe-set results are reused
+unchanged as the surrogate-agnostic reference) on the probe-set runs, once
+per surrogate. Uses the probe set's first 5 repetitions per region (matches
+Experiment 1.1's reps count, not the noise experiment's 10 - the connectome
+swap dominates run-to-run variance here, not the per-trial noise draw).
+
+**Parameter choices:**
+
+- `lambda2 = 0.1` for both CSET and wCSET, unchanged across all 3
+  surrogates - the same value used for the original-connectome flagship
+  reconstruction, not retuned per surrogate's edge density. This is a
+  documented assumption, not a verified sub-sweep (parallel to the same
+  assumption flagged for the noise-robustness experiment).
+- Outputs are **not** produced via `mm.analysis.inverse.make_process_sample`
+  - that helper derives each output STC's path by string-replacing the input
+    `ave` filename (`ave→stc`, inject `desc-{method}`), which would silently
+  overwrite the flagship `desc-cset`/`desc-wcset` STCs if pointed at the same
+  probe-set `ave` files. Instead each surrogate's outputs get their own
+  compound `desc` (`cset-{surrogate}`, `wcset-{surrogate}`), computed with
+  the same solver classes (`CSET`/`wCSET`) `make_process_sample` uses
+  internally.
+
+```{python filename="surrogate_reconstruction.py"}
+# | output: false
+
+import ast
+
+import mne
+import pandas as pd
+from joblib import Parallel, delayed
+from tqdm import tqdm
+
+from mindmap.analysis.functional.inverse.solvers import CSET, wCSET
+from scripts.data_manager import SimfManager
+from scripts.utils import check_files
 
 # data manager
 dm = SimfManager("simf.config.yml")
 sub = "10"
 
-# output file - per-run half-rising-phase/peak time of the simulated sensor
-# EEG, used to draw reference lines on the correlation-over-time plot in
-# index.qmd. Computed from the same sensor-level 'ave' each run already has
-# (not re-simulated), independent of source reconstruction method.
-fmetrics = Path(f"./results/sub-{sub}_simf-metrics")
-ftiming = Path(f"./results/sub-{sub}_simf_spike_timing.csv")
+n_reps_per_region = 5
+surrogates = ["atlas-a2a", "atlas-a2a-bin", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin"]
+lambda2 = {"cset": 0.1, "wcset": 0.1}
+crop = [-0.01, 0.15]
 
-if check_files([ftiming]) and not overwrite:
-  raise FileExistsError("Output already exists!")
+# Resolve every file path in the main process (workers must never close
+# over `dm` itself - see comparison.py's note on pybids/loky pickling)
+def make_process_one(forward, eig):
+  def process_one(fave, fcov, fstc_cset, fstc_wcset):
+    data = mne.read_evokeds(fave, verbose="warning")[0]
+    ncov = mne.read_cov(fcov, verbose="warning")
+    data = data.copy().crop(tmin=crop[0], tmax=crop[1])
 
-index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
+    kwargs = dict(forward=forward, noise_cov=ncov, depth=0.8, eigenvectors=eig["vec"])
 
-rows = []
-for run in tqdm(index["run"], desc="Computing spike timing"):
-  fave = dm.get_path(sub, "ave", task="spk", run=run)
-  ave = mne.read_evokeds(fave, verbose="warning")[0]
+    if fstc_cset is not None:
+      inv = CSET(**kwargs)
+      sol = inv.solve(data, lambda2=lambda2["cset"])
+      sol.save(str(fstc_cset), overwrite=True, verbose="warning")
 
-  rows.append({
-    "run": run,
-    "hrp_time": mm.analysis.eeg.get_rising_phase(ave, ratio=0.5, as_idx=False),
-    "pp_time": mm.analysis.eeg.get_rising_phase(ave, ratio=1.0, as_idx=False),
-  })
+    if fstc_wcset is not None:
+      inv = wCSET(eigenvalues=eig["val"], harm=0.8, **kwargs)
+      sol = inv.solve(data, lambda2["wcset"])
+      sol.save(str(fstc_wcset), overwrite=True, verbose="warning")
 
-pd.DataFrame(rows).to_csv(ftiming, index=False)
+    return "done"
+  return process_one
+
+def run_surrogate_reconstruction(overwrite=False):
+  # 1. Select probe-set runs (first n_reps_per_region reps per region)
+  probe_set = pd.read_csv(f"./results/sub-{sub}_probe-set.csv")
+  index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
+  index["region"] = index["source_index_list"].apply(lambda s: ast.literal_eval(s)[0])
+
+  probe_runs = index[
+    index["region"].isin(probe_set["region"]) & (index["repetition"] <= n_reps_per_region)
+  ]["run"].tolist()
+
+  # 2. Static forward model (always the mismatched "inv" model, same as the
+  # flagship reconstruction - see forward_problem.py)
+  forward = dm.load(sub, "fwd", desc="inv")
+
+  for surrogate in surrogates:
+    eig = dm.load(sub, "eig", desc=surrogate)
+
+    tasks = []
+    for run in probe_runs:
+      fave = dm.get_path(sub, "ave", task="spk", run=run)
+      fcov = dm.get_path(sub, "cov", task="spk", run=run)
+      fstc_cset = dm.get_path(sub, "stc", task="spk", run=run, desc=f"cset-{surrogate}")
+      fstc_wcset = dm.get_path(sub, "stc", task="spk", run=run, desc=f"wcset-{surrogate}")
+
+      need_cset = not (check_files([fstc_cset]) and not overwrite)
+      need_wcset = not (check_files([fstc_wcset]) and not overwrite)
+
+      if need_cset or need_wcset:
+        tasks.append((fave, fcov, fstc_cset if need_cset else None, fstc_wcset if need_wcset else None))
+
+    if not tasks:
+      print(f"[{surrogate}] already exists, skipping.")
+      continue
+
+    process_one = make_process_one(forward, eig)
+    Parallel(n_jobs=-1)(
+      delayed(process_one)(*t) for t in tqdm(tasks, desc=f"Reconstructing ({surrogate})")
+    )
+
+run_surrogate_reconstruction(overwrite=False)
+```
+
+Computes the same validation metrics as `comparison.py` above (spatial
+correlation over time, precision-recall at half-rising-phase/peak), but
+restricted to `["cset", "wcset"]` and to the probe-set runs only, one
+`MetricSuite` per surrogate.
+
+⚠ Uses `mm.core.calc_pr_curve` rather than `comparison.py`'s
+`mm.core.calc_performance_curves`: the latter was split into
+`calc_roc_curve`/`calc_pr_curve` in a later `mindmap` refactor and no longer
+exists. **`comparison.py`'s cell above is therefore currently broken if
+rerun against the installed `mindmap` version** - it still calls the old
+name. Worth fixing there too; left alone here since it's outside this
+experiment's scope.
+
+```{python filename="surrogate_comparison.py"}
+# | output: false
+
+import ast
+from pathlib import Path
+
+import mne
+import numpy as np
+import pandas as pd
+from joblib import Parallel, delayed
+from tqdm import tqdm
+
+import mindmap as mm
+from scripts.data_manager import SimfManager
+from scripts.utils import check_files, resample_pr_curve
+
+# data manager
+dm = SimfManager("simf.config.yml")
+sub = "10"
+
+surrogates = ["atlas-a2a", "atlas-a2a-bin", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin"]
+methods = ["cset", "wcset"]
+n_pr_points = 100
+
+def process_run(paths):
+  """Compute validation metrics for a single simulation run, for cset/wcset only."""
+  gold = mne.read_source_estimate(paths["gold"])
+  ave = mne.read_evokeds(paths["ave"], verbose="warning")[0]
+
+  corr = {}
+  prec_hrp = {}
+  prec_pp = {}
+
+  for m in methods:
+    stc = mne.read_source_estimate(paths["stc"][m])
+
+    ground = gold.copy().crop(tmin=stc.times[0], tmax=stc.times[-1])
+    data = ave.copy().crop(tmin=stc.times[0], tmax=stc.times[-1])
+
+    corr[m] = mm.analysis.inverse.compute_stc_correlation(
+      ground, stc, mode="spatial", method="pearson"
+    )
+
+    for phase_name, ratio, store in [("hrp", 0.5, prec_hrp), ("pp", 1.0, prec_pp)]:
+      idx = mm.analysis.eeg.get_rising_phase(data, ratio=ratio, as_idx=True)
+      activity_mask = ground.data[:, idx] > 0
+      estimated = stc.data[:, idx]
+
+      curves = mm.core.calc_pr_curve(activity_mask, estimated)
+      precision, recall = curves["precision"], curves["recall"]
+      store[m], recall_grid = resample_pr_curve(precision, recall, n_points=n_pr_points)
+
+  return corr, prec_hrp, prec_pp, stc.times, recall_grid
+
+def run_surrogate_comparison(overwrite=False):
+  # probe-set runs (same selection as surrogate_reconstruction.py)
+  probe_set = pd.read_csv(f"./results/sub-{sub}_probe-set.csv")
+  index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
+  index["region"] = index["source_index_list"].apply(lambda s: ast.literal_eval(s)[0])
+  probe_runs = index[
+    index["region"].isin(probe_set["region"]) & (index["repetition"] <= 5)
+  ]["run"].tolist()
+
+  for surrogate in surrogates:
+    results_dir = Path("./results")
+    fmetrics = results_dir/f"sub-{sub}_simf-metrics_{surrogate}"
+
+    if check_files([fmetrics/"meta.json"]) and not overwrite:
+      print(f"[{surrogate}] already exists, skipping.")
+      continue
+
+    run_paths = [
+      {
+        "gold": dm.get_path(sub, "gold", task="spk", run=run),
+        "ave": dm.get_path(sub, "ave", task="spk", run=run),
+        "stc": {m: dm.get_path(sub, "stc", task="spk", run=run, desc=f"{m}-{surrogate}") for m in methods},
+      }
+      for run in probe_runs
+    ]
+
+    results = Parallel(n_jobs=-1)(
+      delayed(process_run)(paths)
+      for paths in tqdm(run_paths, desc=f"Computing metrics ({surrogate})")
+    )
+
+    corr_runs, prhrp_runs, prpp_runs, times, recall_grid = zip(*results)
+
+    metrics = mm.metric.MetricSuite(f"sub-{sub} simulation validation - surrogate {surrogate}")
+    for m in methods:
+      metrics.register(m, "correlation", np.stack([r[m] for r in corr_runs]), times=times[0])
+      metrics.register(m, "precision_hrp", np.stack([r[m] for r in prhrp_runs]), recall=recall_grid[0])
+      metrics.register(m, "precision_pp", np.stack([r[m] for r in prpp_runs]), recall=recall_grid[0])
+
+    metrics.save(fmetrics)
+
+run_surrogate_comparison(overwrite=False)
+```
+
+## Experiment 2: Noise/SNR Sweep Reconstruction & Validation
+
+Reconstructs every method on the noise/SNR sweep dataset and scores it
+against ground truth, one combined pass per run via
+`mm.analysis.functional.inverse.run_parallel_pipeline` - ported from the
+reference notebook
+(`tutorials/analysis/inverse/inverse-noisesweep.ipynb` in the `mindmap`
+repo), adapted to this project's `SimfManager`/probe-set conventions.
+
+⚠ This intentionally departs from the flagship/surrogate reconstruction
+cells elsewhere in this file in several ways - each is a deliberate choice,
+not an oversight:
+
+- **6 methods** (`dspm`, `sloreta`, `mne`, `cset`, `wcset`, `mce`), not the 4
+  used by the flagship/surrogate comparisons - matches
+  `processing_spike.qmd`'s convention and resolves the open `FILL` question
+  in `comparison.py`'s prose above about why `mce`/`mne` were excluded there.
+- **SNR-adaptive `lambda2`** for `dspm`/`sloreta`/`mne`/`wcset`
+  (`max(0.01, 1/snr.max()**2)`, computed per run from that run's own
+  estimated SNR), fixed `0.1` for `cset`/`mce` - matches the notebook
+  exactly. This supersedes `TODO_simf_robustness.md`'s earlier "fixed
+  `lambda2` across all 5 SNR levels" assumption **for this cell only** - see
+  the TODO for why that assumption no longer applies here.
+- **wCSET hyperparameters**: `depth=0.5`, `harm=5`,
+  `harmonic_method="lowpass"` - matches the notebook exactly, but differs
+  from every other wCSET call in this file (flagship/surrogate
+  reconstructions use `depth=0.8`, `harm=0.8`, default
+  `harmonic_method="gap"`). This means the noise-sweep's wCSET numbers are
+  **not** directly comparable to the flagship/surrogate wCSET numbers
+  elsewhere in the manuscript - both use the name "wCSET" but different
+  hyperparameters.
+- **5 scalar metrics per run/method** (`correlation_hrp`, `correlation_pp`,
+  `ap_hrp`, `ap_pp`, `localization_error_hrp`), not the 3
+  full-time-course/full-PR-curve metrics `comparison.py`/
+  `surrogate_comparison.py` compute. Only two timepoints (`hrp`/`pp`) are
+  solved per run/method, not the full cropped window - no full time-course
+  correlation, no full PR curves, and **no STC files saved to disk**. A
+  deliberate scope reduction from `TODO_simf_robustness.md`'s original plan,
+  justified by volume (up to 3,000 runs x 6 methods = 18,000 solves).
+- **hrp/pp timing** is picked from each run's own clean `gold`, projected to
+  sensor space with the *simulation* forward (`simulator.hm.fwd`,
+  noise-immune by construction), not from the noisy `ave` the way
+  `comparison.py`/`spike_timing.py` do it elsewhere in this file. Picking
+  timing from noisy data would confound "can we find the right time point"
+  with "how accurate is the reconstruction" - a real risk specifically here,
+  since this experiment deliberately varies noise level. Not applied
+  retroactively to `comparison.py`/`spike_timing.py` - out of scope for this
+  cell.
+
+**Parameter choices:**
+
+- `QUICK_TEST` kept in sync with `noise_sweep_simulation.py`'s own flag -
+  both must point at the same generated dataset (test or full), or this cell
+  tries to read runs that don't exist for the other mode.
+- `fwd = dm.load(sub, "fwd", desc="inv")`: the inversion-time forward, used
+  for solving - deliberately different from the simulation-time forward,
+  same inverse-crime-avoidance convention used throughout this file.
+- `eig = dm.load(sub, "eig")`: the original tractography connectome's
+  eigenbasis, unchanged - Experiment 2 doesn't touch the connectome (that's
+  Experiment 1's axis).
+- `fsource` paths are built directly
+  (`sources_dir/f"run-{run:03d}_source.json"`) rather than through
+  `dm.get_path`: `SimfManager` has no `"source"` datatype registered (unlike
+  the notebook's `TutoManager`), and adding one for this single call site
+  wasn't worth it - the naming convention is fixed by
+  `generate_simulation_dataset` itself.
+- Sweep index read from the same `results/` convenience copy
+  `noise_sweep_simulation.py` writes, not the raw per-subject
+  `simulation_index.tsv` directly - stays consistent with what downstream
+  cells were already told to rely on. No `target_snr`-is-NaN filtering
+  needed here (unlike the notebook): Experiment 2's sweep never generates a
+  noise-only condition, so every row is used.
+- `n_jobs = -1`, not the notebook's `n_jobs=4` - matches this project's own
+  `Parallel(n_jobs=-1)` convention already used successfully in
+  `comparison.py`/`surrogate_reconstruction.py`/`surrogate_comparison.py` at
+  a similar per-worker memory scale (same ~7465-dim dense eigenbasis). Worth
+  tuning down if memory becomes a problem in practice.
+- No plotting cell here - this file only produces data (see `comparison.py`'s
+  own trailing note). The noise-robustness figure is still a TODO item for
+  `index.qmd`.
+
+```{python filename="noise_sweep_comparison.py"}
+# | output: false
+
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import mne
+
+import mindmap as mm
+from mindmap.analysis.functional.common.metric import find_peak_localization_error
+from mindmap.analysis.functional.inverse import InverseTask, run_parallel_pipeline
+from scripts.data_manager import SimfManager
+from scripts.utils import check_files
+
+# data manager
+dm = SimfManager("simf.config.yml")
+sub = "10"
+
+# keep in sync with noise_sweep_simulation.py's own QUICK_TEST flag - both
+# must point at the same dataset (test vs full) or this cell will try to
+# read runs that don't exist for the other mode
+QUICK_TEST = True
+suffix = "_test" if QUICK_TEST else ""
+noisesweep_subject = f"{sub}-noisesweep-test" if QUICK_TEST else f"{sub}-noisesweep"
+
+n_jobs = -1   # compute resource setting, not a modeling choice - see prose above
+
+def preprocess_hrp_pp(ctx):
+  """Picks hrp/pp from this run's own noise-free gold (immune to noise/SNR by
+  construction), projected to sensor space with the simulation forward."""
+  ave, gold, simulator = ctx["ave"], ctx["gold"], ctx["simulator"]
+
+  clean_ave = mne.apply_forward(simulator.hm.fwd, gold, ave.info)
+  hrp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=0.5, as_idx=True)[0]
+  pp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=1, as_idx=True)[0]
+
+  # solve only at those two phases - on the actual noisy `ave`, not the clean
+  # projection - instead of the whole cropped window
+  phase_data = mne.EvokedArray(
+    ave.data[:, [hrp_idx, pp_idx]], ave.info, tmin=0, nave=ave.nave, kind=ave.kind
+  )
+
+  return {"phase_data": phase_data, "hrp_idx": hrp_idx, "pp_idx": pp_idx}
+
+def make_reconstruct(fwd, eig):
+  """Solves all six inverse methods on the two-timepoint phase_data."""
+  mne_methods = {"sloreta": "sLORETA", "dspm": "dSPM", "mne": "MNE"}
+
+  def reconstruct(ctx):
+    data, ncov = ctx["phase_data"], ctx["ncov"]
+
+    snr, _ = mm.analysis.eeg.estimate_evoked_snr(
+      evoked=data, baseline=ctx["simulator"].epoch_config.baseline, noise_cov=ncov
+    )
+    lambda2_auto = max(0.01, 1.0 / (snr.max() ** 2))
+
+    inv_wcset = mm.analysis.inverse.wCSET(
+      forward=fwd, noise_cov=ncov, depth=0.5,
+      eigenvectors=eig["vec"], eigenvalues=eig["val"],
+      harm=5, harmonic_method="lowpass",
+    )
+    inv_cset = mm.analysis.inverse.CSET(forward=fwd, noise_cov=ncov, depth=0.8, eigenvectors=eig["vec"])
+    inv_mce = mm.analysis.inverse.MCE(forward=fwd, noise_cov=ncov, depth=0.8)
+    inv_mne_op = mne.minimum_norm.make_inverse_operator(
+      info=data.info, forward=fwd, noise_cov=ncov, fixed=True, depth=None, verbose="warning",
+    )
+
+    solutions = {
+      "wcset": inv_wcset.solve(data, lambda2_auto),
+      "cset": inv_cset.solve(data, lambda2=0.1),
+      "mce": inv_mce.solve(data, lambda2=0.1),
+    }
+    for m, mne_name in mne_methods.items():
+      solutions[m] = mne.minimum_norm.apply_inverse(
+        data, inv_mne_op, lambda2_auto, method=mne_name, verbose="warning"
+      )
+
+    return {"solutions": solutions}
+
+  return reconstruct
+
+def postprocess_score(dipole_positions):
+  """Scores each of the six solutions against this run's own gold, returns 5 scalars/method."""
+  def score(ctx):
+    gold, hrp_idx, pp_idx = ctx["gold"], ctx["hrp_idx"], ctx["pp_idx"]
+    src, simulator, task = ctx["src"], ctx["simulator"], ctx["task"]
+
+    true_source_mask = src.select_targets(simulator.hm.src, simulator.hm.parc, simulator.hm.ras2tkras)
+    gold_hrp, gold_pp = gold.data[:, hrp_idx], gold.data[:, pp_idx]
+
+    rows = []
+    for method, sol in ctx["solutions"].items():
+      sol_hrp, sol_pp = sol.data[:, 0], sol.data[:, 1]
+
+      hit = find_peak_localization_error(sol_hrp, true_source_mask, dipole_positions)
+
+      rows.append({
+        "method": method,
+        "snr": task.target_snr,
+        "correlation_hrp": np.corrcoef(gold_hrp, sol_hrp)[0, 1],
+        "correlation_pp": np.corrcoef(gold_pp, sol_pp)[0, 1],
+        "localization_error_hrp": hit["distance_mm"],
+        "ap_hrp": mm.core.calc_pr_curve(gold_hrp > 0, sol_hrp)["ap"],
+        "ap_pp": mm.core.calc_pr_curve(gold_pp > 0, sol_pp)["ap"],
+      })
+    return rows
+
+  return score
+
+def run_noise_sweep_comparison(overwrite=QUICK_TEST):
+  # output: one MetricSuite for the whole sweep (all methods x SNR levels)
+  fmetrics = Path(f"./results/sub-{sub}_noise-sweep-metrics{suffix}")
+
+  if check_files([fmetrics/"meta.json"]) and not overwrite:
+    print("Already exists, skipping.")
+    return
+
+  # 0. Subject-level data (run-independent) - inversion-time forward and
+  # original connectome eigenbasis, both unchanged across SNR levels (see
+  # prose above)
+  fwd = dm.load(sub, "fwd", desc="inv")
+  eig = dm.load(sub, "eig")
+  dipole_positions = mm.anatomy.source_space.get_dipole_positions(fwd["src"]) * 1000
+
+  simulator_dir = dm.roots["sim"]/f"sub-{noisesweep_subject}"/"simulator"
+  sources_dir = dm.roots["sim"]/f"sub-{noisesweep_subject}"/"sources"
+
+  # 1. Sweep index (see prose above for why this reads the results/
+  # convenience copy rather than the raw per-subject simulation_index.tsv)
+  findex = Path(f"./results/sub-{sub}_noise-sweep_index{suffix}.tsv")
+  df_sweep = pd.read_csv(findex, sep="\t")
+
+  tasks = [
+    InverseTask(
+      run = int(row["run"]),
+      simulator_dir = simulator_dir,
+      fave = dm.get_path(noisesweep_subject, "ave", task="spk", run=int(row["run"])),
+      fcov = dm.get_path(noisesweep_subject, "cov", task="spk", run=int(row["run"])),
+      fgold = dm.get_path(noisesweep_subject, "gold", task="spk", run=int(row["run"])),
+      fsource = sources_dir/f"run-{int(row['run']):03d}_source.json",
+      target_snr = row["target_snr"],
+    )
+    for _, row in df_sweep.iterrows()
+  ]
+
+  # 2. Three-stage pipeline: pick hrp/pp from the clean gold, solve all 6
+  # methods only at those two phases, score against gold - mirrors
+  # inverse-noisesweep.ipynb's pipeline exactly (see prose above)
+  results = run_parallel_pipeline(
+    tasks,
+    preprocess_hrp_pp,
+    make_reconstruct(fwd, eig),
+    postprocess_score(dipole_positions),
+    n_jobs = n_jobs,
+  )
+
+  # 3. Register into one MetricSuite (method x snr), same pattern as
+  # comparison.py/surrogate_comparison.py
+  metrics = mm.metric.MetricSuite(f"sub-{sub} noise/SNR sweep validation")
+  for run_rows in results:
+    for row in run_rows:
+      method, snr = row["method"], row["snr"]
+      metrics.register(method, "correlation_hrp", row["correlation_hrp"], method=method, snr=snr)
+      metrics.register(method, "correlation_pp", row["correlation_pp"], method=method, snr=snr)
+      metrics.register(method, "localization_error_hrp", row["localization_error_hrp"], method=method, snr=snr)
+      metrics.register(method, "ap_hrp", row["ap_hrp"], method=method, snr=snr)
+      metrics.register(method, "ap_pp", row["ap_pp"], method=method, snr=snr)
+
+  metrics.save(fmetrics, overwrite=overwrite)
+
+run_noise_sweep_comparison(overwrite=QUICK_TEST)
 ```

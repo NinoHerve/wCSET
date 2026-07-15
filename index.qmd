@@ -154,7 +154,7 @@ To ensure physical consistency, edges are weighted by distance (in mm): fiber le
 
 In clinical settings where diffusion data may be unavailable, we evaluate two connectome surrogates validated through our simulation framework (see Section 3.1):
 
-- Probabilistic atlas surrogate: Long-range tracts are extrapolated from the MultiConn atlas [@aleman-gomez_multi-scale_2022]. We parcellate the subject’s brain according to the atlas and connect dipoles between two regions if a tract exists in more than 60% of the atlas population. Gray matter connections are then added as described above.
+- Probabilistic atlas surrogate: Long-range tracts are extrapolated from the MultiConn atlas [@aleman-gomez_multi-scale_2022]. We parcellate the subject’s brain according to the atlas and connect dipoles between two regions if a tract exists in more than 65% of the atlas population. Gray matter connections are then added as described above.
     
 - Geometry-only surrogate: This model relies solely on gray matter connectivity derived from the brain mesh. While distinct from the Beltrami-operator-weighted geometry, this surrogate tests the hypothesis that local brain geometry alone can capture significant brain-function coupling without explicit long-range information.
 
@@ -610,7 +610,7 @@ import mindmap as mm
 # every other figure in this document. Does NOT reuse draw_box_spaghetti --
 # see below for why.
 
-# one MetricSuite per subject, saved by evaluate_vieeg_fidelity_intra.py in
+# one MetricSuite per subject, saved by evaluate_vieeg_fidelity.py in
 # processing_intra.qmd; load_study() combines every sub-*/ subfolder into one
 vieeg_metrics = mm.metric.MetricSuite.load_study("./results/intra_vieeg_metrics")
 
@@ -653,7 +653,7 @@ SUBJECT_TITLES = {
 }
 
 # Per-subject Cleveland dot plot: rows = metric, columns = subject. Each cell
-# shows all 6 methods (matches estimate_ieeg_intra.py/evaluate_vieeg_fidelity_intra.py --
+# shows all 6 methods (matches estimate_ieeg.py/evaluate_vieeg_fidelity.py --
 # unlike tutorials/analysis/eeg/virtual_ieeg.ipynb, mne/wMNE is kept in here)
 # as colored dots on a single horizontal line -- so "which method wins this
 # metric, for this subject" is just "which dot sits furthest along the
