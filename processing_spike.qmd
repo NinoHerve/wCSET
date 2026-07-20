@@ -382,11 +382,14 @@ graph-spectral prior used by CSET/wCSET in `solve_inverse.py`.
 - `sparsity = 0.14`, `deterministic = True` (in `connectome_from_atlas`):
   **FILL**
 - `maximum_dist = 22` (mm), `maximum_neigh = 35` (geometry-based fallback):
-  **FILL** - note these differ substantially from `processing_simf.qmd`'s
-  equivalent step (`maximum_dist=15, maximum_neigh=3`); worth confirming
-  whether that's intentional (e.g. the atlas-based connectome is much
-  sparser to begin with, so the geometric fallback needs to reach
-  further/wider to fill gaps) or should be reconciled.
+  **FILL** - note these differ from `processing_simf.qmd`'s own
+  tractography-based connectome (`maximum_dist=15, maximum_neigh=8`), but
+  that's expected: simf's own atlas-based *surrogate* connectome
+  (`surrogate_connectivity.py`) deliberately reuses this file's exact
+  `22mm/35neigh` values instead, so the two are already intentionally
+  aligned for the atlas-based case - the difference from simf's
+  tractography-based connectome just reflects the different data modality
+  (individual dMRI vs. population atlas), not drift.
 - `lap_type = "normalized"` (pygsp graph Laplacian): same as the simulation
   study. **FILL**
 
@@ -395,7 +398,6 @@ import numpy as np
 import mindmap as mm
 from scripts.utils import loop, check_files
 from scripts.data_manager import SpikeManager
-import pygsp
 
 # data manager
 dm = SpikeManager("spike.config.yml")
@@ -458,11 +460,11 @@ def build_connectivity(sub, overwrite):
     fill_idx = np.argwhere((con_geom > 0) & (con_atlas == 0))
     con[fill_idx[:,0], fill_idx[:,1]] = con_geom[fill_idx[:,0], fill_idx[:,1]]
 
-    # 4. Compute Spectral properties
+    # 4. Compute Spectral properties: shared helper (dense eigh,
+    # eigval[0] pinned to exactly 0), matches processing_simf.qmd's
+    # connectivity cells - both now compute the spectrum the same way
     inv_con = np.divide(1, con, out=np.zeros_like(con), where=con>0)    # weight according to length
-    G = pygsp.graphs.Graph(inv_con, lap_type="normalized")
-    eigval, eigvec = np.linalg.eigh(G.L.toarray())
-    eigval[0] = 0
+    eigvec, eigval = mm.analysis.connectivity.compute_cst(inv_con)
 
     # End: Save
     np.save(fcon, con)
@@ -472,23 +474,68 @@ build_connectivity(overwrite=False)
 ```
 
 
-Runs all six source reconstruction methods (wCSET, CSET, MCE, sLORETA, dSPM,
-MNE) per subject, regularized per-subject via an SNR estimate from the
+Runs all five source reconstruction methods (wCSET, CSET, sLORETA, dSPM,
+wMNE) per subject, regularized per-subject via an SNR estimate from the
 evoked baseline window (same per-subject baseline windows as
 `eeg_preprocessing.py` above).
 
-**Parameter choices:**
+⚠ MCE excluded from every study in this project (not solved, saved, or
+scored anywhere): its hard L1 sparsity threshold makes it react to
+correlation/AP/localization-error metrics on a fundamentally different axis
+than the other five methods - see `processing_simf.qmd`'s `solve_inverse.py`
+prose and `index.qmd`'s `plot_configuration.py` note for the full rationale.
+
+⚠ **Solver setup brought in line with `processing_simf.qmd`'s
+`solve_inverse.py`** (the project's now-current convention, itself matching
+the reference notebooks / `lambda2-tuning.ipynb` sweep exactly) - this used
+to be the *old* fixed-`depth=0.8`/`harm=0.7`/shared-`lambda2` convention that
+predates that sweep, which is why this cell previously diverged from simf on
+several parameters at once (resolves the "is this depth-weighting difference
+intentional?" question previously flagged here). Recomputing STCs under this
+new setup means `resection_evaluation_metrics.py` further down is now stale
+against them and needs re-running once the new STCs exist.
+
+⚠ **`mne`/`MNE` renamed to `wmne`/`wMNE` throughout** (this file, and
+`processing_simf.qmd`/`processing_intra.qmd`/`index.qmd`): MNE-Python's
+`method="MNE"` output is only "plain" MNE without depth weighting - once a
+depth prior is applied (as it always was here, `depth=0.8` originally), the
+result is *weighted* MNE (wMNE), so the label was renamed to say what it
+actually is. This also fixed a real inconsistency, not just a name: wMNE
+previously shared one `make_inverse_operator` call (and its `depth`) with
+sLORETA/dSPM, so the depth-weighting cleanup above (splitting
+sLORETA/dSPM to `depth=None`) would have silently stripped wMNE's own depth
+weighting too - the very thing that makes it "weighted" MNE rather than
+plain MNE. wMNE now gets its own `make_inverse_operator` call, at
+`depth=0.8` - the standard/recommended depth-weighting exponent for wMNE
+(MNE-Python's own default for `make_inverse_operator`, and the value found
+near-optimal in the original depth-weighting literature, Lin et al. 2006,
+"Assessing and improving the spatial accuracy of MEG source localization by
+depth-weighted minimum-norm estimates," *NeuroImage*) - no longer the same
+value as CSET/wCSET's own `depth`, both of which have since moved to `0.2`
+(see below).
+
+**Parameter choices** (matching `processing_simf.qmd`'s `solve_inverse.py`):
 
 - `lambda2 = max(0.01, 1/snr**2)`: regularization derived from estimated
-  SNR, floored at `0.01` (i.e. an SNR ceiling of 10). **FILL** (why this
-  specific floor)
-- `depth = 0.8` (wCSET, CSET, MCE, and also passed to
-  `mne.minimum_norm.make_inverse_operator` for sLORETA/dSPM/MNE). **FILL** -
-  ⚠ `processing_simf.qmd`'s equivalent step (`scripts/source_recon_sim.py`)
-  calls `make_inverse_operator` with `depth=None` for the same three
-  MNE-native methods (sLORETA/dSPM/MNE) - worth confirming whether this
-  depth-weighting difference between the two studies is intentional.
-- `harm = 0.7` (wCSET's harmonic weighting): **FILL**
+  SNR, floored at `0.01` (i.e. an SNR ceiling of 10), shared by
+  dSPM/sLORETA/wMNE/wCSET. **FILL** (why this specific floor)
+- CSET's `lambda2` and `depth` are fixed at `0.1` and `0.2` respectively,
+  decoupled from the SNR-derived value above, per explicit instruction -
+  superseding this file's earlier `lambda2=1`/`depth=0.8`. That earlier
+  `lambda2=1` came from the `lambda2-tuning.ipynb` sweep in
+  `processing_simf.qmd` (AP increases monotonically with `lambda2` for
+  CSET, so the grid's upper edge won outright); the new `0.1`/`0.2` values
+  are a deliberate override, not re-derived from that sweep or
+  independently re-verified on this cohort.
+- `depth = 0.8` for wMNE, `depth = 0.2` for CSET and wCSET (per explicit
+  instruction, superseding wCSET's earlier `depth=0.5`), and `depth = None`
+  (no depth weighting) for `mne.minimum_norm.make_inverse_operator` shared
+  by sLORETA/dSPM - see the ⚠ note above for why wMNE needs its own,
+  separate, depth-weighted inverse operator rather than sharing
+  sLORETA/dSPM's.
+- `harm = 0.5`, `harmonic_method = "lowpass"` (wCSET's harmonic weighting) -
+  per explicit instruction, superseding the earlier `harm = 5` (itself
+  previously `harm = 0.7` with the default `"gap"` method).
 - `fixed = True` (fixed-orientation dipoles, for the `mne.minimum_norm`
   inverse operator): **FILL**
 
@@ -509,12 +556,11 @@ def source_recon(sub, overwrite=True):
     # outputs files
     fwcset = dm.get_path(sub, "stc", task="spike", desc="wcset")
     fcset = dm.get_path(sub, "stc", task="spike", desc="cset")
-    fmce = dm.get_path(sub, "stc", task="spike", desc="mce")
     fsloreta = dm.get_path(sub, "stc", task="spike", desc="sloreta")
     fdspm = dm.get_path(sub, "stc", task="spike", desc="dspm")
-    fmne = dm.get_path(sub, "stc", task="spike", desc="mne")
+    fwmne = dm.get_path(sub, "stc", task="spike", desc="wmne")
 
-    if check_files([fwcset, fcset, fmce, fsloreta, fdspm, fmne]) and not overwrite:
+    if check_files([fwcset, fcset, fsloreta, fdspm, fwmne]) and not overwrite:
         return
 
     # Start: Load data
@@ -550,10 +596,11 @@ def source_recon(sub, overwrite=True):
     inv = mm.analysis.inverse.wCSET(
         forward = fwd,
         noise_cov = ncov,
-        depth = 0.8,                # depth weighting
+        depth = 0.2,                # depth weighting
         eigenvectors = eig["vec"],
         eigenvalues = eig["val"],
-        harm = 0.7,                 # harmonic weighting
+        harm = 0.5,                 # harmonic weighting
+        harmonic_method = "lowpass",
     )
     wcset = inv.solve(ave, lambda2)
 
@@ -561,40 +608,33 @@ def source_recon(sub, overwrite=True):
     inv = mm.analysis.inverse.CSET(
         forward = fwd,
         noise_cov = ncov,
-        depth = 0.8,
+        depth = 0.2,
         eigenvectors = eig["vec"],
     )
 
-    cset = inv.solve(ave, lambda2=lambda2)
+    # fixed, decoupled from the SNR-derived lambda2 above - see prose
+    cset = inv.solve(ave, lambda2=0.1)
 
-    # 2.3 MCE
-    inv = mm.analysis.inverse.MCE(
-        forward = fwd,
-        noise_cov = ncov,
-        depth = 0.8,
-    )
-
-    mce = inv.solve(ave, lambda2=lambda2)
-
-    # 2.4 sLORETA
-    inv = mne.minimum_norm.make_inverse_operator(ave.info, fwd, ncov, depth=0.8, fixed=True)
+    # 2.3 sLORETA
+    inv = mne.minimum_norm.make_inverse_operator(ave.info, fwd, ncov, depth=None, fixed=True)
     sloreta = mne.minimum_norm.apply_inverse(ave, inv, lambda2, method="sLORETA")
 
-    # 2.5 dSPM
+    # 2.4 dSPM
     dspm = mne.minimum_norm.apply_inverse(ave, inv, lambda2, method="dSPM")
 
-    # 2.6 MNE
-    mne_ = mne.minimum_norm.apply_inverse(ave, inv, lambda2, method="MNE")
+    # 2.5 wMNE - own inverse operator (depth=0.8, no longer matching CSET/wCSET's own depth=0.2), not
+    # shared with sLORETA/dSPM's depth=None one - see prose above
+    inv_wmne = mne.minimum_norm.make_inverse_operator(ave.info, fwd, ncov, depth=0.8, fixed=True)
+    wmne = mne.minimum_norm.apply_inverse(ave, inv_wmne, lambda2, method="MNE")
 
     # End: Save
     wcset.save(fwcset, overwrite=overwrite, verbose="warning")
     cset.save(fcset, overwrite=overwrite, verbose="warning")
-    mce.save(fmce, overwrite=overwrite, verbose="warning")
     sloreta.save(fsloreta, overwrite=overwrite, verbose="warning")
     dspm.save(fdspm, overwrite=overwrite, verbose="warning")
-    mne_.save(fmne, overwrite=overwrite, verbose="warning")
+    wmne.save(fwmne, overwrite=overwrite, verbose="warning")
 
-source_recon(overwrite=False)
+source_recon(overwrite=True)  # must force-regen: CSET now depth=0.2/lambda2=0.1 (was depth=0.8/lambda2=1), wCSET now depth=0.2/harm=0.5 (was depth=0.5/harm=5), wMNE renamed from mne with its own depth-weighted operator
 ```
 
 
@@ -747,7 +787,7 @@ dm = SpikeManager("spike.config.yml")
 fmetrics = Path("./results/spike_resection_metrics.csv")
 fmetrics.parent.mkdir(exist_ok=True)
 
-METHODS = ["wcset", "cset", "mce", "sloreta", "dspm", "mne"]
+METHODS = ["wcset", "cset", "sloreta", "dspm", "wmne"]
 
 @loop(subjects=dm.subjects)
 def evaluate_resection_localization(sub, overwrite=False):

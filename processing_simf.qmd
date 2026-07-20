@@ -406,10 +406,10 @@ run_forward_problem(overwrite=False)
 
 # Probe-Set Selection
 
-Shared groundwork for the connectome/noise-robustness experiments (§3.1.2 in
-`index.qmd`): a probe set of source regions spatially spread across the
-cortex, reused by every degradation/surrogate/noise condition below so
-region identity never confounds a condition comparison.
+Shared groundwork for the connectome/noise-robustness experiments: a probe
+set of source regions spatially spread across the cortex, reused by every
+degradation/surrogate/noise condition below so region identity never
+confounds a condition comparison.
 
 Selects a spatially uniform subset of source regions via greedy
 farthest-point sampling over region centroids
@@ -425,7 +425,7 @@ set no longer deliberately spans the wCSET performance range, only spatial
 coverage of the cortex (hemisphere/lobe balance now follows from the FPS
 geometry rather than being tracked/printed separately).
 
-⚠ Region identities changed as a result: Experiment 1.2's already-computed
+⚠ Region identities changed as a result: Experiment 3's already-computed
 surrogate reconstructions/metrics
 (`results/sub-10_simf-metrics_{surrogate}`, from `surrogate_reconstruction.py`
 /`surrogate_comparison.py`) were computed against the *old* probe set and are
@@ -434,10 +434,19 @@ now stale - they need to be regenerated against the new one (flagged in
 
 **Parameter choices:**
 
-- `n_regions = 60`: unchanged from the previous tercile-based scheme's total
-  (20/tercile x 3), to keep the same probe-set size and downstream compute
-  budget (Experiment 1.2's 5-reps-per-region reconstruction, Experiment 2's
-  10-reps-per-region noise sweep).
+- `n_regions = 100`: bumped up from the previous tercile-based scheme's total
+  (60 = 20/tercile x 3) for denser spatial coverage, at the cost of a larger
+  downstream compute budget (Experiment 3's 5-reps-per-region
+  reconstruction, Experiment 1's 20-reps-per-region noise sweep both scale
+  with this).
+  ⚠ Changing `n_regions` reshuffles `select_uniform_regions`' greedy
+  farthest-point-sampling order, so this is a new region identity set, not a
+  superset of the old 60 - every probe-set-dependent output computed against
+  the old file (`results/sub-10_probe-set.csv`,
+  `results/sub-10_simf-metrics_{surrogate}` from `surrogate_reconstruction.py`
+  /`surrogate_comparison.py`, and the noise-sweep quick-test index) is now
+  stale and needs rerunning against the regenerated probe set, same as the
+  tercile→FPS switch above.
 - `cortex_only = True` (function default): matches the previous scheme, which
   in practice only ever sampled `ctx-` regions.
 - `seed = base_seed = 42`: project convention; controls the farthest-point
@@ -456,7 +465,7 @@ from scripts.utils import check_files
 dm = SimfManager("simf.config.yml")
 sub = "10"
 
-n_regions = 60
+n_regions = 100
 base_seed = 42
 
 def run_probe_set_selection(overwrite=False):
@@ -489,7 +498,7 @@ def run_probe_set_selection(overwrite=False):
   # 2. Save
   probe_set.to_csv(fprobe, index=False)
 
-run_probe_set_selection(overwrite=False)
+run_probe_set_selection(overwrite=False)  # overwrite: force regen over the stale 60-region file
 ```
 
 # Connectomics
@@ -639,10 +648,10 @@ def run_connectivity(overwrite=True):
 run_connectivity(overwrite=False)
 ```
 
-## Build atlas-based surrogate connectivity graphs and compute their eigensystems (Experiment 1.2)
+## Build atlas-based surrogate connectivity graphs and compute their eigensystems (Experiment 3)
 
 Builds the connectome surrogates used to test CSET/wCSET reconstruction
-against connectome *construction method* (Experiment 1.2, `index.qmd`
+against connectome *construction method* (Experiment 3, `index.qmd`
 §2.3.3), so CSET/wCSET can later be reconstructed on the probe-set runs with
 each surrogate in place of the original tractography-based connectome. No
 new simulation is needed: only the reconstruction-side connectome changes
@@ -820,10 +829,74 @@ run_surrogate_connectivity(overwrite=False)
 
 ## Flagship Dataset
 
-Runs the actual spike simulations: for every region in the parcellation,
-simulates 30 repetitions of a spike originating in that region and
-propagating across the structural connectome to the sensors, at a fixed
-target SNR.
+Runs the actual spike simulations: for each of the shared 100-region probe
+set (`results/sub-10_probe-set.csv`, see `probe_set_selection.py`), simulates
+8 repetitions of a spike originating in that region and propagating across
+the structural connectome to the sensors, at a fixed target SNR.
+
+⚠ **Region/repetition count, revised down from an earlier draft that ran all
+~473 parcellation regions x 30 repetitions (14,190 runs)** - decided via an
+external power-analysis pilot
+(`mindmap/tutorials/analysis/simulations/pilot_power_analysis.ipynb` +
+companion `pilot_01_generate.py`/`pilot_02_solve.py`/`pilot_03_analyze.py` in
+the `mindmap` repo, run and analyzed separately from this project), not a
+guess:
+
+- The pilot simulated 26 regions (stratified by depth x orientation tertiles
+  + lobe, not random/uniform - deliberately spans easy/superficial and
+  hard/deep-tangential sources) x 8 repetitions x all 6 methods on
+  `sub-simf10`, then fit a mixed-effects model per outcome
+  (`localization_error_hrp`, `ap_hrp`, `ap_pp`, `correlation_auc`) with
+  `region` as a random intercept and a named `method:region` variance
+  component (does relative method ranking depend on brain location - the
+  scientifically interesting question this dataset is meant to answer, as
+  opposed to the `method` main effect, which turned out to be saturated at
+  power~1.0 across every tested design and every outcome - the six methods'
+  average performance differs by so much that it isn't a useful axis for
+  sizing this study at all).
+- Monte-Carlo power simulation across a grid of `k` (10-100 regions) x `r`
+  (3-20 reps) found only one test anywhere near the 0.8 threshold: the
+  `method x region` interaction on `localization_error_hrp` (the noisiest
+  outcome), which dips to 0.72 at the smallest grid point (k=10, r=3) but
+  clears 0.86 by k=15 and >=0.96 at r=5 for any k. The pilot's own written
+  recommendation was **k=20, r=5 (100 sims/method)** - comfortably past every
+  plateau with margin, at under half the pilot's own budget.
+- **This project deviates from that recommendation on the region axis**: we
+  kept **k=100** rather than 20, because the interaction test only confirms
+  that *some* region effect is detectable given the pilot's 26-region sample
+  - it can't confirm that 20-26 regions actually represent the anatomical
+  heterogeneity across the full ~400-region atlas. Broader coverage was
+  judged worth the extra compute over the bare power-minimal design.
+  Concretely, the 100 regions used are the project's own **existing
+  probe set** (`results/sub-10_probe-set.csv`, spatially-uniform
+  farthest-point sampling, see `probe_set_selection.py`) rather than a fresh
+  independent sample - this also means the flagship dataset now shares
+  region identities with the connectome-degradation/surrogate/noise-sweep
+  experiments, instead of their 100-region probe set being drawn from a much
+  larger, differently-purposed flagship pool.
+- **`r=8`, not the pilot's `r=5` or the originally-considered `r=20`**: at
+  k=100, the pilot's own grid shows power is already saturated at ~1.0 for
+  every outcome/test *even at r=3* - the reps axis buys no additional
+  detection power once region count is this large. What `r` still buys is
+  per-region estimate precision (SE of one region's own mean
+  `localization_error_hrp`): 4.23mm at r=3, 3.28mm at r=5, 2.59mm at r=8,
+  1.64mm at r=20. `r=8` was chosen as a reasonable middle point given
+  `comparison.py`/`index.qmd` pool metrics across all runs rather than
+  reporting per-region estimates - tighter per-region precision (r=20) isn't
+  currently needed, but `r=3-5`'s coarser per-region precision seemed like
+  unnecessary risk for negligible compute savings.
+- **Net effect**: 100 x 8 = 800 runs vs. the previous 473 x 30 = 14,190 - a
+  94.4% reduction - while comfortably exceeding (not just meeting) the power
+  needed for `comparison.py`'s method comparison.
+- ⚠ **Downstream staleness**: this invalidates the existing 14,190-run
+  flagship dataset and everything computed from it (`solve_inverse.py`,
+  `comparison.py`, and `index.qmd`'s methods table/prose, which currently
+  states "30" repetitions and "drawn uniformly at random" over ~400 regions)
+  - those are follow-up updates, not made here; only `simulation.py` itself
+  is changed in this pass.
+- These variance components come from a single pilot subject/single pilot
+  run (`sub-simf10`, not this project's own `sub-10`) - the pilot notebook
+  itself flags this as a caveat if the sizing is meant to generalize further.
 
 ⚠ **Unit note:** the inline comments below mark `width`/`onset`/`repeat` on
 `SpikeSignal` as **[ms]**, but `mindmap.analysis.simulation.SpikeSignal`
@@ -865,7 +938,10 @@ the *correct* units.
 
 **Parameter choices - dataset generation:**
 
-- `repetitions = 30`: repeats simulated per source region. **FILL**
+- Regions: the shared 100-region probe set (`results/sub-10_probe-set.csv`),
+  not all ~473 parcellation regions - see the power-analysis rationale above.
+- `repetitions = 8`: repeats simulated per source region - see the
+  power-analysis rationale above (revised down from an earlier `30`).
 - `snr_target = 10.0`: target single-trial SNR. **FILL**
 - `base_seed = 42`: fixed seed for reproducibility - standard practice, not a
   modeling choice.
@@ -880,6 +956,8 @@ the *correct* units.
 
 ```{python filename="simulation.py"}
 # | output: false
+
+import pandas as pd
 
 import mindmap as mm
 from scripts.data_manager import SimfManager
@@ -940,8 +1018,11 @@ def run_simulation(overwrite=False):
 
   sim = mm.analysis.simulation.Simulator(head_model, epoch_config)
 
-  # run 30 simulations for every brain region
-  brain_regions = parc.clut["Label name"]
+  # 8 repetitions per region, over the shared 100-region probe set (spatially
+  # uniform sample, see probe_set_selection.py) rather than all ~473
+  # parcellation regions - see the power-analysis rationale in the prose above
+  probe_set = pd.read_csv(f"./results/sub-{sub}_probe-set.csv")
+  brain_regions = probe_set["region"].tolist()
   sources = [mm.analysis.simulation.Source([br], spike) for br in brain_regions]
 
   mm.analysis.simulation.generate_simulation_dataset(
@@ -950,26 +1031,41 @@ def run_simulation(overwrite=False):
     simulator = sim,
     sources = sources,
     prop_config = prop_config,
-    repetitions = 30,
+    repetitions = 8,
     snr_targets = [10.0],
     base_seed = 42,
     entities = {"task":"spk"},
-    n_jobs = -1,
+    n_jobs = 20,
   )
 
 run_simulation(overwrite=True)
 ```
 
-## Noise/SNR Sweep Dataset (Experiment 2)
+## Noise/SNR Sweep Dataset (Experiment 1)
 
-Generates a new simulation dataset spanning 5 SNR levels for the probe-set
-regions, so noise robustness can be evaluated the same way Experiment 1
-evaluates connectome robustness. Unlike Experiment 1, the connectome/forward
-model stay fixed here (that's Experiment 1's axis) - only `snr_target`
+Generates a new simulation dataset spanning 9 SNR levels for a dedicated
+50-region probe set, so noise robustness can be evaluated the same way the
+connectome experiments (degradation, surrogates) evaluate connectome
+robustness. Unlike those, the connectome/forward model stay fixed here
+(connectome identity is their axis, not this one) - only `snr_target`
 varies, so this cell produces genuinely new `ave`/`cov`/`gold` files (not
 just a new reconstruction pass on existing ones). Reconstruction and metric
 computation are separate follow-up steps, not part of this cell - see
-"Experiment 2: Noise/SNR Sweep Reconstruction & Validation" further below.
+"Experiment 1: Noise/SNR Sweep Reconstruction & Validation" further below.
+
+⚠ **Region set changed from the shared 100-region probe set to a dedicated
+50-region one, specifically for this experiment.** The original design
+reused the shared probe set (`results/sub-10_probe-set.csv`) so the noise
+sweep stayed region-for-region comparable with the degradation/surrogate
+experiments. A completed power-analysis pilot
+(`tutorials/analysis/simulations/pilot_noise_cluster_permutation_power.ipynb`)
+found that, for this experiment specifically, region count matters far more
+than repetition count - 50 regions x 3 reps beats 20 regions x 8 reps at
+equal total budget - and that region-for-region comparability with the other
+Study-1 experiments isn't needed for the noise-robustness question this
+experiment answers on its own. We therefore trade that comparability for a
+smaller, power-optimal, noise-sweep-specific region set (see "Noise-Sweep
+Probe Set" below) rather than continuing to reuse the shared one.
 
 ⚠ This is a corrected rewrite of an earlier draft of this cell that was never
 run. The earlier draft (a) called `generate_simulation_dataset` with a
@@ -980,25 +1076,91 @@ would have silently overwritten the flagship dataset's `simulation_index.tsv`
 on first run, since `generate_simulation_dataset` writes that file to
 `sub-{subject}/` keyed only by `subject`, not by `task`. Both are fixed below.
 
+### Noise-Sweep Probe Set
+
+Unlike every other robustness experiment in this file, the noise sweep uses
+its own dedicated region set rather than the shared one from
+`probe_set_selection.py` above (see prose above for why). Built the same way
+- greedy farthest-point sampling via
+`mm.anatomy.parcellation.select_uniform_regions` - just at `n_regions = 50`
+instead of 100, which (per the same reshuffling behavior already documented
+in `probe_set_selection.py`) produces an entirely different region identity
+set, not a subset of the shared 100.
+
+```{python filename="noise_sweep_probe_set.py"}
+from pathlib import Path
+
+import pandas as pd
+
+import mindmap as mm
+from scripts.data_manager import SimfManager
+from scripts.utils import check_files
+
+# data manager
+dm = SimfManager("simf.config.yml")
+sub = "10"
+
+n_regions = 50
+base_seed = 42
+
+def run_noise_sweep_probe_set_selection(overwrite=False):
+  # output file
+  fprobe = Path(f"./results/sub-{sub}_probe-set_noisesweep.csv")
+
+  if check_files([fprobe]) and not overwrite:
+    print("Already exists, skipping.")
+    return
+
+  # 0. Load shared inputs (same pattern as probe_set_selection.py)
+  src = dm.load(sub, "fwd", desc="sim")["src"]
+  parc = dm.load(sub, "dseg", space="fs", segmentation="multiconn2022", scale="4")
+  ras2tkras = dm.load(sub, "ras2tkras")
+
+  # 1. Spatially uniform region selection (greedy farthest-point sampling
+  # over cortical region centroids) - dedicated to this experiment, not the
+  # shared probe set (see prose above)
+  regions = mm.anatomy.parcellation.select_uniform_regions(
+    source_space = src,
+    parcellation = parc,
+    ras2tkras = ras2tkras,
+    n_regions = n_regions,
+    seed = base_seed,
+  )
+
+  probe_set = pd.DataFrame({"region": regions})
+
+  print(f"Noise-sweep probe set: {len(probe_set)} regions (spatially uniform, cortex-only)")
+
+  # 2. Save
+  probe_set.to_csv(fprobe, index=False)
+
+run_noise_sweep_probe_set_selection(overwrite=True)
+```
+
 **Parameter choices:**
 
-- Regions: the same probe set as Experiment 1
-  (`results/sub-10_probe-set.csv`, 60 regions) - not a new noise-specific
-  sample, so the two experiments stay directly comparable region-for-region.
-- `snr_levels = [20, 10, 5, 2.5, 1.25]`: log2-spaced. SNR is a ratio and
-  accuracy-vs-SNR curves are typically threshold-shaped, so geometric
-  spacing resolves the transition zone better than linear steps would.
-- `n_reps = 10` (vs. 5 for the connectome-degradation experiments): higher
-  because per-trial noise-draw variance is specifically what needs
-  averaging out here, unlike the connectome sweep where the connectome
-  perturbation itself dominates run-to-run variance.
-- Total volume: 60 regions x 5 levels x 10 reps = 3,000 runs (~21% the size
-  of the original single-level 14,190-run flagship dataset).
-- `subject = f"{sub}-noisesweep"` (i.e. `"10-noisesweep"`), distinct from the
-  flagship dataset's `sub="10"` - required to avoid the `simulation_index.tsv`
-  collision described above (mirrors the reference notebook's
-  `simf10`/`simf10-noisesweep` split in
-  `tutorials/analysis/simulations/simulation_spike.ipynb`).
+- Regions: a dedicated 50-region noise-sweep-specific probe set
+  (`results/sub-10_probe-set_noisesweep.csv`, see "Noise-Sweep Probe Set"
+  above) - not the shared 100-region probe set used by the degradation/
+  surrogate experiments. Traded region-for-region comparability with those
+  experiments for power-optimal sizing specific to the noise sweep - see the
+  ⚠ note above.
+- `snr_levels = [1, 1.5, 2, 3, 5, 7, 10, 14, 20]`: 9 levels, denser than the
+  original 5-level log2 grid, still spanning roughly the same 1-20 range.
+- `n_reps = 3` (down from the original 20): per the power-analysis pilot
+  referenced above, region count - not repetition count - is what drives
+  power for this experiment's outcomes, so the budget was reallocated from
+  reps toward regions rather than kept high on both axes.
+- Total volume: 50 regions x 9 levels x 3 reps = 1,350 runs (down from the
+  original single-grid 10,000).
+- `subject = f"{sub}-noisesweep-v2"` (i.e. `"10-noisesweep-v2"`), distinct
+  from both the flagship dataset's `sub="10"` and the original noise sweep's
+  `"10-noisesweep"` id, so this smaller, differently-sized replacement can't
+  silently collide with anything computed under the old id. No original
+  `"10-noisesweep"` dataset actually exists on disk to preserve.
+  `noise_sweep_reconstruction.py`/`noise_sweep_comparison.py` have been
+  updated to point at this `"-v2"` subject/index (they previously pointed at
+  the old, nonexistent `"10-noisesweep"` id and would have failed).
 - One `generate_simulation_dataset` call for the whole sweep: `snr_targets`
   already accepts a list (current installed
   `mindmap.analysis.simulation.pipeline.generate_simulation_dataset`
@@ -1012,11 +1174,11 @@ on first run, since `generate_simulation_dataset` writes that file to
   `(region, snr, rep)` triple gets an independent draw - not the same
   underlying noise realization reused across levels with only the signal
   scaled. The original plan for this experiment (see TODO §3) wanted that
-  literal pairing for a repeated-measures comparison; that would require five
-  separate calls, each re-seeding `base_seed=42` and each writing to its own
-  `subject` (e.g. `f"{sub}-noisesweep-snr{tag}"`), plus a concat step -
+  literal pairing for a repeated-measures comparison; that would require
+  nine separate calls, each re-seeding `base_seed=42` and each writing to its
+  own `subject` (e.g. `f"{sub}-noisesweep-snr{tag}"`), plus a concat step -
   deliberately not done here in favor of the simpler, upstream-idiomatic
-  one-call sweep. Downstream analysis should treat the 5 levels as
+  one-call sweep. Downstream analysis should treat the 9 levels as
   independent samples, not matched pairs.
 - `base_seed = 42`: project convention, reused as the single seed for this
   call (see pairing note above - it no longer produces paired draws the way
@@ -1030,17 +1192,12 @@ on first run, since `generate_simulation_dataset` writes that file to
   already used for the other `joblib.Parallel` calls in this file
   (`comparison.py`, `surrogate_reconstruction.py`, `surrogate_comparison.py`).
 
-⚠ **`QUICK_TEST` toggle:** this cell has never been run, so `QUICK_TEST = True`
-below shrinks it to the first 3 probe-set regions x 2 SNR levels x 2
-reps = 12 runs, to validate the pipeline (paths, API call, index output)
-without paying for the full 3,000-run sweep while still fixing bugs. Quick
-runs land in their own `subject` (`10-noisesweep-test`) and `results/` file
-(`..._index_test.tsv`), so they never collide with or block the full run.
-The full parameters (`FULL_PARAMS` below) are exactly what §3's design above
-specifies - once a quick run completes cleanly end-to-end, flip
-`QUICK_TEST = False` and rerun for the real sweep. The `10-noisesweep-test`
-subject folder and `..._index_test.tsv` file are safe to delete afterward;
-nothing downstream reads them.
+⚠ A quick-test run (3 probe-set regions x 2 SNR levels x 2 reps = 12 runs)
+already validated the pipeline (paths, API call, index output) before
+committing to the full sweep below, back when the sweep was still at its
+original 100-region/10,000-run size. That smoke test's `subject`
+(`10-noisesweep-test`) and `results/` file (`..._index_test.tsv`) are no
+longer referenced by this cell and are safe to delete.
 
 ```{python filename="noise_sweep_simulation.py"}
 # | output: false
@@ -1057,61 +1214,30 @@ from scripts.utils import check_files
 dm = SimfManager("simf.config.yml")
 sub = "10"
 
-# ----------------------------------------------------------------------
-# QUICK_TEST: set to False once the pipeline runs clean end-to-end, to swap
-# back to the full sweep - both parameter sets are kept here so nothing
-# needs to be retyped/re-derived (see prose above).
-# ----------------------------------------------------------------------
-QUICK_TEST = True
-
-FULL_PARAMS = dict(
-  snr_levels = [20, 10, 5, 2.5, 1.25],
-  n_reps = 10,
-  n_test_regions = None,   # None = full 60-region probe set
-  subject_suffix = "noisesweep",
-)
-
-QUICK_PARAMS = dict(
-  snr_levels = [20, 5],            # two levels spanning the sweep's extremes
-  n_reps = 2,
-  n_test_regions = 3,              # enough to exercise every code path, not
-                                    # to draw conclusions from
-  subject_suffix = "noisesweep-test",
-)
-
-params = QUICK_PARAMS if QUICK_TEST else FULL_PARAMS
-snr_levels = params["snr_levels"]
-n_reps = params["n_reps"]
-noisesweep_subject = f"{sub}-{params['subject_suffix']}"
+snr_levels = [1, 1.5, 2, 3, 5, 7, 10, 14, 20]
+n_reps = 3
+noisesweep_subject = f"{sub}-noisesweep-v2"
 base_seed = 42
-n_jobs = -1   # compute resource setting, not a modeling choice - see prose above
+n_jobs = 25   # compute resource setting, not a modeling choice - see prose above
 
-def run_noise_sweep_simulation(overwrite=QUICK_TEST):
+def run_noise_sweep_simulation(overwrite=False):
   # output: convenience copy of the sweep's simulation_index.tsv under
   # results/, so downstream cells don't need to know the noisesweep subject id.
-  # Quick-test runs get their own suffixed filename so they never collide
-  # with / block the full run's output.
-  suffix = "_test" if QUICK_TEST else ""
-  findex = Path(f"./results/sub-{sub}_noise-sweep_index{suffix}.tsv")
+  findex = Path(f"./results/sub-{sub}_noise-sweep_index_v2.tsv")
   fsim_index = dm.roots["sim"]/f"sub-{noisesweep_subject}"/"simulation_index.tsv"
 
   if check_files([findex]) and not overwrite:
     print("Already exists, skipping.")
     return
 
-  # 0. Probe-set regions (shared with Experiment 1 - see probe_set_selection.py)
-  probe_set = pd.read_csv(f"./results/sub-{sub}_probe-set.csv")
+  # 0. Probe-set regions - dedicated to this experiment, not the shared one
+  # (see "Noise-Sweep Probe Set" above)
+  probe_set = pd.read_csv(f"./results/sub-{sub}_probe-set_noisesweep.csv")
   probe_regions = probe_set["region"].tolist()
-
-  if params["n_test_regions"] is not None:
-    # select_uniform_regions builds its output greedily (farthest-point
-    # sampling), so the first N entries are already a spatially spread subset
-    # on their own - no extra stratification needed for a quick smoke test
-    probe_regions = probe_regions[:params["n_test_regions"]]
 
   # 1. Load shared simulation inputs - same original connectome/forward as
   # the flagship dataset (simulation.py): only noise varies across levels
-  # here, not the connectome (that's Experiment 1's axis)
+  # here, not the connectome (that's the degradation/surrogate experiments' axis)
   fwd = dm.load(sub, "fwd", desc="sim")
   con = dm.load(sub, "con")
   eeg = dm.load(sub, "ave-temp")
@@ -1174,61 +1300,296 @@ def run_noise_sweep_simulation(overwrite=QUICK_TEST):
   # 3. Convenience copy under results/ (see output note above)
   shutil.copy(fsim_index, findex)
 
-run_noise_sweep_simulation(overwrite=QUICK_TEST)
+run_noise_sweep_simulation(overwrite=True)
 ```
 
-# Inverse Problem
+# Source Reconstruction Experiments
 
-## Solve Inverse Problem
+## Solve Inverse Problem (Flagship)
 
-Runs source reconstruction (dSPM, sLORETA, CSET, wCSET) on every simulated
-run, in parallel, via `scripts/source_recon_sim.py`. Uses the
-*reconstruction* forward model (`fwd`, `desc="inv"`) from
+Runs source reconstruction (wCSET, CSET, sLORETA, dSPM, wMNE - 5 methods) on
+every simulated run, in parallel, via
+`mindmap`'s `InverseSimTask`/`run_parallel_pipeline` - the same pipeline
+pattern used in the reference notebooks
+(`tutorials/analysis/inverse/inverse-noisesweep.ipynb` and
+`connectome_surrogates.ipynb` in the `mindmap` repo), generalized from
+their 2-timepoint (hrp/pp) scoring use case to a full-time-course
+save-to-disk use case via `InverseSimTask.foutputs` (built into the library
+for exactly this: a save-oriented `postprocess_fn`, per its own docstring).
+Supersedes the previous `scripts/source_recon_sim.py`, which called the
+older `make_process_sample`/`filter_remaining_files` API - every other
+reconstruction cell in this file (`surrogate_reconstruction.py`,
+`noise_sweep_reconstruction.py`) is already a self-contained cell rather than
+delegating to an external script, so this brings `solve_inverse.py` in line.
+Uses the *reconstruction* forward model (`fwd`, `desc="inv"`) from
 `forward_problem.py`, deliberately mismatched from the model that generated
 the data (see note above).
 
-**Parameter choices (set in `scripts/source_recon_sim.py`, not inline here):**
+⚠ **MCE dropped from this study entirely** (no longer solved, saved, or
+scored anywhere in this file, nor plotted in `index.qmd`): its hard L1
+sparsity threshold means it reacts to correlation/AP/localization-error
+metrics on a fundamentally different axis than the other five methods (exact
+zeros whenever it doesn't fire vs. an artificially clean precision-recall
+ranking whenever it does), which isn't a meaningful signal about connectivity
+priors - see `index.qmd`'s `plot_configuration.py` note. `cset`'s own
+`lambda2` was originally tuned jointly with MCE's (see next bullet); that
+history is kept below since it still explains CSET's value, even though MCE
+itself is no longer computed.
 
-- `lambda2 = [0.01, 0.01, 0.1, 0.1]` (for `[dspm, sloreta, cset, wcset]`
-  respectively): per-method regularization parameter. **FILL** - why
-  CSET/wCSET use 10x more regularization than dSPM/sLORETA.
-- `crop = [-0.01, 0.15]` (s): time window kept for reconstruction/evaluation.
-  **FILL**
-
-```{python filename="solve_inverse.py"}
-# | output: false
-# script to handle parallel processing
-%run scripts/source_recon_sim.py
-```
-
-## Validation Metrics
-
-For every simulated run, computes (a) the spatial correlation between
-reconstruction and ground truth over time, and (b) precision-recall curves
-at the half-rising-phase/peak of the simulated EEG - one `MetricSuite` per
-subject, reloaded and plotted in `index.qmd`.
+⚠ **`mne`/`MNE` renamed to `wmne`/`wMNE` throughout** (this file, and
+`processing_spike.qmd`/`processing_intra.qmd`/`index.qmd`): MNE-Python's
+`method="MNE"` output is only "plain" MNE without depth weighting - once a
+depth prior is applied, the result is *weighted* MNE (wMNE), which is what
+this method actually always was here (it shared a depth-weighted inverse
+operator with sLORETA/dSPM until that operator's own depth was set to
+`None` below). wMNE now gets its own separate `make_inverse_operator` call,
+at `depth=0.8` - the standard/recommended depth-weighting exponent for
+wMNE (MNE-Python's own default for `make_inverse_operator`, and the value
+found near-optimal in the original depth-weighting literature, Lin et al.
+2006, "Assessing and improving the spatial accuracy of MEG source
+localization by depth-weighted minimum-norm estimates," *NeuroImage*) - no
+longer the same value as CSET/wCSET's own `depth`, both of which have
+since moved to `0.2`. This is a deliberate
+departure from the reference notebooks (which don't split wMNE out from
+sLORETA/dSPM's shared, undepth-weighted operator) - everything else in this
+cell still matches them exactly.
 
 **Parameter choices:**
 
-- `methods = ["dspm", "sloreta", "cset", "wcset"]`: excludes `mce`/`mne`,
-  unlike the SPIKE-cohort comparison. **FILL** - intentional, or should this
-  list match the SPIKE study's six methods?
+- Solver setup now matches the reference notebooks exactly (aside from the
+  wMNE depth-weighting split above), rather than being independently tuned:
+  SNR-adaptive `lambda2` (`max(0.01, 1/snr.max()**2)`, computed per run) for
+  dspm/sloreta/wmne/wcset, fixed `0.1` for cset (see next bullet), and
+  `wCSET(depth=0.2, harm=0.5, harmonic_method="lowpass")` - both `depth` and
+  `harm` per explicit instruction, superseding this cell's previous
+  `depth=0.5`/`harm=5`. This resolves the previous open question of why
+  CSET/wCSET used 10x more regularization than dSPM/sLORETA - it no longer
+  is a fixed, independently-tuned choice.
+  ⚠ `depth=0.2`/`harm=0.5`/`harmonic_method="lowpass"` now apply uniformly
+  to every wCSET call in this file, including Experiment 3's (surrogates/
+  degradation, below), which previously stayed on their own older
+  `depth=0.8`/`harm=0.8`/default-`"gap"` convention - the same explicit
+  instruction was applied across every wCSET call, so the flagship,
+  noise-sweep, degradation, and surrogate cells now all share the exact
+  same wCSET hyperparameters (only the connectome/data each solves against
+  still differs, which is the point of those experiments).
+- `cset`'s `lambda2` is now fixed at `0.1` and `depth` at `0.2`, per explicit
+  instruction from this point onward - superseding this file's previous
+  `lambda2=1.0`/`depth=0.8` convention. That previous value came from an
+  empirical sweep (`tutorials/analysis/inverse/lambda2-tuning.ipynb`, grid
+  `[0.01, 0.03, 0.1, 0.3, 1.0]`, `sub-simf10`, 10 runs, hrp/pp only):
+  AP-hrp/AP-pp increased monotonically with `lambda2` for CSET, favoring
+  `1.0` (the grid's upper edge). The new `0.1`/`0.2` values are a deliberate
+  override, not re-derived from that sweep or re-verified on `sub-10`. The
+  same sweep also covered MCE (whose AP/correlation decreased while its
+  localization error improved over the same range - the signature of
+  pushing a sparse/L1 solver toward more sparsity), which is part of why MCE
+  was dropped from this study rather than tuned further: optimizing one
+  `lambda2` for both AP/correlation and localization isn't possible for a
+  sparse solver the way it is for CSET.
+- SNR is estimated from the *uncropped* `ave`, not the `[-0.02, 0.15]`-cropped
+  reconstruction window - cropping first would cut off the baseline window
+  entirely and silently pin `lambda2_auto` to its floor value, the same bug
+  already fixed in the reference notebooks for their own crop-to-phase_data
+  step.
+- `crop = [-0.02, 0.15]` (s): time window kept for reconstruction/evaluation.
+- `overwrite=True`: required, not optional, for this run - the existing STC
+  files at these same `desc=method` paths were computed under the old
+  fixed-lambda2/`depth=0.8`/`harm=0.8`/`gap` convention, so the usual
+  skip-if-exists check would otherwise silently leave them stale under the
+  new solver setup. This is a full ~14,190-run x 6-method recompute of the
+  flagship dataset, not an incremental one - it overwrites the numbers
+  behind the current `index.qmd` Results text (e.g. "wCSET achieves 0.7
+  correlation") with numbers computed under the new convention.
+- `comparison.py`'s `methods` list matches this cell's 5 methods exactly
+  (see below).
+
+```{python filename="solve_inverse.py"}
+# | output: false
+
+from pathlib import Path
+
+import mne
+import pandas as pd
+
+import mindmap as mm
+from mindmap.analysis.functional.inverse import InverseSimTask, run_parallel_pipeline
+from scripts.data_manager import SimfManager
+from scripts.utils import check_files
+
+# data manager
+dm = SimfManager("simf.config.yml")
+sub = "10"
+
+methods = ["wcset", "cset", "sloreta", "dspm", "wmne"]
+crop = [-0.02, 0.15]   # s - unchanged from the previous script's crop window
+n_jobs = 25             # project convention (reference notebooks use n_jobs=4)
+
+def preprocess_crop(ctx):
+  # crop for solving; ctx["ave"] itself is left untouched (uncropped, full
+  # baseline intact) for reconstruct_fn's SNR estimate below
+  return {"data": ctx["ave"].copy().crop(tmin=crop[0], tmax=crop[1])}
+
+def make_reconstruct(fwd, eig):
+  """Solves whatever methods this task still needs (see foutputs filtering
+  in run_solve_inverse), using the same solver setup as
+  inverse-noisesweep.ipynb / connectome_surrogates.ipynb (aside from the
+  wMNE depth-weighting split below, a deliberate departure - see prose)."""
+  mne_methods = {"sloreta": "sLORETA", "dspm": "dSPM"}   # depth=None, no depth weighting
+
+  def reconstruct(ctx):
+    data, ncov, needed = ctx["data"], ctx["ncov"], ctx["task"].foutputs
+
+    # SNR from the uncropped `ave`, not `data` - see prose above
+    snr, _ = mm.analysis.eeg.estimate_evoked_snr(
+      evoked=ctx["ave"], baseline=ctx["simulator"].epoch_config.baseline, noise_cov=ncov
+    )
+    lambda2_auto = max(0.01, 1.0 / (snr.max() ** 2))
+
+    solutions = {}
+    if "wcset" in needed:
+      inv = mm.analysis.inverse.wCSET(
+        forward=fwd, noise_cov=ncov, depth=0.2,
+        eigenvectors=eig["vec"], eigenvalues=eig["val"],
+        harm=0.5, harmonic_method="lowpass",
+      )
+      solutions["wcset"] = inv.solve(data, lambda2_auto)
+    if "cset" in needed:
+      inv = mm.analysis.inverse.CSET(forward=fwd, noise_cov=ncov, depth=0.2, eigenvectors=eig["vec"])
+      solutions["cset"] = inv.solve(data, lambda2=0.1)
+    if any(m in needed for m in mne_methods):
+      inv_mne_op = mne.minimum_norm.make_inverse_operator(
+        info=data.info, forward=fwd, noise_cov=ncov, fixed=True, depth=None, verbose="warning",
+      )
+      for m, mne_name in mne_methods.items():
+        if m in needed:
+          solutions[m] = mne.minimum_norm.apply_inverse(
+            data, inv_mne_op, lambda2_auto, method=mne_name, verbose="warning"
+          )
+    if "wmne" in needed:
+      # wMNE - own inverse operator (depth=0.8, no longer matching CSET/wCSET's own depth=0.2), not
+      # shared with sLORETA/dSPM's depth=None one - see prose above
+      inv_wmne_op = mne.minimum_norm.make_inverse_operator(
+        info=data.info, forward=fwd, noise_cov=ncov, fixed=True, depth=0.8, verbose="warning",
+      )
+      solutions["wmne"] = mne.minimum_norm.apply_inverse(
+        data, inv_wmne_op, lambda2_auto, method="MNE", verbose="warning"
+      )
+    return {"solutions": solutions}
+
+  return reconstruct
+
+def postprocess_save(ctx):
+  for method, sol in ctx["solutions"].items():
+    sol.save(str(ctx["task"].foutputs[method]), overwrite=True, verbose="warning")
+  return "done"
+
+def run_solve_inverse(overwrite=False):
+  index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
+  simulator_dir = dm.roots["sim"]/f"sub-{sub}"/"simulator"
+  sources_dir = dm.roots["sim"]/f"sub-{sub}"/"sources"
+
+  # mne's stc.save() doesn't create parent directories - it just opens the
+  # file for writing, unlike dm.get_path() which only builds the path string
+  (dm.roots["sim"]/f"sub-{sub}"/"stc").mkdir(parents=True, exist_ok=True)
+
+  # per-run, per-method skip: only (re)solve methods whose output file is
+  # missing (or overwrite=True) - same partial-skip pattern already used in
+  # surrogate_reconstruction.py, just generalized to 6 methods
+  tasks = []
+  for run in index["run"]:
+    foutputs = {m: dm.get_path(sub, "stc", task="spk", run=run, desc=m) for m in methods}
+    needed = {m: p for m, p in foutputs.items() if overwrite or not check_files([p], silent=True)}
+    if not needed:
+      continue
+    tasks.append(InverseSimTask(
+      run=int(run),
+      simulator_dir=simulator_dir,
+      fave=dm.get_path(sub, "ave", task="spk", run=run),
+      fcov=dm.get_path(sub, "cov", task="spk", run=run),
+      fgold=dm.get_path(sub, "gold", task="spk", run=run),
+      fsource=sources_dir/f"run-{int(run):03d}_source.json",
+      foutputs=needed,
+    ))
+
+  print(f"{len(index) - len(tasks)}/{len(index)} runs already fully done, {len(tasks)} left.")
+  if not tasks:
+    return
+
+  fwd = dm.load(sub, "fwd", desc="inv")
+  eig = dm.load(sub, "eig")
+
+  # n_threads_per_job=1: n_jobs already saturates the 32-core budget, see
+  # project memory on run_parallel_pipeline thread capping
+  run_parallel_pipeline(
+    tasks, preprocess_crop, make_reconstruct(fwd, eig), postprocess_save, n_jobs=n_jobs, n_threads_per_job=1,
+  )
+
+run_solve_inverse(overwrite=True)  # must force-regen: old STCs used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; wcset now depth=0.2/harm=0.5 (was depth=0.5/harm=5); wMNE (formerly desc="mne") now solved with its own depth=0.8 operator under desc="wmne"
+```
+
+## Validation Metrics (Flagship)
+
+For every simulated run, computes (a) the spatial correlation between
+reconstruction and ground truth over time, (b) precision-recall curves at
+the half-rising-phase/peak of the simulated EEG, (c) localization error at
+the half-rising-phase only - distance from each method's single loudest
+vertex to the true seed region, 0 if inside it - and (d) the half-rising-
+phase/peak time of the simulated *sensor* EEG itself (used only for the
+reference lines drawn on the correlation plot in `index.qmd`, independent of
+source reconstruction method) - one `MetricSuite` per subject, reloaded and
+plotted in `index.qmd`.
+
+Merged from two previously separate cells (`comparison.py`/`spike_timing.py`)
+that looped over the identical `index["run"]` and both read each run's `ave`
+- now one `mindmap` `run_parallel_pipeline` pass per run does both, using
+`MeasureTask`. Localization error additionally requires `InverseSimTask`-style
+context this cell didn't previously load: `simulator` (via `MeasureTask`'s own
+`simulator_dir`, for `hm.src`/`hm.parc`/`hm.ras2tkras`) and each run's saved
+seed `Source` (for `select_targets`, same pattern as
+`noise_sweep_comparison.py`/`degradation_reconstruction.py`), plus
+`dipole_positions` computed once per subject from the reconstruction-time
+forward model. This also fixes a redundancy that predated the merge:
+`get_rising_phase` used to be recomputed once per `(method, phase)` pair (4
+methods x 2 phases) even though it doesn't depend on `method` - now computed
+once per phase and reused for every method's precision-recall indexing.
+
+**Parameter choices:**
+
+- `methods = ["wcset", "cset", "sloreta", "dspm", "wmne"]`: all 5 methods
+  `solve_inverse.py` now solves/saves, matching the SPIKE-cohort comparison -
+  resolves this cell's previous `["dspm", "sloreta", "cset", "wcset"]`
+  (`wmne` was excluded, an open **FILL** question at the time; `mce` was
+  briefly included too before being dropped from the whole study - see
+  `solve_inverse.py`'s prose above).
 - `n_pr_points = 100`: resolution of the resampled precision-recall curve
   grid (see `resample_pr_curve`) - a visualization/storage resolution
   tradeoff rather than a modeling assumption.
+- hrp/pp (for both the precision-recall indexing and the sensor-timing
+  metric below) are picked from `ave` *cropped* to the reconstruction's
+  window, not the full uncropped evoked the old `spike_timing.py` used - per
+  explicit instruction, the crop window always brackets the simulated spike
+  here, so this doesn't change which sample gets picked, and it's what lets
+  the two cells' `get_rising_phase` calls collapse into one.
+- Localization error is computed at half-rising-phase only, not peak phase -
+  hrp is the phase actually used for source localization throughout this
+  study (Section 2.6.2 of `index.qmd`), so a peak-phase counterpart would be
+  extra volume without a use.
+- `n_jobs = 25`: compute resource setting, not a modeling choice - matches the
+  project convention used elsewhere in this file.
 
 ```{python filename="comparison.py"}
 # | output: false
 
 from pathlib import Path
 
-import mne
 import numpy as np
 import pandas as pd
-from joblib import Parallel, delayed
-from tqdm import tqdm
 
 import mindmap as mm
+from mindmap.analysis.functional.common.metric import find_peak_localization_error
+from mindmap.analysis.functional.inverse import MeasureTask, run_parallel_pipeline
+from mindmap.analysis.simulation.components import Source
 from scripts.data_manager import SimfManager
 from scripts.utils import check_files, resample_pr_curve
 
@@ -1236,8 +1597,78 @@ from scripts.utils import check_files, resample_pr_curve
 dm = SimfManager("simf.config.yml")
 sub = "10"
 
-methods = ["dspm", "sloreta", "cset", "wcset"]
+methods = ["wcset", "cset", "sloreta", "dspm", "wmne"]
 n_pr_points = 100   # points kept per resampled precision-recall curve
+n_jobs = 25
+
+def make_preprocess(sources_dir):
+  """Crops ground/data to the shared STC window (unchanged from before), and
+  additionally resolves this run's true seed-source mask for
+  localization_error_hrp below - needs `simulator` (now requested via
+  MeasureTask's `simulator_dir`) for hm.src/hm.parc/hm.ras2tkras, and the
+  run's own saved Source seed, same pattern as
+  noise_sweep_comparison.py/degradation_reconstruction.py."""
+  def preprocess(ctx):
+    # every method's STC shares the same crop window (set by solve_inverse.py's
+    # `crop`), so any one of them can be used to read it off
+    stc0 = next(iter(ctx["solutions"].values()))
+    ground = ctx["gold"].copy().crop(tmin=stc0.times[0], tmax=stc0.times[-1])
+    data = ctx["ave"].copy().crop(tmin=stc0.times[0], tmax=stc0.times[-1])
+
+    fsource = sources_dir/f"run-{ctx['task'].run:03d}_source.json"
+    src_seed = Source.load(fsource)
+    simulator = ctx["simulator"]
+    true_source_mask = src_seed.select_targets(simulator.hm.src, simulator.hm.parc, simulator.hm.ras2tkras)
+
+    return {"ground": ground, "data": data, "true_source_mask": true_source_mask}
+  return preprocess
+
+def make_postprocess_score(dipole_positions):
+  """Scores every method's solution against gold, derives this run's hrp/pp
+  sensor timing, and localization error at half-rising-phase only (see
+  prose above for why no peak-phase counterpart) - one pass per run replaces
+  the old comparison.py/spike_timing.py's two separate loops."""
+  def postprocess_score(ctx):
+    ground, data, solutions = ctx["ground"], ctx["data"], ctx["solutions"]
+    true_source_mask = ctx["true_source_mask"]
+
+    corr = {
+      m: mm.analysis.inverse.compute_stc_correlation(ground, stc, mode="spatial", method="pearson")
+      for m, stc in solutions.items()
+    }
+
+    prec_hrp, prec_pp = {}, {}
+    phase_time = {}
+    recall_grid = None
+    hrp_idx = None
+    for phase_name, ratio, store in [("hrp", 0.5, prec_hrp), ("pp", 1.0, prec_pp)]:
+      # computed once per phase, not once per (method, phase): ground/data/idx
+      # don't depend on which method's stc is being scored
+      idx = mm.analysis.eeg.get_rising_phase(data, ratio=ratio, as_idx=True)
+      # `idx` is a length-1 array (mne's `time_as_index` always returns one,
+      # even for scalar input) - fine for the fancy-indexing below, but
+      # `data.times[idx]` would stay a length-1 array too, so np.stack-ing one
+      # per run would add a stray extra axis instead of a flat (n_runs,) array
+      phase_time[phase_name] = data.times[idx].item()
+      if phase_name == "hrp":
+        hrp_idx = idx
+
+      activity_mask = ground.data[:, idx] > 0
+      for m, stc in solutions.items():
+        curves = mm.core.calc_pr_curve(activity_mask, stc.data[:, idx])
+        store[m], recall_grid = resample_pr_curve(curves["precision"], curves["recall"], n_points=n_pr_points)
+
+    # localization error at half-rising-phase only: distance from each
+    # method's single loudest vertex at hrp to the true seed region (0 if
+    # inside it) - the classic single-source localization baseline, read
+    # alongside the PR curve above rather than in place of it
+    loc_err_hrp = {
+      m: find_peak_localization_error(stc.data[:, hrp_idx], true_source_mask, dipole_positions)["distance_mm"]
+      for m, stc in solutions.items()
+    }
+
+    return corr, prec_hrp, prec_pp, loc_err_hrp, data.times, recall_grid, phase_time["hrp"], phase_time["pp"]
+  return postprocess_score
 
 def run_comparison(overwrite=False):
   # one MetricSuite folder regroups every metric of this study (raw per-run
@@ -1252,62 +1683,53 @@ def run_comparison(overwrite=False):
   # one row per simulation run
   index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
 
+  simulator_dir = dm.roots["sim"]/f"sub-{sub}"/"simulator"
+  sources_dir = dm.roots["sim"]/f"sub-{sub}"/"sources"
+
+  # subject-level data (run-independent): dipole positions for
+  # find_peak_localization_error, from the same (mismatched, "inv") forward
+  # model used to reconstruct every run below
+  fwd = dm.load(sub, "fwd", desc="inv")
+  dipole_positions = mm.anatomy.source_space.get_dipole_positions(fwd["src"]) * 1000
+
   # resolve every file path in the main process: `dm` wraps a pybids BIDSLayout
   # (SQLAlchemy-backed) that joblib/loky cannot pickle to ship to worker
-  # processes, so workers must never close over `dm` itself - only plain paths
-  run_paths = [
-    {
-      "gold": dm.get_path(sub, "gold", task="spk", run=run),
-      "ave": dm.get_path(sub, "ave", task="spk", run=run),
-      "stc": {m: dm.get_path(sub, "stc", task="spk", run=run, desc=m) for m in methods},
-    }
-    for run in index["run"]
-  ]
+  # processes, so tasks must carry plain paths only. `solve_inverse.py` may
+  # still be running in the background - only runs whose STCs are already
+  # fully written for every method are included, so this cell can be (re)run
+  # against a partial dataset instead of waiting for the whole sweep to finish.
+  tasks = []
+  for run in index["run"]:
+    fsolutions = {m: dm.get_path(sub, "stc", task="spk", run=int(run), desc=m) for m in methods}
+    # silent=True: this runs up to len(index) x len(methods) times, and
+    # check_files' default per-file INFO log would otherwise flood the
+    # output with one line per already-solved file (thousands, once
+    # solve_inverse.py is mostly/fully done)
+    if not all(check_files([p], silent=True) for p in fsolutions.values()):
+      continue
+    tasks.append(MeasureTask(
+      run=int(run),
+      fgold=dm.get_path(sub, "gold", task="spk", run=int(run)),
+      fsolutions=fsolutions,
+      fave=dm.get_path(sub, "ave", task="spk", run=int(run)),
+      simulator_dir=simulator_dir,
+    ))
 
-  def process_run(paths):
-    """Compute validation metrics for a single simulation run, for every method."""
-    gold = mne.read_source_estimate(paths["gold"])
-    ave = mne.read_evokeds(paths["ave"], verbose="warning")[0]
+  print(f"{len(tasks)}/{len(index)} runs fully reconstructed - scoring those now"
+        f" (the rest may still be solving in solve_inverse.py).")
+  if not tasks:
+    return
 
-    corr = {}
-    prec_hrp = {}
-    prec_pp = {}
-
-    for m in methods:
-      stc = mne.read_source_estimate(paths["stc"][m])
-
-      # align ground truth/sensor data to the reconstruction's (cropped) time window
-      ground = gold.copy().crop(tmin=stc.times[0], tmax=stc.times[-1])
-      data = ave.copy().crop(tmin=stc.times[0], tmax=stc.times[-1])
-
-      # ------------------------------------------------
-      # Spatial correlation over time
-      # ------------------------------------------------
-      corr[m] = mm.analysis.inverse.compute_stc_correlation(
-        ground, stc, mode="spatial", method="pearson"
-      )
-
-      # ------------------------------------------------
-      # Precision-recall curves @ 50% rising phase / peak phase
-      # ------------------------------------------------
-      for phase_name, ratio, store in [("hrp", 0.5, prec_hrp), ("pp", 1.0, prec_pp)]:
-        idx = mm.analysis.eeg.get_rising_phase(data, ratio=ratio, as_idx=True)
-        activity_mask = ground.data[:, idx] > 0
-        estimated = stc.data[:, idx]
-
-        curves = mm.core.calc_pr_curve(activity_mask, estimated)
-        precision, recall = curves["precision"], curves["recall"]
-        store[m], recall_grid = resample_pr_curve(precision, recall, n_points=n_pr_points)
-
-    return corr, prec_hrp, prec_pp, stc.times, recall_grid
-
-  # run across the whole simulation dataset
-  results = Parallel(n_jobs=-1)(
-    delayed(process_run)(paths)
-    for paths in tqdm(run_paths, desc="Computing validation metrics")
+  # run across the whole simulation dataset - no reconstruction here (STCs
+  # are already on disk from solve_inverse.py), so the process stage is a no-op
+  # n_threads_per_job=1: n_jobs already saturates the 32-core budget, see
+  # project memory on run_parallel_pipeline thread capping
+  results = run_parallel_pipeline(
+    tasks, make_preprocess(sources_dir), lambda ctx: None, make_postprocess_score(dipole_positions), n_jobs=n_jobs, n_threads_per_job=1,
   )
 
-  corr_runs, prhrp_runs, prpp_runs, times, recall_grid = zip(*results)
+  corr_runs, prhrp_runs, prpp_runs, locerr_runs, times, recall_grid, hrp_times, pp_times = zip(*results)
+  run_ids = [t.run for t in tasks]
 
   # one MetricSuite regroups every metric of this study. Each metric is registered
   # as a single (n_runs, n_points) stack and kept as an array internally, which is
@@ -1320,334 +1742,84 @@ def run_comparison(overwrite=False):
     metrics.register(m, "correlation", np.stack([r[m] for r in corr_runs]), times=times[0])
     metrics.register(m, "precision_hrp", np.stack([r[m] for r in prhrp_runs]), recall=recall_grid[0])
     metrics.register(m, "precision_pp", np.stack([r[m] for r in prpp_runs]), recall=recall_grid[0])
+    # scalar per run, half-rising-phase only - same one-point-per-run
+    # pattern as the "timing" entries below
+    metrics.register(m, "localization_error_hrp", np.array([r[m] for r in locerr_runs]), run=np.array(run_ids))
 
-  metrics.save(fmetrics)
+  # per-run half-rising-phase/peak time of the simulated sensor EEG - a
+  # property of `ave`, not of any solver, so registered under its own
+  # "timing" label rather than one of the method labels above. Same study,
+  # same MetricSuite - replaces the old spike_timing.py's separate
+  # results/sub-10_simf_spike_timing.csv (index.qmd's only reader of that
+  # file now reads this suite instead)
+  metrics.register("timing", "hrp_time", np.array(hrp_times), run=np.array(run_ids))
+  metrics.register("timing", "pp_time", np.array(pp_times), run=np.array(run_ids))
 
-run_comparison(overwrite=False)
+  metrics.save(fmetrics, overwrite=overwrite)
+
+run_comparison(overwrite=True)
 ```
 
 Plots of these results (spatial correlation over time, precision-recall at
-half-rising-phase/peak) live in `index.qmd`'s Results section
-(`results_simf_correlation.py`/`results_simf_precision.py`), not here - this
-file only produces the data (`results/sub-10_simf-metrics`) they read.
-
-Computes the per-run half-rising-phase (`ratio=0.5`) / peak (`ratio=1.0`)
-time of each simulated run's *sensor* EEG - used only for the reference
-lines drawn on the correlation plot in `index.qmd`, independent of source
-reconstruction method. `ratio` isn't a free parameter here: it's the same
-0.5/1.0 convention used everywhere else in this project to define "half
-rising phase" and "peak phase".
-
-```{python filename="spike_timing.py"}
-# | output: false
-
-from pathlib import Path
-
-import numpy as np
-import pandas as pd
-import mne
-from tqdm import tqdm
-
-import mindmap as mm
-from scripts.data_manager import SimfManager
-from scripts.utils import check_files
-
-# data manager
-dm = SimfManager("simf.config.yml")
-sub = "10"
-
-def run_spike_timing(overwrite=False):
-  # output file - per-run half-rising-phase/peak time of the simulated sensor
-  # EEG, used to draw reference lines on the correlation-over-time plot in
-  # index.qmd. Computed from the same sensor-level 'ave' each run already has
-  # (not re-simulated), independent of source reconstruction method.
-  ftiming = Path(f"./results/sub-{sub}_simf_spike_timing.csv")
-
-  if check_files([ftiming]) and not overwrite:
-    print("Already exists, skipping.")
-    return
-
-  index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
-
-  rows = []
-  for run in tqdm(index["run"], desc="Computing spike timing"):
-    fave = dm.get_path(sub, "ave", task="spk", run=run)
-    ave = mne.read_evokeds(fave, verbose="warning")[0]
-
-    rows.append({
-      "run": run,
-      "hrp_time": mm.analysis.eeg.get_rising_phase(ave, ratio=0.5, as_idx=False),
-      "pp_time": mm.analysis.eeg.get_rising_phase(ave, ratio=1.0, as_idx=False),
-    })
-
-  pd.DataFrame(rows).to_csv(ftiming, index=False)
-
-run_spike_timing(overwrite=False)
-```
-
-## Experiment 1.2: Surrogate-Connectome Reconstruction & Validation
-
-Reconstructs CSET & wCSET (only - dSPM/sLORETA don't depend on the
-connectome, so their original-connectome probe-set results are reused
-unchanged as the surrogate-agnostic reference) on the probe-set runs, once
-per surrogate. Uses the probe set's first 5 repetitions per region (matches
-Experiment 1.1's reps count, not the noise experiment's 10 - the connectome
-swap dominates run-to-run variance here, not the per-trial noise draw).
-
-**Parameter choices:**
-
-- `lambda2 = 0.1` for both CSET and wCSET, unchanged across all 3
-  surrogates - the same value used for the original-connectome flagship
-  reconstruction, not retuned per surrogate's edge density. This is a
-  documented assumption, not a verified sub-sweep (parallel to the same
-  assumption flagged for the noise-robustness experiment).
-- Outputs are **not** produced via `mm.analysis.inverse.make_process_sample`
-  - that helper derives each output STC's path by string-replacing the input
-    `ave` filename (`ave→stc`, inject `desc-{method}`), which would silently
-  overwrite the flagship `desc-cset`/`desc-wcset` STCs if pointed at the same
-  probe-set `ave` files. Instead each surrogate's outputs get their own
-  compound `desc` (`cset-{surrogate}`, `wcset-{surrogate}`), computed with
-  the same solver classes (`CSET`/`wCSET`) `make_process_sample` uses
-  internally.
-
-```{python filename="surrogate_reconstruction.py"}
-# | output: false
-
-import ast
-
-import mne
-import pandas as pd
-from joblib import Parallel, delayed
-from tqdm import tqdm
-
-from mindmap.analysis.functional.inverse.solvers import CSET, wCSET
-from scripts.data_manager import SimfManager
-from scripts.utils import check_files
-
-# data manager
-dm = SimfManager("simf.config.yml")
-sub = "10"
-
-n_reps_per_region = 5
-surrogates = ["atlas-a2a", "atlas-a2a-bin", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin"]
-lambda2 = {"cset": 0.1, "wcset": 0.1}
-crop = [-0.01, 0.15]
-
-# Resolve every file path in the main process (workers must never close
-# over `dm` itself - see comparison.py's note on pybids/loky pickling)
-def make_process_one(forward, eig):
-  def process_one(fave, fcov, fstc_cset, fstc_wcset):
-    data = mne.read_evokeds(fave, verbose="warning")[0]
-    ncov = mne.read_cov(fcov, verbose="warning")
-    data = data.copy().crop(tmin=crop[0], tmax=crop[1])
-
-    kwargs = dict(forward=forward, noise_cov=ncov, depth=0.8, eigenvectors=eig["vec"])
-
-    if fstc_cset is not None:
-      inv = CSET(**kwargs)
-      sol = inv.solve(data, lambda2=lambda2["cset"])
-      sol.save(str(fstc_cset), overwrite=True, verbose="warning")
-
-    if fstc_wcset is not None:
-      inv = wCSET(eigenvalues=eig["val"], harm=0.8, **kwargs)
-      sol = inv.solve(data, lambda2["wcset"])
-      sol.save(str(fstc_wcset), overwrite=True, verbose="warning")
-
-    return "done"
-  return process_one
-
-def run_surrogate_reconstruction(overwrite=False):
-  # 1. Select probe-set runs (first n_reps_per_region reps per region)
-  probe_set = pd.read_csv(f"./results/sub-{sub}_probe-set.csv")
-  index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
-  index["region"] = index["source_index_list"].apply(lambda s: ast.literal_eval(s)[0])
-
-  probe_runs = index[
-    index["region"].isin(probe_set["region"]) & (index["repetition"] <= n_reps_per_region)
-  ]["run"].tolist()
-
-  # 2. Static forward model (always the mismatched "inv" model, same as the
-  # flagship reconstruction - see forward_problem.py)
-  forward = dm.load(sub, "fwd", desc="inv")
-
-  for surrogate in surrogates:
-    eig = dm.load(sub, "eig", desc=surrogate)
-
-    tasks = []
-    for run in probe_runs:
-      fave = dm.get_path(sub, "ave", task="spk", run=run)
-      fcov = dm.get_path(sub, "cov", task="spk", run=run)
-      fstc_cset = dm.get_path(sub, "stc", task="spk", run=run, desc=f"cset-{surrogate}")
-      fstc_wcset = dm.get_path(sub, "stc", task="spk", run=run, desc=f"wcset-{surrogate}")
-
-      need_cset = not (check_files([fstc_cset]) and not overwrite)
-      need_wcset = not (check_files([fstc_wcset]) and not overwrite)
-
-      if need_cset or need_wcset:
-        tasks.append((fave, fcov, fstc_cset if need_cset else None, fstc_wcset if need_wcset else None))
-
-    if not tasks:
-      print(f"[{surrogate}] already exists, skipping.")
-      continue
-
-    process_one = make_process_one(forward, eig)
-    Parallel(n_jobs=-1)(
-      delayed(process_one)(*t) for t in tqdm(tasks, desc=f"Reconstructing ({surrogate})")
-    )
-
-run_surrogate_reconstruction(overwrite=False)
-```
-
-Computes the same validation metrics as `comparison.py` above (spatial
-correlation over time, precision-recall at half-rising-phase/peak), but
-restricted to `["cset", "wcset"]` and to the probe-set runs only, one
-`MetricSuite` per surrogate.
-
-⚠ Uses `mm.core.calc_pr_curve` rather than `comparison.py`'s
-`mm.core.calc_performance_curves`: the latter was split into
-`calc_roc_curve`/`calc_pr_curve` in a later `mindmap` refactor and no longer
-exists. **`comparison.py`'s cell above is therefore currently broken if
-rerun against the installed `mindmap` version** - it still calls the old
-name. Worth fixing there too; left alone here since it's outside this
-experiment's scope.
-
-```{python filename="surrogate_comparison.py"}
-# | output: false
-
-import ast
-from pathlib import Path
-
-import mne
-import numpy as np
-import pandas as pd
-from joblib import Parallel, delayed
-from tqdm import tqdm
-
-import mindmap as mm
-from scripts.data_manager import SimfManager
-from scripts.utils import check_files, resample_pr_curve
-
-# data manager
-dm = SimfManager("simf.config.yml")
-sub = "10"
-
-surrogates = ["atlas-a2a", "atlas-a2a-bin", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin"]
-methods = ["cset", "wcset"]
-n_pr_points = 100
-
-def process_run(paths):
-  """Compute validation metrics for a single simulation run, for cset/wcset only."""
-  gold = mne.read_source_estimate(paths["gold"])
-  ave = mne.read_evokeds(paths["ave"], verbose="warning")[0]
-
-  corr = {}
-  prec_hrp = {}
-  prec_pp = {}
-
-  for m in methods:
-    stc = mne.read_source_estimate(paths["stc"][m])
-
-    ground = gold.copy().crop(tmin=stc.times[0], tmax=stc.times[-1])
-    data = ave.copy().crop(tmin=stc.times[0], tmax=stc.times[-1])
-
-    corr[m] = mm.analysis.inverse.compute_stc_correlation(
-      ground, stc, mode="spatial", method="pearson"
-    )
-
-    for phase_name, ratio, store in [("hrp", 0.5, prec_hrp), ("pp", 1.0, prec_pp)]:
-      idx = mm.analysis.eeg.get_rising_phase(data, ratio=ratio, as_idx=True)
-      activity_mask = ground.data[:, idx] > 0
-      estimated = stc.data[:, idx]
-
-      curves = mm.core.calc_pr_curve(activity_mask, estimated)
-      precision, recall = curves["precision"], curves["recall"]
-      store[m], recall_grid = resample_pr_curve(precision, recall, n_points=n_pr_points)
-
-  return corr, prec_hrp, prec_pp, stc.times, recall_grid
-
-def run_surrogate_comparison(overwrite=False):
-  # probe-set runs (same selection as surrogate_reconstruction.py)
-  probe_set = pd.read_csv(f"./results/sub-{sub}_probe-set.csv")
-  index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
-  index["region"] = index["source_index_list"].apply(lambda s: ast.literal_eval(s)[0])
-  probe_runs = index[
-    index["region"].isin(probe_set["region"]) & (index["repetition"] <= 5)
-  ]["run"].tolist()
-
-  for surrogate in surrogates:
-    results_dir = Path("./results")
-    fmetrics = results_dir/f"sub-{sub}_simf-metrics_{surrogate}"
-
-    if check_files([fmetrics/"meta.json"]) and not overwrite:
-      print(f"[{surrogate}] already exists, skipping.")
-      continue
-
-    run_paths = [
-      {
-        "gold": dm.get_path(sub, "gold", task="spk", run=run),
-        "ave": dm.get_path(sub, "ave", task="spk", run=run),
-        "stc": {m: dm.get_path(sub, "stc", task="spk", run=run, desc=f"{m}-{surrogate}") for m in methods},
-      }
-      for run in probe_runs
-    ]
-
-    results = Parallel(n_jobs=-1)(
-      delayed(process_run)(paths)
-      for paths in tqdm(run_paths, desc=f"Computing metrics ({surrogate})")
-    )
-
-    corr_runs, prhrp_runs, prpp_runs, times, recall_grid = zip(*results)
-
-    metrics = mm.metric.MetricSuite(f"sub-{sub} simulation validation - surrogate {surrogate}")
-    for m in methods:
-      metrics.register(m, "correlation", np.stack([r[m] for r in corr_runs]), times=times[0])
-      metrics.register(m, "precision_hrp", np.stack([r[m] for r in prhrp_runs]), recall=recall_grid[0])
-      metrics.register(m, "precision_pp", np.stack([r[m] for r in prpp_runs]), recall=recall_grid[0])
-
-    metrics.save(fmetrics)
-
-run_surrogate_comparison(overwrite=False)
-```
-
-## Experiment 2: Noise/SNR Sweep Reconstruction & Validation
+half-rising-phase/peak, sensor hrp/pp timing) live in `index.qmd`'s Results
+section (`results_simf_correlation.py`/`results_simf_precision.py`), not
+here - this file only produces the data (`results/sub-10_simf-metrics`) they
+read.
+
+## Experiment 1: Noise/SNR Sweep Reconstruction & Validation
 
 Reconstructs every method on the noise/SNR sweep dataset and scores it
-against ground truth, one combined pass per run via
-`mm.analysis.functional.inverse.run_parallel_pipeline` - ported from the
-reference notebook
+against ground truth, via `mm.analysis.functional.inverse.run_parallel_pipeline`
+- ported from the reference notebook
 (`tutorials/analysis/inverse/inverse-noisesweep.ipynb` in the `mindmap`
 repo), adapted to this project's `SimfManager`/probe-set conventions.
 
-⚠ This intentionally departs from the flagship/surrogate reconstruction
-cells elsewhere in this file in several ways - each is a deliberate choice,
-not an oversight:
+Split into two cells, `noise_sweep_reconstruction.py` (solve + save STCs to
+disk) and `noise_sweep_comparison.py` (reload STCs + score), the same
+solve/score split already used by the flagship (`solve_inverse.py`/
+`comparison.py`) and surrogate (`surrogate_reconstruction.py`/
+`surrogate_comparison.py`) experiments - originally this was one combined
+`run_parallel_pipeline` pass with no disk save, which meant any change to the
+scoring logic required re-solving the whole sweep (up to 10,000 runs x 6
+methods), and a full run had no way to resume if interrupted, since
+`metrics.save()` only ran once at the very end. Splitting it fixes both.
 
-- **6 methods** (`dspm`, `sloreta`, `mne`, `cset`, `wcset`, `mce`), not the 4
-  used by the flagship/surrogate comparisons - matches
-  `processing_spike.qmd`'s convention and resolves the open `FILL` question
-  in `comparison.py`'s prose above about why `mce`/`mne` were excluded there.
-- **SNR-adaptive `lambda2`** for `dspm`/`sloreta`/`mne`/`wcset`
+⚠ This still departs from the flagship/surrogate reconstruction cells
+elsewhere in this file in several ways - each is a deliberate choice, not an
+oversight:
+
+- **5 methods** (`dspm`, `sloreta`, `wmne`, `cset`, `wcset`), matching the
+  flagship comparison (`comparison.py`, above) - MCE excluded from this
+  study entirely, see `solve_inverse.py`'s prose above. The surrogate
+  reconstruction cells further below stay at 2 (CSET/wCSET only), unaffected.
+  `wmne` (renamed from `mne` - see `solve_inverse.py`'s prose above) gets its
+  own depth-weighted (`depth=0.8`) inverse operator here too, same split as
+  the flagship.
+- **SNR-adaptive `lambda2`** for `dspm`/`sloreta`/`wmne`/`wcset`
   (`max(0.01, 1/snr.max()**2)`, computed per run from that run's own
-  estimated SNR), fixed `0.1` for `cset`/`mce` - matches the notebook
-  exactly. This supersedes `TODO_simf_robustness.md`'s earlier "fixed
+  estimated SNR); `cset` uses a fixed `lambda2=0.1` and `depth=0.2` instead,
+  per explicit instruction - superseding this file's earlier `lambda2=1.0`
+  (itself raised from the notebook's original `0.1`, per the
+  `lambda2-tuning.ipynb` sweep referenced in `solve_inverse.py`'s prose
+  above). This supersedes `TODO_simf_robustness.md`'s earlier "fixed
   `lambda2` across all 5 SNR levels" assumption **for this cell only** - see
   the TODO for why that assumption no longer applies here.
-- **wCSET hyperparameters**: `depth=0.5`, `harm=5`,
-  `harmonic_method="lowpass"` - matches the notebook exactly, but differs
-  from every other wCSET call in this file (flagship/surrogate
-  reconstructions use `depth=0.8`, `harm=0.8`, default
-  `harmonic_method="gap"`). This means the noise-sweep's wCSET numbers are
-  **not** directly comparable to the flagship/surrogate wCSET numbers
-  elsewhere in the manuscript - both use the name "wCSET" but different
-  hyperparameters.
+- **wCSET hyperparameters**: `depth=0.2`, `harm=0.5`, `harmonic_method="lowpass"`
+  - now match every other wCSET call in this file exactly (flagship,
+  degradation, surrogate all updated to the same values per explicit
+  instruction) - the noise-sweep's wCSET numbers are therefore directly
+  comparable to the flagship/degradation/surrogate wCSET numbers elsewhere
+  in the manuscript, unlike in earlier revisions of this file.
 - **5 scalar metrics per run/method** (`correlation_hrp`, `correlation_pp`,
   `ap_hrp`, `ap_pp`, `localization_error_hrp`), not the 3
   full-time-course/full-PR-curve metrics `comparison.py`/
   `surrogate_comparison.py` compute. Only two timepoints (`hrp`/`pp`) are
-  solved per run/method, not the full cropped window - no full time-course
-  correlation, no full PR curves, and **no STC files saved to disk**. A
-  deliberate scope reduction from `TODO_simf_robustness.md`'s original plan,
-  justified by volume (up to 3,000 runs x 6 methods = 18,000 solves).
+  solved and saved per run/method, not the full cropped window - no full
+  time-course correlation, no full PR curves. A deliberate scope reduction
+  from `TODO_simf_robustness.md`'s original plan, justified by volume (up to
+  10,000 runs x 6 methods = 60,000 solves) - the saved STCs stay cheap
+  (2 samples each) even at that scale, unlike the flagship's full-time-course
+  ones.
 - **hrp/pp timing** is picked from each run's own clean `gold`, projected to
   sensor space with the *simulation* forward (`simulator.hm.fwd`,
   noise-immune by construction), not from the noisy `ave` the way
@@ -1656,19 +1828,24 @@ not an oversight:
   with "how accurate is the reconstruction" - a real risk specifically here,
   since this experiment deliberately varies noise level. Not applied
   retroactively to `comparison.py`/`spike_timing.py` - out of scope for this
-  cell.
+  cell. This also means the saved STCs' two timepoints carry hrp/pp identity
+  only by *column order* (0 = hrp, 1 = pp), not by any time value tied to
+  `ave`/`gold`'s own clock (`phase_data` is built with `tmin=0`) -
+  `noise_sweep_comparison.py` re-derives `hrp_idx`/`pp_idx` itself rather
+  than reading them off `stc.times`.
+- STCs are saved under `noisesweep_subject` ("10-noisesweep-v2"), not `sub`
+  ("10") - reusing `sub` would silently collide with the flagship's own
+  `desc=method` STC files at the same path, since `solve_inverse.py` already
+  writes there.
 
-**Parameter choices:**
+**Parameter choices (reconstruction):**
 
-- `QUICK_TEST` kept in sync with `noise_sweep_simulation.py`'s own flag -
-  both must point at the same generated dataset (test or full), or this cell
-  tries to read runs that don't exist for the other mode.
 - `fwd = dm.load(sub, "fwd", desc="inv")`: the inversion-time forward, used
   for solving - deliberately different from the simulation-time forward,
   same inverse-crime-avoidance convention used throughout this file.
 - `eig = dm.load(sub, "eig")`: the original tractography connectome's
-  eigenbasis, unchanged - Experiment 2 doesn't touch the connectome (that's
-  Experiment 1's axis).
+  eigenbasis, unchanged - this experiment doesn't touch the connectome (that's
+  the degradation/surrogate experiments' axis).
 - `fsource` paths are built directly
   (`sources_dir/f"run-{run:03d}_source.json"`) rather than through
   `dm.get_path`: `SimfManager` has no `"source"` datatype registered (unlike
@@ -1679,44 +1856,38 @@ not an oversight:
   `noise_sweep_simulation.py` writes, not the raw per-subject
   `simulation_index.tsv` directly - stays consistent with what downstream
   cells were already told to rely on. No `target_snr`-is-NaN filtering
-  needed here (unlike the notebook): Experiment 2's sweep never generates a
+  needed here (unlike the notebook): Experiment 1's sweep never generates a
   noise-only condition, so every row is used.
-- `n_jobs = -1`, not the notebook's `n_jobs=4` - matches this project's own
-  `Parallel(n_jobs=-1)` convention already used successfully in
-  `comparison.py`/`surrogate_reconstruction.py`/`surrogate_comparison.py` at
-  a similar per-worker memory scale (same ~7465-dim dense eigenbasis). Worth
-  tuning down if memory becomes a problem in practice.
-- No plotting cell here - this file only produces data (see `comparison.py`'s
-  own trailing note). The noise-robustness figure is still a TODO item for
-  `index.qmd`.
+- Always runs over the *full* sweep index, not a quick-test subsample -
+  unlike `noise_sweep_comparison.py` below, there's no reason to limit what
+  gets solved+saved here: the STCs are reused by both a quick scoring pass
+  and the full one.
+- Per-run, per-method skip via `foutputs` (only (re)solve methods whose
+  output file is missing, or `overwrite=True`) - same resumable pattern as
+  `solve_inverse.py`, needed here specifically because a full run is ~10,000
+  runs x 6 methods and may be interrupted partway.
+- `n_jobs = 25`: compute resource setting, not a modeling choice.
 
-```{python filename="noise_sweep_comparison.py"}
+```{python filename="noise_sweep_reconstruction.py"}
 # | output: false
 
 from pathlib import Path
 
-import numpy as np
-import pandas as pd
 import mne
+import pandas as pd
 
 import mindmap as mm
-from mindmap.analysis.functional.common.metric import find_peak_localization_error
-from mindmap.analysis.functional.inverse import InverseTask, run_parallel_pipeline
+from mindmap.analysis.functional.inverse import InverseSimTask, run_parallel_pipeline
 from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
 dm = SimfManager("simf.config.yml")
 sub = "10"
+noisesweep_subject = f"{sub}-noisesweep-v2"   # distinct bids subject - see noise_sweep_simulation.py
 
-# keep in sync with noise_sweep_simulation.py's own QUICK_TEST flag - both
-# must point at the same dataset (test vs full) or this cell will try to
-# read runs that don't exist for the other mode
-QUICK_TEST = True
-suffix = "_test" if QUICK_TEST else ""
-noisesweep_subject = f"{sub}-noisesweep-test" if QUICK_TEST else f"{sub}-noisesweep"
-
-n_jobs = -1   # compute resource setting, not a modeling choice - see prose above
+methods = ["wcset", "cset", "sloreta", "dspm", "wmne"]
+n_jobs = 25   # compute resource setting, not a modeling choice - see prose above
 
 def preprocess_hrp_pp(ctx):
   """Picks hrp/pp from this run's own noise-free gold (immune to noise/SNR by
@@ -1728,55 +1899,207 @@ def preprocess_hrp_pp(ctx):
   pp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=1, as_idx=True)[0]
 
   # solve only at those two phases - on the actual noisy `ave`, not the clean
-  # projection - instead of the whole cropped window
+  # projection - instead of the whole cropped window. tmin=0 means the saved
+  # STC's two columns carry hrp/pp identity by order only, not by a time
+  # value tied to ave/gold's own clock - see prose above.
   phase_data = mne.EvokedArray(
     ave.data[:, [hrp_idx, pp_idx]], ave.info, tmin=0, nave=ave.nave, kind=ave.kind
   )
 
-  return {"phase_data": phase_data, "hrp_idx": hrp_idx, "pp_idx": pp_idx}
+  return {"phase_data": phase_data}
 
 def make_reconstruct(fwd, eig):
-  """Solves all six inverse methods on the two-timepoint phase_data."""
-  mne_methods = {"sloreta": "sLORETA", "dspm": "dSPM", "mne": "MNE"}
+  """Solves whatever methods this task still needs (see foutputs filtering in
+  run_noise_sweep_reconstruction) at the two-timepoint phase_data."""
+  mne_methods = {"sloreta": "sLORETA", "dspm": "dSPM"}   # depth=None, no depth weighting
 
   def reconstruct(ctx):
-    data, ncov = ctx["phase_data"], ctx["ncov"]
+    data, ncov, needed = ctx["phase_data"], ctx["ncov"], ctx["task"].foutputs
 
+    # SNR from the full-length `ave`, not `phase_data` - the latter is just
+    # the two HRP/PP samples reindexed to tmin=0, so the pre-stimulus
+    # baseline window falls outside it and yields an empty slice (NaN SNR).
     snr, _ = mm.analysis.eeg.estimate_evoked_snr(
-      evoked=data, baseline=ctx["simulator"].epoch_config.baseline, noise_cov=ncov
+      evoked=ctx["ave"], baseline=ctx["simulator"].epoch_config.baseline, noise_cov=ncov
     )
     lambda2_auto = max(0.01, 1.0 / (snr.max() ** 2))
 
-    inv_wcset = mm.analysis.inverse.wCSET(
-      forward=fwd, noise_cov=ncov, depth=0.5,
-      eigenvectors=eig["vec"], eigenvalues=eig["val"],
-      harm=5, harmonic_method="lowpass",
-    )
-    inv_cset = mm.analysis.inverse.CSET(forward=fwd, noise_cov=ncov, depth=0.8, eigenvectors=eig["vec"])
-    inv_mce = mm.analysis.inverse.MCE(forward=fwd, noise_cov=ncov, depth=0.8)
-    inv_mne_op = mne.minimum_norm.make_inverse_operator(
-      info=data.info, forward=fwd, noise_cov=ncov, fixed=True, depth=None, verbose="warning",
-    )
-
-    solutions = {
-      "wcset": inv_wcset.solve(data, lambda2_auto),
-      "cset": inv_cset.solve(data, lambda2=0.1),
-      "mce": inv_mce.solve(data, lambda2=0.1),
-    }
-    for m, mne_name in mne_methods.items():
-      solutions[m] = mne.minimum_norm.apply_inverse(
-        data, inv_mne_op, lambda2_auto, method=mne_name, verbose="warning"
+    solutions = {}
+    if "wcset" in needed:
+      inv = mm.analysis.inverse.wCSET(
+        forward=fwd, noise_cov=ncov, depth=0.2,
+        eigenvectors=eig["vec"], eigenvalues=eig["val"],
+        harm=0.5, harmonic_method="lowpass",
+      )
+      solutions["wcset"] = inv.solve(data, lambda2_auto)
+    if "cset" in needed:
+      inv = mm.analysis.inverse.CSET(forward=fwd, noise_cov=ncov, depth=0.2, eigenvectors=eig["vec"])
+      solutions["cset"] = inv.solve(data, lambda2=0.1)
+    if any(m in needed for m in mne_methods):
+      inv_mne_op = mne.minimum_norm.make_inverse_operator(
+        info=data.info, forward=fwd, noise_cov=ncov, fixed=True, depth=None, verbose="warning",
+      )
+      for m, mne_name in mne_methods.items():
+        if m in needed:
+          solutions[m] = mne.minimum_norm.apply_inverse(
+            data, inv_mne_op, lambda2_auto, method=mne_name, verbose="warning"
+          )
+    if "wmne" in needed:
+      # wMNE - own inverse operator (depth=0.8, no longer matching CSET/wCSET's own depth=0.2), not
+      # shared with sLORETA/dSPM's depth=None one - see solve_inverse.py's prose
+      inv_wmne_op = mne.minimum_norm.make_inverse_operator(
+        info=data.info, forward=fwd, noise_cov=ncov, fixed=True, depth=0.8, verbose="warning",
+      )
+      solutions["wmne"] = mne.minimum_norm.apply_inverse(
+        data, inv_wmne_op, lambda2_auto, method="MNE", verbose="warning"
       )
 
     return {"solutions": solutions}
 
   return reconstruct
 
-def postprocess_score(dipole_positions):
-  """Scores each of the six solutions against this run's own gold, returns 5 scalars/method."""
+def postprocess_save(ctx):
+  for method, sol in ctx["solutions"].items():
+    sol.save(str(ctx["task"].foutputs[method]), overwrite=True, verbose="warning")
+  return "done"
+
+def run_noise_sweep_reconstruction(overwrite=False):
+  # always the full sweep - QUICK_TEST lives in noise_sweep_comparison.py now
+  findex = Path(f"./results/sub-{sub}_noise-sweep_index_v2.tsv")
+  df_sweep = pd.read_csv(findex, sep="\t")
+
+  simulator_dir = dm.roots["sim"]/f"sub-{noisesweep_subject}"/"simulator"
+  sources_dir = dm.roots["sim"]/f"sub-{noisesweep_subject}"/"sources"
+
+  # mne's stc.save() doesn't create parent directories - it just opens the
+  # file for writing, unlike dm.get_path() which only builds the path string
+  (dm.roots["sim"]/f"sub-{noisesweep_subject}"/"stc").mkdir(parents=True, exist_ok=True)
+
+  # per-run, per-method skip: only (re)solve methods whose output file is
+  # missing (or overwrite=True), same pattern as solve_inverse.py - keyed off
+  # noisesweep_subject, NOT sub, so these paths don't collide with the
+  # flagship dataset's own stc files at the same desc=method
+  tasks = []
+  for _, row in df_sweep.iterrows():
+    run = int(row["run"])
+    foutputs = {m: dm.get_path(noisesweep_subject, "stc", task="spk", run=run, desc=m) for m in methods}
+    needed = {m: p for m, p in foutputs.items() if overwrite or not check_files([p])}
+    if not needed:
+      continue
+    tasks.append(InverseSimTask(
+      run=run,
+      simulator_dir=simulator_dir,
+      fave=dm.get_path(noisesweep_subject, "ave", task="spk", run=run),
+      fcov=dm.get_path(noisesweep_subject, "cov", task="spk", run=run),
+      fgold=dm.get_path(noisesweep_subject, "gold", task="spk", run=run),
+      fsource=sources_dir/f"run-{run:03d}_source.json",
+      foutputs=needed,
+    ))
+
+  print(f"{len(df_sweep) - len(tasks)}/{len(df_sweep)} runs already fully done, {len(tasks)} left.")
+  if not tasks:
+    return
+
+  fwd = dm.load(sub, "fwd", desc="inv")
+  eig = dm.load(sub, "eig")
+
+  # n_threads_per_job=1: n_jobs already saturates the 32-core budget, see
+  # project memory on run_parallel_pipeline thread capping
+  run_parallel_pipeline(
+    tasks, preprocess_hrp_pp, make_reconstruct(fwd, eig), postprocess_save, n_jobs=n_jobs, n_threads_per_job=1,
+  )
+
+run_noise_sweep_reconstruction(overwrite=True)  # must force-regen: old STCs used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; wcset now depth=0.2/harm=0.5 (was depth=0.5/harm=5); wMNE (formerly desc="mne") now solved with its own depth=0.8 operator under desc="wmne"
+```
+
+Computes the same 5 scalar metrics as before (`correlation_hrp`,
+`correlation_pp`, `ap_hrp`, `ap_pp`, `localization_error_hrp`), but now via
+`MeasureTask` - reloading the STCs `noise_sweep_reconstruction.py` saved
+instead of solving them - the same read-and-score pattern `comparison.py`
+uses for the flagship dataset.
+
+⚠ `MeasureTask` doesn't carry `fsource`/`src` the way `InverseSimTask` does
+(scoring-only tasks don't usually need it), but `localization_error_hrp`
+needs `src.select_targets(...)` to build `true_source_mask` - loaded
+directly here (`Source.load(sources_dir/f"run-{run:03d}_source.json")`)
+inside this cell's own preprocessing step instead. `dipole_positions` stays
+computed once, outside the pipeline, same as before (run-independent).
+
+**Parameter choices (comparison):**
+
+- `QUICK_TEST`: now lives here rather than in the reconstruction cell - it
+  only selects which subset of *already-solved* runs to score, from the same
+  full index. When `True`, subsamples `n_quick_per_level` runs per SNR level
+  instead of scoring all 1,350 runs x 6 methods. `suffix` keeps the
+  quick-test output (`results/sub-10_noise-sweep-metrics_test`) from
+  colliding with the real, full-sweep one. `QUICK_TEST = False` here: this
+  is the full scoring pass.
+- `n_quick_per_level = 30`: sample size per SNR level under `QUICK_TEST` -
+  large enough to sanity-check the pipeline runs correctly end-to-end,
+  small enough to finish fast (150 runs total vs. 1,350).
+- Only runs whose STCs are already fully written for every method are
+  included (same partial-availability check as `comparison.py`) - lets this
+  cell be (re)run against a partial `noise_sweep_reconstruction.py` pass
+  instead of waiting for the whole sweep to finish.
+- `n_jobs = 25`: this cell only scores already-solved STCs, no reconstruction
+  - compute resource setting, matching the project convention used elsewhere
+  in this file.
+- No plotting cell here - this file only produces data (see `comparison.py`'s
+  own trailing note). The noise-robustness figure is still a TODO item for
+  `index.qmd`.
+
+```{python filename="noise_sweep_comparison.py"}
+# | output: false
+
+from pathlib import Path
+
+import mne
+import numpy as np
+import pandas as pd
+
+import mindmap as mm
+from mindmap.analysis.functional.common.metric import find_peak_localization_error
+from mindmap.analysis.functional.inverse import MeasureTask, run_parallel_pipeline
+from mindmap.analysis.simulation.components import Source
+from scripts.data_manager import SimfManager
+from scripts.utils import check_files
+
+# data manager
+dm = SimfManager("simf.config.yml")
+sub = "10"
+noisesweep_subject = f"{sub}-noisesweep-v2"
+
+methods = ["wcset", "cset", "sloreta", "dspm", "wmne"]
+
+QUICK_TEST = False
+n_quick_per_level = 30   # runs sampled per SNR level under QUICK_TEST - see prose above
+suffix = "_test" if QUICK_TEST else ""   # keeps quick-test output from colliding with the real metrics
+n_jobs = 25
+
+def make_preprocess(sources_dir):
+  """Re-derives hrp/pp from this run's own noise-free gold (same recipe as
+  noise_sweep_reconstruction.py's preprocess_hrp_pp - the saved STCs' two
+  columns don't carry a usable time axis, see prose above), and loads this
+  run's `src` manually since MeasureTask doesn't."""
+  def preprocess(ctx):
+    ave, gold, simulator = ctx["ave"], ctx["gold"], ctx["simulator"]
+
+    clean_ave = mne.apply_forward(simulator.hm.fwd, gold, ave.info)
+    hrp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=0.5, as_idx=True)[0]
+    pp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=1, as_idx=True)[0]
+
+    fsource = sources_dir/f"run-{ctx['task'].run:03d}_source.json"
+    return {"hrp_idx": hrp_idx, "pp_idx": pp_idx, "src": Source.load(fsource)}
+  return preprocess
+
+def make_score(dipole_positions):
+  """Scores each of the six saved solutions against this run's own gold,
+  returns 5 scalars/method. sol.data[:, 0]/[:, 1] are hrp/pp by construction
+  order (see noise_sweep_reconstruction.py), so hrp_idx/pp_idx re-derived
+  above are only used to index into `gold`, never into `sol`/`stc.times`."""
   def score(ctx):
     gold, hrp_idx, pp_idx = ctx["gold"], ctx["hrp_idx"], ctx["pp_idx"]
-    src, simulator, task = ctx["src"], ctx["simulator"], ctx["task"]
+    src, simulator = ctx["src"], ctx["simulator"]
 
     true_source_mask = src.select_targets(simulator.hm.src, simulator.hm.parc, simulator.hm.ras2tkras)
     gold_hrp, gold_pp = gold.data[:, hrp_idx], gold.data[:, pp_idx]
@@ -1789,7 +2112,6 @@ def postprocess_score(dipole_positions):
 
       rows.append({
         "method": method,
-        "snr": task.target_snr,
         "correlation_hrp": np.corrcoef(gold_hrp, sol_hrp)[0, 1],
         "correlation_pp": np.corrcoef(gold_pp, sol_pp)[0, 1],
         "localization_error_hrp": hit["distance_mm"],
@@ -1808,51 +2130,72 @@ def run_noise_sweep_comparison(overwrite=QUICK_TEST):
     print("Already exists, skipping.")
     return
 
-  # 0. Subject-level data (run-independent) - inversion-time forward and
-  # original connectome eigenbasis, both unchanged across SNR levels (see
-  # prose above)
+  # 0. Subject-level data (run-independent) - inversion-time forward, used
+  # only for dipole_positions here (no solving happens in this cell anymore)
   fwd = dm.load(sub, "fwd", desc="inv")
-  eig = dm.load(sub, "eig")
   dipole_positions = mm.anatomy.source_space.get_dipole_positions(fwd["src"]) * 1000
 
   simulator_dir = dm.roots["sim"]/f"sub-{noisesweep_subject}"/"simulator"
   sources_dir = dm.roots["sim"]/f"sub-{noisesweep_subject}"/"sources"
 
   # 1. Sweep index (see prose above for why this reads the results/
-  # convenience copy rather than the raw per-subject simulation_index.tsv)
-  findex = Path(f"./results/sub-{sub}_noise-sweep_index{suffix}.tsv")
+  # convenience copy rather than the raw per-subject simulation_index.tsv) -
+  # always the full sweep's index; QUICK_TEST subsamples it below rather
+  # than pointing at a separate dataset
+  findex = Path(f"./results/sub-{sub}_noise-sweep_index_v2.tsv")
   df_sweep = pd.read_csv(findex, sep="\t")
 
-  tasks = [
-    InverseTask(
-      run = int(row["run"]),
-      simulator_dir = simulator_dir,
-      fave = dm.get_path(noisesweep_subject, "ave", task="spk", run=int(row["run"])),
-      fcov = dm.get_path(noisesweep_subject, "cov", task="spk", run=int(row["run"])),
-      fgold = dm.get_path(noisesweep_subject, "gold", task="spk", run=int(row["run"])),
-      fsource = sources_dir/f"run-{int(row['run']):03d}_source.json",
-      target_snr = row["target_snr"],
+  if QUICK_TEST:
+    df_sweep = df_sweep.groupby("target_snr", group_keys=False).sample(
+      n=n_quick_per_level, random_state=42
     )
-    for _, row in df_sweep.iterrows()
-  ]
 
-  # 2. Three-stage pipeline: pick hrp/pp from the clean gold, solve all 6
-  # methods only at those two phases, score against gold - mirrors
+  run2snr = dict(zip(df_sweep["run"], df_sweep["target_snr"]))
+
+  # only runs whose STCs are already fully written for every method - lets
+  # this cell be (re)run against a partial noise_sweep_reconstruction.py
+  # pass instead of waiting for the whole sweep to finish, same pattern as
+  # comparison.py
+  tasks = []
+  for run in df_sweep["run"]:
+    run = int(run)
+    fsolutions = {m: dm.get_path(noisesweep_subject, "stc", task="spk", run=run, desc=m) for m in methods}
+    if not all(check_files([p], silent=True) for p in fsolutions.values()):
+      continue
+    tasks.append(MeasureTask(
+      run=run,
+      fgold=dm.get_path(noisesweep_subject, "gold", task="spk", run=run),
+      fsolutions=fsolutions,
+      fave=dm.get_path(noisesweep_subject, "ave", task="spk", run=run),
+      simulator_dir=simulator_dir,
+    ))
+
+  print(f"{len(tasks)}/{len(df_sweep)} runs fully reconstructed - scoring those now"
+        f" (the rest may still be solving in noise_sweep_reconstruction.py).")
+  if not tasks:
+    return
+
+  # 2. Read-and-score pipeline: re-derive hrp/pp from the clean gold, score
+  # the previously-saved 2-timepoint solutions against gold - mirrors
   # inverse-noisesweep.ipynb's pipeline exactly (see prose above)
+  # n_threads_per_job=1: n_jobs already saturates the 32-core budget, see
+  # project memory on run_parallel_pipeline thread capping
   results = run_parallel_pipeline(
     tasks,
-    preprocess_hrp_pp,
-    make_reconstruct(fwd, eig),
-    postprocess_score(dipole_positions),
+    make_preprocess(sources_dir),
+    lambda ctx: None,
+    make_score(dipole_positions),
     n_jobs = n_jobs,
+    n_threads_per_job = 1,
   )
 
   # 3. Register into one MetricSuite (method x snr), same pattern as
   # comparison.py/surrogate_comparison.py
   metrics = mm.metric.MetricSuite(f"sub-{sub} noise/SNR sweep validation")
-  for run_rows in results:
+  for task, run_rows in zip(tasks, results):
+    snr = run2snr[task.run]
     for row in run_rows:
-      method, snr = row["method"], row["snr"]
+      method = row["method"]
       metrics.register(method, "correlation_hrp", row["correlation_hrp"], method=method, snr=snr)
       metrics.register(method, "correlation_pp", row["correlation_pp"], method=method, snr=snr)
       metrics.register(method, "localization_error_hrp", row["localization_error_hrp"], method=method, snr=snr)
@@ -1861,5 +2204,522 @@ def run_noise_sweep_comparison(overwrite=QUICK_TEST):
 
   metrics.save(fmetrics, overwrite=overwrite)
 
-run_noise_sweep_comparison(overwrite=QUICK_TEST)
+run_noise_sweep_comparison(overwrite=True)
+```
+
+## Experiment 2: Connectome Degradation (Rewiring)
+
+Sweeps three degradation operators on the *reconstruction-side* connectome
+only, at 0-100% severity, and rerun CSET/wCSET on the probe-set runs at each
+level - dSPM/sLORETA are connectome-agnostic, so their flagship probe-set
+results are reused unchanged as a flat reference (not recomputed here), same
+pattern as Experiment 3 (surrogates). No new simulation is needed: like
+Experiment 3, this reuses the flagship's existing SNR=10, original-connectome
+`ave`/`cov`/`gold` files for the probe-set runs - only the reconstruction-side
+connectome changes. Purpose: figure out how much of the true connectome has
+to be correct before CSET/wCSET's advantage over dSPM/sLORETA erodes.
+
+Two-stage parallel design, ported from
+`tutorials/analysis/inverse/sabotage_connectome.ipynb` in the `mindmap` repo:
+
+- **Stage 1** (`mm.analysis.connectivity.cache_cst_batch`): corrupts +
+  eigendecomposes every `(operator, percentage)` connectome *in parallel*,
+  each inside its own worker process, writing straight to disk - never
+  holding more than `n_jobs_cache` connectome/eigenvector pairs (~426MB each,
+  confirmed from this project's own `sub-10_eig.npz` files) in memory at
+  once, regardless of sweep size.
+- **Stage 2** (`mm.analysis.functional.inverse.run_parallel_pipeline`,
+  unmodified): loops over the now-cached connectomes one at a time, and for
+  each, parallelizes reconstruction+scoring *across probe-set runs* -
+  exactly the notebook's own Stage 2.
+
+⚠ Deliberately **not** split into a `_reconstruction.py`/`_comparison.py` pair
+the way the flagship/noise-sweep experiments are - there's no persisted-STC
+checkpoint to split across here (see next point), so this stays one cell,
+same as the reference notebook keeping both stages in one notebook.
+
+⚠ **No STC files are saved to disk anywhere in this cell** - reconstruct +
+score happen in the same `run_parallel_pipeline` pass per connectome, and the
+solutions are discarded immediately after scoring, exactly like the
+notebook's own `postprocess_score`. This is a deliberate departure from
+`solve_inverse.py`/`comparison.py` and `noise_sweep_reconstruction.py`/
+`noise_sweep_comparison.py`'s save-then-score-separately split: those
+experiments needed a persisted-STC checkpoint because their expensive step
+(10,000+ solves) has no other natural resume point. Here, Stage 1's
+connectome cache already **is** that checkpoint - reconstruction itself is
+cheap (probe-set runs x 2 methods x 2 timepoints per connectome), so a third
+persisted layer would just be redundant disk writes for something that
+regenerates in seconds. Stage 1's cache, by contrast, **is** kept permanently
+- at 3 operators x 10 non-zero percentage levels x ~426MB, that's only
+~13GB, cheap against this machine's free space, and it protects the actually
+slow step (eigendecomposition, ~70-115s each per this project's own surrogate
+notes).
+
+**Parameter choices:**
+
+- **Percentage grid**: 0, 10, 20, ..., 100 (11 levels), per
+  `TODO_simf_robustness.md` §2 - not the notebook's `[0,20,40,60,80,100]` or
+  the noise-sweep's log2 grid. 0% is a no-op for all three operators - the
+  clean `eig` is reused directly, never cached.
+- **permutation** = `swap_rewire_connectome` (degree-preserving double-edge
+  swap). Needs the same empirical calibration as the notebook's "swap"
+  method: `n_swaps = n_edges` does **not** reach "100% different from
+  original" - the swap curve plateaus around ~98-99% (a coupon-collector
+  effect, documented in `swap_rewire_connectome`'s own docstring) - so a
+  multiplier grid is probed once and inverted to hit each target percentage
+  of the empirically measured ceiling, exactly like the notebook.
+- **deletion**/**addition** = `perturb_connectome_topology` with only
+  `n_deletions`/`n_additions` set (the other at 0) - exact closed form,
+  `k = round(percentage/100 * total_edges)`, no calibration needed.
+- No repeats per `(operator, percentage)` (single `seed=0` connectome
+  instance each) - matches `TODO_simf_robustness.md`'s plan. A completed
+  pilot (`pilot_degradation_draws_*`, connectome-draw-count sizing, per
+  project memory) validated a 5-repeat-per-level design as a possible
+  follow-up, but this was deliberately not adopted here - single draw per
+  level stays the design for this dataset.
+- **CSET/wCSET only**, not the noise-sweep's SNR-adaptive-lambda2/6-method
+  convention (this experiment doesn't vary noise, so SNR-adaptive `lambda2`
+  has no reason to apply here). wCSET's `depth` and `harm` are now fixed at
+  `0.2` and `0.5` respectively, with `harmonic_method="lowpass"` now passed
+  explicitly (superseding this file's earlier `depth=0.8`/`harm=0.8`/default
+  `"gap"`), `lambda2=0.1` unchanged - matches
+  `surrogate_reconstruction.py`'s convention. CSET's `depth` and `lambda2`
+  are fixed at `0.2` and `0.1` respectively, per explicit instruction -
+  superseding this file's earlier `depth=0.8`/`lambda2=1.0` (itself raised
+  from `0.1`, see `solve_inverse.py`'s prose above for the
+  `lambda2-tuning.ipynb` sweep this comes from).
+- **5 scalar metrics per run/method** (`correlation_hrp`/`_pp`, `ap_hrp`/
+  `_pp`, `localization_error_hrp`) - a small scope addition beyond
+  `TODO_simf_robustness.md` §2's literal "peak-phase spatial correlation"
+  bullet, added because `InverseSimTask` already loads `simulator`/`src` for
+  free, so `localization_error_hrp` costs nothing extra and keeps this
+  experiment's metric set consistent with Experiment 1 (noise sweep).
+- Probe-set runs selected exactly like `surrogate_reconstruction.py`
+  (100 regions x `n_reps_per_region=8` reps - the flagship dataset's full
+  repetition count, not a subset - from the flagship's own
+  `simulation_index.tsv`; no new subject, no new simulation).
+- **Output**: one `MetricSuite` per operator
+  (`results/sub-10_simf-metrics_degradation-{operator}`), matching
+  `surrogate_comparison.py`'s per-condition file convention (`coord=
+  "percentage"`), not the notebook's single combined suite.
+
+```{python filename="degradation_reconstruction.py"}
+# | output: false
+
+import ast
+from pathlib import Path
+
+import mne
+import numpy as np
+import pandas as pd
+
+import mindmap as mm
+from mindmap.analysis.connectivity import ConnectomeCacheTask, cache_cst_batch
+from mindmap.analysis.functional.common.metric import find_peak_localization_error
+from mindmap.analysis.functional.inverse import InverseSimTask, run_parallel_pipeline
+from scripts.data_manager import SimfManager
+from scripts.utils import check_files
+
+# data manager
+dm = SimfManager("simf.config.yml")
+sub = "10"
+
+operators = ["permutation", "deletion", "addition"]
+
+percentages = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+n_reps_per_region = 8   # full flagship repetition count, not a subset
+n_jobs_cache = 4
+
+n_jobs_solve = 25   # Stage 2: reconstruct+score, parallelized across probe-set runs
+
+def run_degradation_reconstruction(overwrite=False):
+  fmetrics = {op: Path(f"./results/sub-{sub}_simf-metrics_degradation-{op}") for op in operators}
+  if all(check_files([f/"meta.json"]) for f in fmetrics.values()) and not overwrite:
+    print("Already exists, skipping.")
+    return
+
+  # 0. Subject-level data (run-independent)
+  fwd = dm.load(sub, "fwd", desc="inv")
+  con = dm.load(sub, "con")
+  eig_clean = dm.load(sub, "eig")
+  eigvec_clean, eigval_clean = eig_clean["vec"], eig_clean["val"]
+
+  # same strength conversion (1/length) used to build the original eig -
+  # see connectivity.py above - so corrupted connectomes stay comparable to
+  # the clean one at percentage=0
+  con_strength = np.divide(1, con, out=np.zeros_like(con), where=con > 0)
+  dipole_positions = mm.anatomy.source_space.get_dipole_positions(fwd["src"]) * 1000
+  simulator_dir = dm.roots["sim"]/f"sub-{sub}"/"simulator"
+  sources_dir = dm.roots["sim"]/f"sub-{sub}"/"sources"
+
+  # 1. Calibrate "permutation" severity - n_swaps ~ n_edges does not reach
+  # 100% "different from original" (plateaus ~98-99%, see prose above), so
+  # probe a multiplier grid and invert the measured curve, same as
+  # sabotage_connectome.ipynb's "swap" method
+  triu_idx = np.triu_indices_from(con_strength, k=1)
+  orig_edges = con_strength[triu_idx] != 0
+  total_edges = int(orig_edges.sum())
+
+  def measure_swap_frac(mult, seed=0):
+    n_swaps = round(mult * total_edges / 2)
+    rewired = mm.analysis.connectivity.swap_rewire_connectome(con_strength, n_swaps=n_swaps, seed=seed)
+    return ((rewired[triu_idx] != 0) & ~orig_edges).sum() / total_edges
+
+  mult_grid = np.array([0.05, 0.1, 0.2, 0.35, 0.5, 0.7, 1, 1.5, 2, 3, 4, 5, 7, 10, 13, 16, 20, 25, 30])
+  probe_fracs = np.maximum.accumulate([measure_swap_frac(m) for m in mult_grid])
+  swap_ceiling = probe_fracs[-1]
+
+  calibrated_n_swaps = {0: 0}
+  for pct in percentages:
+    if pct == 0:
+      continue
+    target_frac = pct / 100 * swap_ceiling
+    mult = np.interp(target_frac, probe_fracs, mult_grid)
+    calibrated_n_swaps[pct] = round(mult * total_edges / 2)
+
+  print(f"swap_rewire_connectome empirical ceiling (treated as '100%'): {swap_ceiling:.4f}")
+  print(f"calibrated n_swaps per percentage: {calibrated_n_swaps}")
+
+  edit_counts = {pct: round(pct / 100 * total_edges) for pct in percentages}
+
+  def corrupt(operator, percentage, seed):
+    if operator == "permutation":
+      return mm.analysis.connectivity.swap_rewire_connectome(
+        con_strength, n_swaps=calibrated_n_swaps[percentage], seed=seed
+      )
+    if operator == "deletion":
+      return mm.analysis.connectivity.perturb_connectome_topology(
+        con_strength, n_deletions=edit_counts[percentage], n_additions=0, seed=seed
+      )
+    if operator == "addition":
+      return mm.analysis.connectivity.perturb_connectome_topology(
+        con_strength, n_deletions=0, n_additions=edit_counts[percentage], seed=seed
+      )
+    raise ValueError(f"unknown operator {operator!r}")
+
+  # 2. Stage 1: parallel corrupt + eigendecompose + cache (permanent - see
+  # prose above for why this differs from the no-STC-saved choice below)
+  cache_dir = dm.roots["mm"]/f"sub-{sub}"/"cst_cache"
+
+  cache_tasks = [
+    ConnectomeCacheTask(label=f"{operator}_pct{pct}", args=(operator, pct, 0))
+    for operator in operators
+    for pct in percentages
+    if pct != 0
+  ]
+  print(f"{len(cache_tasks)} connectomes to cache: {[t.label for t in cache_tasks]}")
+
+  cache_paths = cache_cst_batch(cache_tasks, corrupt, cache_dir, n_jobs=n_jobs_cache, n_threads_per_job=2, overwrite=overwrite)
+
+  # 3. Probe-set runs (same selection as surrogate_reconstruction.py)
+  probe_set = pd.read_csv(f"./results/sub-{sub}_probe-set.csv")
+  index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
+  index["region"] = index["source_index_list"].apply(lambda s: ast.literal_eval(s)[0])
+  probe_runs = index[
+    index["region"].isin(probe_set["region"]) & (index["repetition"] <= n_reps_per_region)
+  ]["run"].tolist()
+
+  inverse_tasks = [
+    InverseSimTask(
+      run=int(r),
+      simulator_dir=simulator_dir,
+      fave=dm.get_path(sub, "ave", task="spk", run=int(r)),
+      fcov=dm.get_path(sub, "cov", task="spk", run=int(r)),
+      fgold=dm.get_path(sub, "gold", task="spk", run=int(r)),
+      fsource=sources_dir/f"run-{int(r):03d}_source.json",
+    )
+    for r in probe_runs
+  ]
+  print(f"{len(inverse_tasks)} probe-set runs ({len(probe_set)} regions x {n_reps_per_region} reps).")
+
+  # 4. Stage 2 setup: preprocess/reconstruct/postprocess - hrp/pp picked from
+  # each run's own clean gold, same fix noise_sweep_reconstruction.py uses,
+  # needed here too since hrp/pp indices must be identical across every
+  # connectome variant for a given run to stay comparable
+  def preprocess_hrp_pp(ctx):
+    ave, gold, simulator = ctx["ave"], ctx["gold"], ctx["simulator"]
+    clean_ave = mne.apply_forward(simulator.hm.fwd, gold, ave.info)
+    hrp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=0.5, as_idx=True)[0]
+    pp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=1, as_idx=True)[0]
+    phase_data = mne.EvokedArray(
+      ave.data[:, [hrp_idx, pp_idx]], ave.info, tmin=0, nave=ave.nave, kind=ave.kind
+    )
+    return {"phase_data": phase_data, "hrp_idx": hrp_idx, "pp_idx": pp_idx}
+
+  def make_reconstruct(eigvec, eigval):
+    def reconstruct(ctx):
+      data, ncov = ctx["phase_data"], ctx["ncov"]
+      inv_wcset = mm.analysis.inverse.wCSET(
+        forward=fwd, noise_cov=ncov, depth=0.2, eigenvectors=eigvec, eigenvalues=eigval,
+        harm=0.5, harmonic_method="lowpass",
+      )
+      inv_cset = mm.analysis.inverse.CSET(forward=fwd, noise_cov=ncov, depth=0.2, eigenvectors=eigvec)
+      solutions = {
+        "wcset": inv_wcset.solve(data, lambda2=0.1),
+        "cset": inv_cset.solve(data, lambda2=0.1),
+      }
+      return {"solutions": solutions}
+    return reconstruct
+
+  def postprocess_score(ctx):
+    gold, hrp_idx, pp_idx = ctx["gold"], ctx["hrp_idx"], ctx["pp_idx"]
+    src, simulator = ctx["src"], ctx["simulator"]
+    true_source_mask = src.select_targets(simulator.hm.src, simulator.hm.parc, simulator.hm.ras2tkras)
+    gold_hrp, gold_pp = gold.data[:, hrp_idx], gold.data[:, pp_idx]
+
+    rows = []
+    for method, sol in ctx["solutions"].items():
+      sol_hrp, sol_pp = sol.data[:, 0], sol.data[:, 1]
+      hit = find_peak_localization_error(sol_hrp, true_source_mask, dipole_positions)
+      rows.append({
+        "method": method,
+        "correlation_hrp": np.corrcoef(gold_hrp, sol_hrp)[0, 1],
+        "correlation_pp": np.corrcoef(gold_pp, sol_pp)[0, 1],
+        "localization_error_hrp": hit["distance_mm"],
+        "ap_hrp": mm.core.calc_pr_curve(gold_hrp > 0, sol_hrp)["ap"],
+        "ap_pp": mm.core.calc_pr_curve(gold_pp > 0, sol_pp)["ap"],
+      })
+    return rows
+
+  # 5. Stage 2: sequential connectomes x parallel runs - no STC ever written
+  # to disk, solutions discarded right after scoring (see prose above)
+  metrics = {op: mm.metric.MetricSuite(f"sub-{sub} connectome degradation - {op}") for op in operators}
+
+  for operator in operators:
+    for pct in percentages:
+      if pct == 0:
+        eigvec, eigval = eigvec_clean, eigval_clean
+      else:
+        cached = np.load(cache_paths[f"{operator}_pct{pct}"])
+        eigvec, eigval = cached["vec"], cached["val"]
+
+      # n_threads_per_job=1: n_jobs already saturates the 32-core budget, see
+      # project memory on run_parallel_pipeline thread capping
+      results = run_parallel_pipeline(
+        inverse_tasks, preprocess_hrp_pp, make_reconstruct(eigvec, eigval), postprocess_score,
+        n_jobs=n_jobs_solve, n_threads_per_job=1, verbose="warning",
+      )
+
+      for run_rows in results:
+        for row in run_rows:
+          method = row["method"]
+          metrics[operator].register(method, "correlation_hrp", row["correlation_hrp"], percentage=pct)
+          metrics[operator].register(method, "correlation_pp", row["correlation_pp"], percentage=pct)
+          metrics[operator].register(method, "localization_error_hrp", row["localization_error_hrp"], percentage=pct)
+          metrics[operator].register(method, "ap_hrp", row["ap_hrp"], percentage=pct)
+          metrics[operator].register(method, "ap_pp", row["ap_pp"], percentage=pct)
+
+      print(f"[{operator}] {pct}% done ({len(inverse_tasks)} runs x 2 methods).")
+
+  for operator in operators:
+    metrics[operator].save(fmetrics[operator], overwrite=overwrite)
+
+run_degradation_reconstruction(overwrite=True)
+```
+
+## Experiment 3: Surrogate-Connectome Reconstruction & Validation
+
+Reconstructs CSET & wCSET (only - dSPM/sLORETA don't depend on the
+connectome, so their original-connectome probe-set results are reused
+unchanged as the surrogate-agnostic reference) on the probe-set runs, once
+per surrogate, and scores them - one cell, no STC files ever written to
+disk.
+
+⚠ **Merged from two previously separate cells**
+(`surrogate_reconstruction.py`/`surrogate_comparison.py`), for the same
+reason `degradation_reconstruction.py` was never split into a
+reconstruction/comparison pair in the first place: reconstruction here is
+cheap enough (probe-set runs x 2 methods x 2 timepoints per surrogate) that
+a persisted-STC checkpoint is unneeded overhead, not a real resume point.
+The old two-cell version also reconstructed on the *entire* cropped
+`[-0.01, 0.15]` window (not just hrp/pp) via raw `joblib.Parallel`, rather
+than `InverseSimTask`/`run_parallel_pipeline` - both fixed here, matching
+`degradation_reconstruction.py`'s design exactly: `preprocess_hrp_pp`/
+`make_reconstruct`/`postprocess_score` below are the same functions, just
+looping over `surrogates` (a flat list) instead of `(operator, percentage)`
+pairs, since surrogate identity has no natural sweep ordering the way
+degradation severity does.
+
+⚠ **Metric set changed as a result**: the old `surrogate_comparison.py`
+computed a full spatial-correlation-over-time curve and full
+precision-recall curves at hrp/pp (mirroring `comparison.py`'s flagship
+figures) - not possible anymore once solving is reduced to 2 timepoints.
+Now computes the same 5 scalars per run/method as
+`degradation_reconstruction.py` (`correlation_hrp`/`_pp`, `ap_hrp`/`_pp`,
+`localization_error_hrp` - the last one new, wasn't computed for surrogates
+before), trading full-curve figures for speed and consistency with
+Experiment 2. `localization_error_hrp` costs nothing extra here either, for
+the same reason it didn't in `degradation_reconstruction.py`:
+`InverseSimTask` already loads `simulator`/`src` for free.
+
+**Parameter choices:**
+
+- `surrogates = ["atlas-a2a", "atlas-a2a-bin", "fused", "fused-bin",
+  "geom-atlas", "geom-atlas-bin"]`: all 6 previously-built surrogates,
+  including their binary (edge-presence-only) variants - unchanged from
+  before, already correct.
+- `n_reps_per_region = 8` (changed from 5 - now the full flagship
+  repetition count, not a subset - same change already made to
+  `degradation_reconstruction.py`).
+- CSET's `depth = 0.2`, `lambda2 = 0.1` (per explicit instruction,
+  superseding this file's earlier `depth=0.8`/`lambda2=1.0` - itself raised
+  from `0.1`, see `solve_inverse.py`'s prose above for the
+  `lambda2-tuning.ipynb` sweep this comes from). wCSET's `depth = 0.2`,
+  `harm = 0.5`, `harmonic_method="lowpass"` now passed explicitly (also per
+  explicit instruction, superseding the earlier `depth=0.8`/`harm=0.8`/
+  default `"gap"`), `lambda2 = 0.1` unchanged - all unchanged across all 6
+  surrogates - not retuned per surrogate's edge density. This is a
+  documented assumption, not a verified sub-sweep (parallel to the same
+  assumption flagged for the noise-robustness experiment).
+- **CSET/wCSET only** - matches `degradation_reconstruction.py`'s
+  convention exactly.
+- Reconstruction at half-rising-phase and peak-phase only, not the full
+  cropped window - see ⚠ notes above.
+- **Output**: one `MetricSuite` per surrogate, saved to
+  `results/sub-10_simf-metrics_{surrogate}` - same file paths as the old
+  `surrogate_comparison.py` used, so anything already pointed at these
+  paths keeps working once this cell is rerun.
+- `n_threads_per_job=1` on the `run_parallel_pipeline` call - see project
+  memory on thread capping; `n_jobs_solve=25` already saturates this
+  machine's 32-core budget, so no per-worker headroom for more than 1 BLAS
+  thread each.
+
+```{python filename="surrogate_reconstruction.py"}
+# | output: false
+
+import ast
+from pathlib import Path
+
+import mne
+import numpy as np
+import pandas as pd
+
+import mindmap as mm
+from mindmap.analysis.functional.common.metric import find_peak_localization_error
+from mindmap.analysis.functional.inverse import InverseSimTask, run_parallel_pipeline
+from scripts.data_manager import SimfManager
+from scripts.utils import check_files
+
+# data manager
+dm = SimfManager("simf.config.yml")
+sub = "10"
+
+surrogates = ["atlas-a2a", "atlas-a2a-bin", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin"]
+n_reps_per_region = 8   # full flagship repetition count, not a subset
+
+n_jobs_solve = 25   # reconstruct+score, parallelized across probe-set runs
+
+def run_surrogate_reconstruction(overwrite=False):
+  fmetrics = {s: Path(f"./results/sub-{sub}_simf-metrics_{s}") for s in surrogates}
+  if all(check_files([f/"meta.json"]) for f in fmetrics.values()) and not overwrite:
+    print("Already exists, skipping.")
+    return
+
+  # 0. Subject-level data (run-independent)
+  fwd = dm.load(sub, "fwd", desc="inv")
+  dipole_positions = mm.anatomy.source_space.get_dipole_positions(fwd["src"]) * 1000
+  simulator_dir = dm.roots["sim"]/f"sub-{sub}"/"simulator"
+  sources_dir = dm.roots["sim"]/f"sub-{sub}"/"sources"
+
+  # 1. Probe-set runs (same selection as degradation_reconstruction.py)
+  probe_set = pd.read_csv(f"./results/sub-{sub}_probe-set.csv")
+  index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
+  index["region"] = index["source_index_list"].apply(lambda s: ast.literal_eval(s)[0])
+  probe_runs = index[
+    index["region"].isin(probe_set["region"]) & (index["repetition"] <= n_reps_per_region)
+  ]["run"].tolist()
+
+  inverse_tasks = [
+    InverseSimTask(
+      run=int(r),
+      simulator_dir=simulator_dir,
+      fave=dm.get_path(sub, "ave", task="spk", run=int(r)),
+      fcov=dm.get_path(sub, "cov", task="spk", run=int(r)),
+      fgold=dm.get_path(sub, "gold", task="spk", run=int(r)),
+      fsource=sources_dir/f"run-{int(r):03d}_source.json",
+    )
+    for r in probe_runs
+  ]
+  print(f"{len(inverse_tasks)} probe-set runs ({len(probe_set)} regions x {n_reps_per_region} reps).")
+
+  # 2. Preprocess/reconstruct/postprocess - hrp/pp picked from each run's own
+  # clean gold, same fix noise_sweep_reconstruction.py/
+  # degradation_reconstruction.py use, needed here too so hrp/pp indices stay
+  # identical across every surrogate for a given run
+  def preprocess_hrp_pp(ctx):
+    ave, gold, simulator = ctx["ave"], ctx["gold"], ctx["simulator"]
+    clean_ave = mne.apply_forward(simulator.hm.fwd, gold, ave.info)
+    hrp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=0.5, as_idx=True)[0]
+    pp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=1, as_idx=True)[0]
+    phase_data = mne.EvokedArray(
+      ave.data[:, [hrp_idx, pp_idx]], ave.info, tmin=0, nave=ave.nave, kind=ave.kind
+    )
+    return {"phase_data": phase_data, "hrp_idx": hrp_idx, "pp_idx": pp_idx}
+
+  def make_reconstruct(eigvec, eigval):
+    def reconstruct(ctx):
+      data, ncov = ctx["phase_data"], ctx["ncov"]
+      inv_wcset = mm.analysis.inverse.wCSET(
+        forward=fwd, noise_cov=ncov, depth=0.2, eigenvectors=eigvec, eigenvalues=eigval,
+        harm=0.5, harmonic_method="lowpass",
+      )
+      inv_cset = mm.analysis.inverse.CSET(forward=fwd, noise_cov=ncov, depth=0.2, eigenvectors=eigvec)
+      solutions = {
+        "wcset": inv_wcset.solve(data, lambda2=0.1),
+        "cset": inv_cset.solve(data, lambda2=0.1),
+      }
+      return {"solutions": solutions}
+    return reconstruct
+
+  def postprocess_score(ctx):
+    gold, hrp_idx, pp_idx = ctx["gold"], ctx["hrp_idx"], ctx["pp_idx"]
+    src, simulator = ctx["src"], ctx["simulator"]
+    true_source_mask = src.select_targets(simulator.hm.src, simulator.hm.parc, simulator.hm.ras2tkras)
+    gold_hrp, gold_pp = gold.data[:, hrp_idx], gold.data[:, pp_idx]
+
+    rows = []
+    for method, sol in ctx["solutions"].items():
+      sol_hrp, sol_pp = sol.data[:, 0], sol.data[:, 1]
+      hit = find_peak_localization_error(sol_hrp, true_source_mask, dipole_positions)
+      rows.append({
+        "method": method,
+        "correlation_hrp": np.corrcoef(gold_hrp, sol_hrp)[0, 1],
+        "correlation_pp": np.corrcoef(gold_pp, sol_pp)[0, 1],
+        "localization_error_hrp": hit["distance_mm"],
+        "ap_hrp": mm.core.calc_pr_curve(gold_hrp > 0, sol_hrp)["ap"],
+        "ap_pp": mm.core.calc_pr_curve(gold_pp > 0, sol_pp)["ap"],
+      })
+    return rows
+
+  # 3. One connectome (surrogate) at a time x parallel runs - no STC ever
+  # written to disk, solutions discarded right after scoring
+  for surrogate in surrogates:
+    if check_files([fmetrics[surrogate]/"meta.json"]) and not overwrite:
+      print(f"[{surrogate}] already exists, skipping.")
+      continue
+
+    eig = dm.load(sub, "eig", desc=surrogate)
+    eigvec, eigval = eig["vec"], eig["val"]
+
+    # n_threads_per_job=1: n_jobs already saturates the 32-core budget, see
+    # project memory on run_parallel_pipeline thread capping
+    results = run_parallel_pipeline(
+      inverse_tasks, preprocess_hrp_pp, make_reconstruct(eigvec, eigval), postprocess_score,
+      n_jobs=n_jobs_solve, n_threads_per_job=1, verbose="warning",
+    )
+
+    metrics = mm.metric.MetricSuite(f"sub-{sub} simulation validation - surrogate {surrogate}")
+    for run_rows in results:
+      for row in run_rows:
+        method = row["method"]
+        metrics.register(method, "correlation_hrp", row["correlation_hrp"])
+        metrics.register(method, "correlation_pp", row["correlation_pp"])
+        metrics.register(method, "localization_error_hrp", row["localization_error_hrp"])
+        metrics.register(method, "ap_hrp", row["ap_hrp"])
+        metrics.register(method, "ap_pp", row["ap_pp"])
+
+    metrics.save(fmetrics[surrogate], overwrite=overwrite)
+    print(f"[{surrogate}] done ({len(inverse_tasks)} runs x 2 methods).")
+
+run_surrogate_reconstruction(overwrite=True)  # must force-regen: old metrics used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; wcset now depth=0.2/harm=0.5/harmonic_method="lowpass" (was depth=0.8/harm=0.8/default "gap")
 ```

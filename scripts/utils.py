@@ -47,7 +47,7 @@ def loop(subjects):
     return decorator
 
 
-def check_files(files: list[Path]):
+def check_files(files: list[Path], silent: bool = False):
     """Check if files exist. Returns 1 at least 1 file does."""
 
     for f in files:
@@ -55,7 +55,8 @@ def check_files(files: list[Path]):
         if f.name.endswith("stc"):
             f = f.parent/f"{f.name}-lh.stc"
         if f.exists():
-            logger.info("Following file already exists: %s", str(f))
+            if not silent:
+                logger.info("Following file already exists: %s", str(f))
             return True
         
         # create parent directory if doesn't exist
