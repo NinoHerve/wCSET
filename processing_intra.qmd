@@ -592,9 +592,10 @@ sharing sLORETA/dSPM's `depth=None` one.
   value found near-optimal in Lin et al. 2006's original depth-weighting
   paper), no longer tied to CSET/wCSET's own `depth`, both of which have
   since moved to `0.2`.
-- `harm = 0.5`, `harmonic_method = "lowpass"` (wCSET's harmonic weighting) -
-  per explicit instruction, superseding the earlier `harm = 5` (itself
-  previously `harm = 0.7` with the default `"gap"` method).
+- `harm = 5`, `harmonic_method = "lowpass"` (wCSET's harmonic weighting) -
+  restored after a typo briefly set it to `harm = 0.5` instead (itself
+  previously `harm = 0.7` with the default `"gap"` method, before the
+  `harmonic_method = "lowpass"` switch).
 - `noise_norm` dropped from the wCSET call - it was only ever set to
   `None`, its own class default, and isn't passed in
   `processing_spike.qmd`'s equivalent call either; removed for consistency,
@@ -652,7 +653,7 @@ def source_recon(sub, overwrite=True):
         depth = 0.2,                # depth weighting
         eigenvectors = eig["vec"],
         eigenvalues = eig["val"],
-        harm = 0.5,                 # harmonic weighting
+        harm = 5,                   # harmonic weighting
         harmonic_method = "lowpass",
     )
     wcset = inv.solve(ave, lambda2)
@@ -687,7 +688,7 @@ def source_recon(sub, overwrite=True):
     dspm.save(fdspm, overwrite=overwrite, verbose="warning")
     wmne.save(fwmne, overwrite=overwrite, verbose="warning")
 
-source_recon(overwrite=True)  # must force-regen: CSET now depth=0.2/lambda2=0.1 (was depth=0.8/lambda2=1), wCSET now depth=0.2/harm=0.5 (was depth=0.5/harm=5), wMNE renamed from mne with its own depth-weighted operator
+source_recon(overwrite=True)  # must force-regen: CSET now depth=0.2/lambda2=0.1 (was depth=0.8/lambda2=1), wCSET's harm was mistakenly set to 0.5, now fixed to the intended harm=5 (depth=0.2 unaffected, unchanged from the prior run), wMNE renamed from mne with its own depth-weighted operator
 ```
 
 
@@ -753,7 +754,7 @@ def compute_vieeg(sub, overwrite):
     for i, m in enumerate(methods):
         vieeg[i].save(files[i], overwrite=overwrite, verbose="warning")
 
-compute_vieeg(overwrite=False)
+compute_vieeg(overwrite=True)  # must force-regen: existing v-ave outputs predate this session's solve_inverse.py parameter changes, so overwrite=False would silently skip already-processed subjects and leave them stale
 ```
 
 ## Fidelity metrics
@@ -865,6 +866,6 @@ def evaluate_vieeg_fidelity(sub, overwrite):
     # 4. Save
     metrics.save(fmetrics, overwrite=overwrite)
 
-evaluate_vieeg_fidelity(overwrite=False)
+evaluate_vieeg_fidelity(overwrite=True)  # must force-regen: results/intra_vieeg_metrics predates this session's solve_inverse.py/compute_vieeg.py changes, so overwrite=False would silently skip already-processed subjects and leave them stale
 ```
 

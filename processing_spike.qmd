@@ -533,9 +533,10 @@ value as CSET/wCSET's own `depth`, both of which have since moved to `0.2`
   by sLORETA/dSPM - see the ⚠ note above for why wMNE needs its own,
   separate, depth-weighted inverse operator rather than sharing
   sLORETA/dSPM's.
-- `harm = 0.5`, `harmonic_method = "lowpass"` (wCSET's harmonic weighting) -
-  per explicit instruction, superseding the earlier `harm = 5` (itself
-  previously `harm = 0.7` with the default `"gap"` method).
+- `harm = 5`, `harmonic_method = "lowpass"` (wCSET's harmonic weighting) -
+  restored after a typo briefly set it to `harm = 0.5` instead (itself
+  previously `harm = 0.7` with the default `"gap"` method, before the
+  `harmonic_method = "lowpass"` switch).
 - `fixed = True` (fixed-orientation dipoles, for the `mne.minimum_norm`
   inverse operator): **FILL**
 
@@ -599,7 +600,7 @@ def source_recon(sub, overwrite=True):
         depth = 0.2,                # depth weighting
         eigenvectors = eig["vec"],
         eigenvalues = eig["val"],
-        harm = 0.5,                 # harmonic weighting
+        harm = 5,                   # harmonic weighting
         harmonic_method = "lowpass",
     )
     wcset = inv.solve(ave, lambda2)
@@ -634,7 +635,7 @@ def source_recon(sub, overwrite=True):
     dspm.save(fdspm, overwrite=overwrite, verbose="warning")
     wmne.save(fwmne, overwrite=overwrite, verbose="warning")
 
-source_recon(overwrite=True)  # must force-regen: CSET now depth=0.2/lambda2=0.1 (was depth=0.8/lambda2=1), wCSET now depth=0.2/harm=0.5 (was depth=0.5/harm=5), wMNE renamed from mne with its own depth-weighted operator
+source_recon(overwrite=True)  # must force-regen: CSET now depth=0.2/lambda2=0.1 (was depth=0.8/lambda2=1), wCSET's harm was mistakenly set to 0.5, now fixed to the intended harm=5 (depth=0.2 unaffected, unchanged from the prior run), wMNE renamed from mne with its own depth-weighted operator
 ```
 
 
@@ -850,7 +851,7 @@ def evaluate_resection_localization(sub, overwrite=False):
     rows = pd.DataFrame(rows)
     mm.core.write_csv_row(fmetrics, rows, index_cols=["subject", "method", "phase"], write_new=True)
 
-evaluate_resection_localization(overwrite=False)
+evaluate_resection_localization(overwrite=True)  # must force-regen: results/spike_resection_metrics.csv predates this session's solve_inverse.py parameter changes (depth/lambda2/harm, wMNE rename), so overwrite=False would silently skip already-processed subjects and leave them stale
 ```
 
 ## Chance-Level Cluster Threshold

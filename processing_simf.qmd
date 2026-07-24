@@ -681,52 +681,106 @@ surrogates than this cell used before:
   confirmed (in the reference notebook) to reach a single connected
   component. `connectome_from_geometry` gained this parameter after this
   cell was first written.
-- **`atlas-a2a`** (all-to-all, `sparsity = 1.0`) - **kept as explicitly
-  instructed**, alongside a new **binary** version `atlas-a2a-bin`. Not the
-  same as the reference notebook's dropped "atlas-only" case: that case had
-  *no* geometry fill at all (known to leave isolated nodes); this cell's
-  `atlas-a2a` has always been geometry-filled like the others, just at
-  `sparsity=1.0` instead of `0.14` - a different, still well-formed
-  surrogate the reference notebook simply didn't include in its own
-  comparison.
+- **`beltrami`** (replaces `atlas-a2a`/`atlas-a2a-bin`, dropped entirely -
+  not kept alongside, per explicit instruction): the source space's own
+  Laplace-Beltrami mesh-geometry eigenbasis, computed directly by
+  `mm.anatomy.source_space.compute_beltrami_harmonics(src)` - a pure-shape
+  control condition with **no connectome/connectivity matrix involved at
+  all**, unlike every other surrogate in this cell. Full design rationale in
+  `tutorials/analysis/connectomic/beltrami_harmonics_notes.md` and
+  `tutorials/analysis/inverse/beltrami-prior-tuning.ipynb` in the `mindmap`
+  repo; summary:
+  - Built directly on the coarse, already-decimated per-hemisphere
+    source-space mesh (the same `src` used everywhere else in this
+    pipeline), not the dense FreeSurfer surface - a dense eigh on the fine
+    ~112k-vertex mesh is computationally infeasible, and point-sampling a
+    fine-mesh solution down to the coarse dipole set would alias.
+  - Each hemisphere is solved as its own independent Laplace-Beltrami
+    problem, with Neumann/natural boundary conditions at the medial-wall
+    opening (the mesh has a boundary there, not a closed manifold) - not
+    pinned to zero, since the medial wall isn't a real neural boundary, just
+    where cortex modeling stops.
+  - `lapy`'s generalized-eigenproblem solve gives mass-orthonormal columns
+    (`ψᵀBψ = I`), not the Euclidean orthonormality (`UᵀU = I`) `wCSET`'s
+    harmonic-prior math needs - rescaled by `sqrt(diag(B))` to fix this,
+    the mesh-case analogue of the free orthonormality `compute_cst` already
+    gets from plain (non-generalized) `eigh`.
+  - Hemispheres are kept fully independent - no cross-hemisphere connection
+    of any kind, not even homotopic mirroring (unlike `geom-atlas`'s
+    `inter_hemi_mirror`). Connecting them would reintroduce a
+    connectivity-like assumption into what's meant to be a pure-geometry,
+    connectivity-free control condition, defeating the point of the
+    comparison.
+  - One per-subject dipole with no incident all-cortex face (a dangling
+    vertex right at the medial-wall boundary) is left as an exact all-zero
+    row rather than patched - nearest-neighbor patching was tried first and
+    measurably broke orthonormality by up to 13% on some `UᵀU` diagonal
+    entries.
+  - Returns `(eigvec, eigval)` directly, same convention as `compute_cst`
+    (full, never-truncated spectrum; ascending eigenvalue order; each
+    disconnected component's - i.e. each hemisphere's - first eigenvalue
+    clamped to exactly 0), so it's drop-in-compatible with
+    `wCSET(eigenvectors=eigvec, eigenvalues=eigval, ...)` - but **no
+    connectivity matrix is ever built or saved** for this surrogate: there
+    is no `con` file, only `eig`.
+- No `beltrami-bin` binary variant: unlike every other surrogate here,
+  `beltrami` has no connectivity matrix to threshold in the first place, so
+  there is no natural "edge presence" notion to binarize - only a
+  continuous eigenbasis.
 - **Dropped** (per the reference notebook, not carried over): atlas-only
   with no geometric fill (leaves isolated nodes - never used in this cell
   either), and geometry-only at the *empirical* `15mm/8neigh` params (this
   cell never had that variant - its geometry-only surrogate always used the
   atlas `22mm/35neigh` params, now `geom-atlas`).
 
-Six surrogates total now: `atlas-a2a`, `atlas-a2a-bin`, `fused`,
-`fused-bin`, `geom-atlas`, `geom-atlas-bin`. ⚠ `surrogate_reconstruction.py`
-and `surrogate_comparison.py` further below both hardcode the surrogate list
-to match - updated together with this cell, since they'd otherwise try to
-load `desc="atlas-s2s"`/`desc="geom-only"` files this cell no longer writes.
+Five surrogates total now: `beltrami`, `fused`, `fused-bin`, `geom-atlas`,
+`geom-atlas-bin` (down from the six-surrogate set above once `atlas-a2a`/
+`atlas-a2a-bin` are dropped in favor of the single `beltrami` surrogate -
+see bullet above). ⚠ `surrogate_reconstruction.py` further below hardcodes
+the surrogate list to match - updated together with this cell, since it
+would otherwise try to load `desc="atlas-a2a"`/`desc="atlas-a2a-bin"` `eig`
+files this cell no longer writes. (Note, incidental to this change:
+`surrogate_comparison.py` no longer exists as a separate cell either - it
+was merged into `surrogate_reconstruction.py` earlier, see that cell's own
+prose further below - so the previous wording here, which still named it as
+a second file to keep in sync, was already stale before this edit.)
 
 **Parameter choices:**
 
 - `consistency > 65`: aligned with `processing_spike.qmd`'s working code
   (not `index.qmd` §2.3.3's currently-stale `>60` - fixed there too, see
   below).
-- All-to-all: `sparsity = 1.0`. Fused: `sparsity = 0.14` (same value used
-  for the SPIKE cohort). `deterministic = True` for both.
-- Geometry fill for the atlas-based surrogates (`atlas-a2a`, `fused`):
-  `maximum_dist = 22`, `maximum_neigh = 35`, `weights = True`, no
-  `inter_hemi_mirror` - the SPIKE study's parameters, reused here as
-  instructed, unchanged by the interhemispheric-mirror fix (that fix is
-  additive/independent and only applied to the standalone `geom-atlas`
-  surrogate, per the reference notebook's own plan: "do not change the
-  fused recipe's own geometric gap-fill call").
+- Fused: `sparsity = 0.14` (same value used for the SPIKE cohort),
+  `deterministic = True`.
+- `beltrami`: no free parameters at all - `compute_beltrami_harmonics(src)`
+  takes only the source space itself; no sparsity/geometry-fill/mirror
+  choice applies, since there is no connectivity-matrix construction step
+  for this surrogate in the first place.
+- Geometry fill for the fused surrogate: `maximum_dist = 22`,
+  `maximum_neigh = 35`, `weights = True`, no `inter_hemi_mirror` - the SPIKE
+  study's parameters, reused here as instructed, unchanged by the
+  interhemispheric-mirror fix (that fix is additive/independent and only
+  applied to the standalone `geom-atlas` surrogate, per the reference
+  notebook's own plan: "do not change the fused recipe's own geometric
+  gap-fill call").
 - `geom-atlas`'s own geometry connectome: same `22mm/35neigh` params, plus
   `inter_hemi_mirror = True` (see note above).
-- Fuse rule (atlas surrogates only): geometry fills a dipole pair only where
-  the atlas surrogate left it unconnected (`con_atlas == 0`) - atlas edges
-  are never overwritten by geometry. `geom-atlas` skips the atlas term and
-  this fuse step entirely.
-- Spectral step: `inv_con = 1/con` (distances -> similarity weights) before
+- Fuse rule (`fused` only): geometry fills a dipole pair only where the
+  atlas connectome left it unconnected (`con_atlas == 0`) - atlas edges are
+  never overwritten by geometry. `geom-atlas` skips the atlas term and this
+  fuse step entirely; `beltrami` skips it too (no connectome, no fill, no
+  atlas term of any kind).
+- Spectral step (`fused`, `geom-atlas` and their binary variants only):
+  `inv_con = 1/con` (distances -> similarity weights) before
   `mm.analysis.connectivity.compute_cst(inv_con)` - matches the main simf
   connectome cell (`connectivity.py`, further above), which now uses the
-  same shared helper instead of a manual `pygsp`+`eigh` call.
-- Each surrogate's `con`/`eig` is saved under its own `desc` entity - the
-  original tractography-based `con`/`eig` (no `desc`) is never touched.
+  same shared helper instead of a manual `pygsp`+`eigh` call. `beltrami` has
+  no equivalent step: its `eigvec`/`eigval` come directly from
+  `compute_beltrami_harmonics(src)`, with no `inv_con`/`compute_cst` call at
+  all, since there is no connectivity matrix to invert or decompose.
+- Each surrogate's `con`/`eig` is saved under its own `desc` entity (except
+  `beltrami`, which has no `con` file at all - see above) - the original
+  tractography-based `con`/`eig` (no `desc`) is never touched.
 
 ```{python filename="surrogate_connectivity.py"}
 # | output: false
@@ -757,8 +811,8 @@ def run_surrogate_connectivity(overwrite=False):
   atlas = length * atlas  # weight = avg fiber lengths
 
   # 1. Geometry connectivity, two variants:
-  # - con_geom_fill: gap-filler for the atlas-based surrogates below,
-  #   unmirrored (exact connectome-atlas.ipynb recipe - not touched by the
+  # - con_geom_fill: gap-filler for the fused surrogate below, unmirrored
+  #   (exact connectome-atlas.ipynb recipe - not touched by the
   #   interhemispheric-mirror fix, which is only for the standalone surrogate)
   # - con_geom_atlas: the standalone geometry-only surrogate, with
   #   inter_hemi_mirror=True (homotopic mirror-matching) so it doesn't ship
@@ -780,18 +834,7 @@ def run_surrogate_connectivity(overwrite=False):
 
   surrogates = {}
 
-  # 2. All-to-all atlas surrogate (kept as explicitly instructed) + binary
-  con_a2a = mm.analysis.connectivity.connectome_from_atlas(
-    src, parc, atlas, ras2tkras,
-    sparsity = 1.0,
-    deterministic = True,
-  )
-  fill_idx = np.argwhere((con_geom_fill > 0) & (con_a2a == 0))
-  con_a2a[fill_idx[:,0], fill_idx[:,1]] = con_geom_fill[fill_idx[:,0], fill_idx[:,1]]
-  surrogates["atlas-a2a"] = con_a2a
-  surrogates["atlas-a2a-bin"] = (con_a2a > 0).astype(float)
-
-  # 3. Fused surrogate (some-to-some atlas + geometry fill) + binary
+  # 2. Fused surrogate (some-to-some atlas + geometry fill) + binary
   con_fused = mm.analysis.connectivity.connectome_from_atlas(
     src, parc, atlas, ras2tkras,
     sparsity = 0.14,
@@ -802,12 +845,12 @@ def run_surrogate_connectivity(overwrite=False):
   surrogates["fused"] = con_fused
   surrogates["fused-bin"] = (con_fused > 0).astype(float)
 
-  # 4. Geometry-only surrogate, atlas params, homotopic interhemispheric
+  # 3. Geometry-only surrogate, atlas params, homotopic interhemispheric
   # connections (no atlas term, no fuse) + binary
   surrogates["geom-atlas"] = con_geom_atlas
   surrogates["geom-atlas-bin"] = (con_geom_atlas > 0).astype(float)
 
-  # 5. Spectral decomposition + save, per surrogate
+  # 4. Spectral decomposition + save, per connectome-based surrogate
   for desc, con in surrogates.items():
     fcon = dm.get_path(sub, "con", desc=desc)
     feig = dm.get_path(sub, "eig", desc=desc)
@@ -822,7 +865,22 @@ def run_surrogate_connectivity(overwrite=False):
     np.save(fcon, con)
     mm.core.write_eig(feig, eigvec, eigval)
 
-run_surrogate_connectivity(overwrite=False)
+  # 5. Beltrami harmonics surrogate: pure cortical-shape control condition,
+  # no connectivity matrix built or saved at all (no atlas/geometry
+  # connectome step, no fuse, no `con` file) - eigvec/eigval come directly
+  # from the source space's own mesh geometry. See this cell's prose above
+  # for the full rationale (Neumann BC at the medial wall, independent
+  # hemispheres, re-orthonormalization, the one dangling-dipole zero row).
+  desc = "beltrami"
+  feig = dm.get_path(sub, "eig", desc=desc)
+
+  if check_files([feig]) and not overwrite:
+    print(f"[{desc}] already exists, skipping.")
+  else:
+    eigvec, eigval = mm.anatomy.source_space.compute_beltrami_harmonics(src)
+    mm.core.write_eig(feig, eigvec, eigval)
+
+run_surrogate_connectivity(overwrite=True)
 ```
 
 # Simulation
@@ -1360,12 +1418,13 @@ cell still matches them exactly.
   wMNE depth-weighting split above), rather than being independently tuned:
   SNR-adaptive `lambda2` (`max(0.01, 1/snr.max()**2)`, computed per run) for
   dspm/sloreta/wmne/wcset, fixed `0.1` for cset (see next bullet), and
-  `wCSET(depth=0.2, harm=0.5, harmonic_method="lowpass")` - both `depth` and
-  `harm` per explicit instruction, superseding this cell's previous
-  `depth=0.5`/`harm=5`. This resolves the previous open question of why
+  `wCSET(depth=0.2, harm=5, harmonic_method="lowpass")` - `depth` per
+  explicit instruction, superseding this cell's previous `depth=0.5`;
+  `harm=5` restores this cell's previous value after a typo briefly set it
+  to `harm=0.5` instead. This resolves the previous open question of why
   CSET/wCSET used 10x more regularization than dSPM/sLORETA - it no longer
   is a fixed, independently-tuned choice.
-  ⚠ `depth=0.2`/`harm=0.5`/`harmonic_method="lowpass"` now apply uniformly
+  ⚠ `depth=0.2`/`harm=5`/`harmonic_method="lowpass"` now apply uniformly
   to every wCSET call in this file, including Experiment 3's (surrogates/
   degradation, below), which previously stayed on their own older
   `depth=0.8`/`harm=0.8`/default-`"gap"` convention - the same explicit
@@ -1451,7 +1510,7 @@ def make_reconstruct(fwd, eig):
       inv = mm.analysis.inverse.wCSET(
         forward=fwd, noise_cov=ncov, depth=0.2,
         eigenvectors=eig["vec"], eigenvalues=eig["val"],
-        harm=0.5, harmonic_method="lowpass",
+        harm=5, harmonic_method="lowpass",
       )
       solutions["wcset"] = inv.solve(data, lambda2_auto)
     if "cset" in needed:
@@ -1525,7 +1584,7 @@ def run_solve_inverse(overwrite=False):
     tasks, preprocess_crop, make_reconstruct(fwd, eig), postprocess_save, n_jobs=n_jobs, n_threads_per_job=1,
   )
 
-run_solve_inverse(overwrite=True)  # must force-regen: old STCs used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; wcset now depth=0.2/harm=0.5 (was depth=0.5/harm=5); wMNE (formerly desc="mne") now solved with its own depth=0.8 operator under desc="wmne"
+run_solve_inverse(overwrite=True)  # must force-regen: old STCs used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; wcset's harm was mistakenly set to 0.5, now fixed to the intended harm=5 (depth=0.2 unaffected, unchanged from the prior run); wMNE (formerly desc="mne") now solved with its own depth=0.8 operator under desc="wmne"
 ```
 
 ## Validation Metrics (Flagship)
@@ -1581,6 +1640,7 @@ once per phase and reused for every method's precision-recall indexing.
 ```{python filename="comparison.py"}
 # | output: false
 
+import ast
 from pathlib import Path
 
 import numpy as np
@@ -1682,6 +1742,15 @@ def run_comparison(overwrite=False):
 
   # one row per simulation run
   index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
+  # region lookup for registration below - same derivation/rationale as
+  # noise_sweep_comparison.py/degradation_reconstruction.py/
+  # surrogate_reconstruction.py: lets index.qmd's compare_methods()/
+  # cluster_permutation() pair methods by region (the correct
+  # repeated-measures unit - reps of the same region are correlated draws,
+  # not independent trials) instead of the coarser per-run pairing used
+  # before.
+  index["region"] = index["source_index_list"].apply(lambda s: ast.literal_eval(s)[0])
+  run2region = dict(zip(index["run"], index["region"]))
 
   simulator_dir = dm.roots["sim"]/f"sub-{sub}"/"simulator"
   sources_dir = dm.roots["sim"]/f"sub-{sub}"/"sources"
@@ -1730,6 +1799,7 @@ def run_comparison(overwrite=False):
 
   corr_runs, prhrp_runs, prpp_runs, locerr_runs, times, recall_grid, hrp_times, pp_times = zip(*results)
   run_ids = [t.run for t in tasks]
+  regions = np.array([run2region[r] for r in run_ids])
 
   # one MetricSuite regroups every metric of this study. Each metric is registered
   # as a single (n_runs, n_points) stack and kept as an array internally, which is
@@ -1738,13 +1808,31 @@ def run_comparison(overwrite=False):
   # for why the PR curves are pre-downsampled onto a common recall grid)
   metrics = mm.metric.MetricSuite(f"sub-{sub} simulation validation")
 
+  # correlation/precision_hrp/precision_pp are 2D (n_runs, n_points) stacks -
+  # register() only accepts point-wise coordinates matching n_points (the
+  # last, within-curve axis: times/recall) or a single constant tag for the
+  # whole call, so a per-run `region` (which varies along the first/reps
+  # axis, not points) can't be attached to one combined all-runs call the
+  # way it can for the 1D localization_error_hrp below. Grouping by region
+  # and registering one stacked call per (method, region) instead - every
+  # call's reps then share that region, so it becomes a valid constant tag -
+  # keeps the same "stack of repeated observations" efficiency the single
+  # all-runs call had, while letting index.qmd's compare_methods()/
+  # cluster_permutation() pair regions across methods (same convention as
+  # noise_sweep_comparison.py/degradation_reconstruction.py/
+  # surrogate_reconstruction.py).
+  unique_regions = np.unique(regions)
   for m in methods:
-    metrics.register(m, "correlation", np.stack([r[m] for r in corr_runs]), times=times[0])
-    metrics.register(m, "precision_hrp", np.stack([r[m] for r in prhrp_runs]), recall=recall_grid[0])
-    metrics.register(m, "precision_pp", np.stack([r[m] for r in prpp_runs]), recall=recall_grid[0])
+    for region in unique_regions:
+      idx = np.where(regions == region)[0]
+      metrics.register(m, "correlation", np.stack([corr_runs[i][m] for i in idx]), times=times[0], region=region)
+      metrics.register(m, "precision_hrp", np.stack([prhrp_runs[i][m] for i in idx]), recall=recall_grid[0], region=region)
+      metrics.register(m, "precision_pp", np.stack([prpp_runs[i][m] for i in idx]), recall=recall_grid[0], region=region)
     # scalar per run, half-rising-phase only - same one-point-per-run
-    # pattern as the "timing" entries below
-    metrics.register(m, "localization_error_hrp", np.array([r[m] for r in locerr_runs]), run=np.array(run_ids))
+    # pattern as the "timing" entries below - `region` is point-wise here
+    # too (length n_runs, matching `run`), since this is already a flat 1D
+    # array (one point per run), not a 2D per-curve stack.
+    metrics.register(m, "localization_error_hrp", np.array([r[m] for r in locerr_runs]), run=np.array(run_ids), region=regions)
 
   # per-run half-rising-phase/peak time of the simulated sensor EEG - a
   # property of `ave`, not of any solver, so registered under its own
@@ -1757,7 +1845,7 @@ def run_comparison(overwrite=False):
 
   metrics.save(fmetrics, overwrite=overwrite)
 
-run_comparison(overwrite=True)
+run_comparison(overwrite=True)  # must force-regen: now registers a `region` coordinate on every method-level metric (was previously absent on correlation/precision_hrp/precision_pp, and only `run` on localization_error_hrp), so index.qmd's compare_methods()/cluster_permutation() can pair methods by region
 ```
 
 Plots of these results (spatial correlation over time, precision-recall at
@@ -1804,7 +1892,7 @@ oversight:
   above). This supersedes `TODO_simf_robustness.md`'s earlier "fixed
   `lambda2` across all 5 SNR levels" assumption **for this cell only** - see
   the TODO for why that assumption no longer applies here.
-- **wCSET hyperparameters**: `depth=0.2`, `harm=0.5`, `harmonic_method="lowpass"`
+- **wCSET hyperparameters**: `depth=0.2`, `harm=5`, `harmonic_method="lowpass"`
   - now match every other wCSET call in this file exactly (flagship,
   degradation, surrogate all updated to the same values per explicit
   instruction) - the noise-sweep's wCSET numbers are therefore directly
@@ -1929,7 +2017,7 @@ def make_reconstruct(fwd, eig):
       inv = mm.analysis.inverse.wCSET(
         forward=fwd, noise_cov=ncov, depth=0.2,
         eigenvectors=eig["vec"], eigenvalues=eig["val"],
-        harm=0.5, harmonic_method="lowpass",
+        harm=5, harmonic_method="lowpass",
       )
       solutions["wcset"] = inv.solve(data, lambda2_auto)
     if "cset" in needed:
@@ -2009,7 +2097,7 @@ def run_noise_sweep_reconstruction(overwrite=False):
     tasks, preprocess_hrp_pp, make_reconstruct(fwd, eig), postprocess_save, n_jobs=n_jobs, n_threads_per_job=1,
   )
 
-run_noise_sweep_reconstruction(overwrite=True)  # must force-regen: old STCs used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; wcset now depth=0.2/harm=0.5 (was depth=0.5/harm=5); wMNE (formerly desc="mne") now solved with its own depth=0.8 operator under desc="wmne"
+run_noise_sweep_reconstruction(overwrite=True)  # must force-regen: old STCs used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; wcset's harm was mistakenly set to 0.5, now fixed to the intended harm=5 (depth=0.2 unaffected, unchanged from the prior run); wMNE (formerly desc="mne") now solved with its own depth=0.8 operator under desc="wmne"
 ```
 
 Computes the same 5 scalar metrics as before (`correlation_hrp`,
@@ -2051,6 +2139,7 @@ computed once, outside the pipeline, same as before (run-independent).
 ```{python filename="noise_sweep_comparison.py"}
 # | output: false
 
+import ast
 from pathlib import Path
 
 import mne
@@ -2152,6 +2241,17 @@ def run_noise_sweep_comparison(overwrite=QUICK_TEST):
 
   run2snr = dict(zip(df_sweep["run"], df_sweep["target_snr"]))
 
+  # region identity for each run, from the same simulation-index convenience
+  # copy - source_index_list is a stringified single-element list (e.g.
+  # "['ctx-lh-inferiortemporal_3']"), same derivation
+  # degradation_reconstruction.py/surrogate_reconstruction.py already use.
+  # Lets compare_methods()/cluster_permutation() in index.qmd pair
+  # methods by region (the correct repeated-measures unit - reps of the same
+  # region are correlated draws, not independent trials) instead of having
+  # no pairing key at all.
+  df_sweep["region"] = df_sweep["source_index_list"].apply(lambda s: ast.literal_eval(s)[0])
+  run2region = dict(zip(df_sweep["run"], df_sweep["region"]))
+
   # only runs whose STCs are already fully written for every method - lets
   # this cell be (re)run against a partial noise_sweep_reconstruction.py
   # pass instead of waiting for the whole sweep to finish, same pattern as
@@ -2194,17 +2294,18 @@ def run_noise_sweep_comparison(overwrite=QUICK_TEST):
   metrics = mm.metric.MetricSuite(f"sub-{sub} noise/SNR sweep validation")
   for task, run_rows in zip(tasks, results):
     snr = run2snr[task.run]
+    region = run2region[task.run]
     for row in run_rows:
       method = row["method"]
-      metrics.register(method, "correlation_hrp", row["correlation_hrp"], method=method, snr=snr)
-      metrics.register(method, "correlation_pp", row["correlation_pp"], method=method, snr=snr)
-      metrics.register(method, "localization_error_hrp", row["localization_error_hrp"], method=method, snr=snr)
-      metrics.register(method, "ap_hrp", row["ap_hrp"], method=method, snr=snr)
-      metrics.register(method, "ap_pp", row["ap_pp"], method=method, snr=snr)
+      metrics.register(method, "correlation_hrp", row["correlation_hrp"], method=method, snr=snr, region=region)
+      metrics.register(method, "correlation_pp", row["correlation_pp"], method=method, snr=snr, region=region)
+      metrics.register(method, "localization_error_hrp", row["localization_error_hrp"], method=method, snr=snr, region=region)
+      metrics.register(method, "ap_hrp", row["ap_hrp"], method=method, snr=snr, region=region)
+      metrics.register(method, "ap_pp", row["ap_pp"], method=method, snr=snr, region=region)
 
   metrics.save(fmetrics, overwrite=overwrite)
 
-run_noise_sweep_comparison(overwrite=True)
+run_noise_sweep_comparison(overwrite=True)  # must force-regen: now registers a `region` coordinate per entry (was previously absent), so index.qmd's compare_methods()/cluster_permutation() can pair methods by region
 ```
 
 ## Experiment 2: Connectome Degradation (Rewiring)
@@ -2280,7 +2381,7 @@ notes).
 - **CSET/wCSET only**, not the noise-sweep's SNR-adaptive-lambda2/6-method
   convention (this experiment doesn't vary noise, so SNR-adaptive `lambda2`
   has no reason to apply here). wCSET's `depth` and `harm` are now fixed at
-  `0.2` and `0.5` respectively, with `harmonic_method="lowpass"` now passed
+  `0.2` and `5` respectively, with `harmonic_method="lowpass"` now passed
   explicitly (superseding this file's earlier `depth=0.8`/`harm=0.8`/default
   `"gap"`), `lambda2=0.1` unchanged - matches
   `surrogate_reconstruction.py`'s convention. CSET's `depth` and `lambda2`
@@ -2418,6 +2519,11 @@ def run_degradation_reconstruction(overwrite=False):
   probe_runs = index[
     index["region"].isin(probe_set["region"]) & (index["repetition"] <= n_reps_per_region)
   ]["run"].tolist()
+  # region lookup for registration below - lets index.qmd's compare_methods()/
+  # cluster_permutation() pair methods by region (the correct repeated-
+  # measures unit here - reps of the same region are correlated draws, not
+  # independent trials) instead of having no pairing key at all.
+  run2region = dict(zip(index["run"], index["region"]))
 
   inverse_tasks = [
     InverseSimTask(
@@ -2451,7 +2557,7 @@ def run_degradation_reconstruction(overwrite=False):
       data, ncov = ctx["phase_data"], ctx["ncov"]
       inv_wcset = mm.analysis.inverse.wCSET(
         forward=fwd, noise_cov=ncov, depth=0.2, eigenvectors=eigvec, eigenvalues=eigval,
-        harm=0.5, harmonic_method="lowpass",
+        harm=5, harmonic_method="lowpass",
       )
       inv_cset = mm.analysis.inverse.CSET(forward=fwd, noise_cov=ncov, depth=0.2, eigenvectors=eigvec)
       solutions = {
@@ -2473,6 +2579,7 @@ def run_degradation_reconstruction(overwrite=False):
       hit = find_peak_localization_error(sol_hrp, true_source_mask, dipole_positions)
       rows.append({
         "method": method,
+        "run": ctx["task"].run,  # for region lookup at registration time below
         "correlation_hrp": np.corrcoef(gold_hrp, sol_hrp)[0, 1],
         "correlation_pp": np.corrcoef(gold_pp, sol_pp)[0, 1],
         "localization_error_hrp": hit["distance_mm"],
@@ -2503,18 +2610,19 @@ def run_degradation_reconstruction(overwrite=False):
       for run_rows in results:
         for row in run_rows:
           method = row["method"]
-          metrics[operator].register(method, "correlation_hrp", row["correlation_hrp"], percentage=pct)
-          metrics[operator].register(method, "correlation_pp", row["correlation_pp"], percentage=pct)
-          metrics[operator].register(method, "localization_error_hrp", row["localization_error_hrp"], percentage=pct)
-          metrics[operator].register(method, "ap_hrp", row["ap_hrp"], percentage=pct)
-          metrics[operator].register(method, "ap_pp", row["ap_pp"], percentage=pct)
+          region = run2region[row["run"]]
+          metrics[operator].register(method, "correlation_hrp", row["correlation_hrp"], percentage=pct, region=region)
+          metrics[operator].register(method, "correlation_pp", row["correlation_pp"], percentage=pct, region=region)
+          metrics[operator].register(method, "localization_error_hrp", row["localization_error_hrp"], percentage=pct, region=region)
+          metrics[operator].register(method, "ap_hrp", row["ap_hrp"], percentage=pct, region=region)
+          metrics[operator].register(method, "ap_pp", row["ap_pp"], percentage=pct, region=region)
 
       print(f"[{operator}] {pct}% done ({len(inverse_tasks)} runs x 2 methods).")
 
   for operator in operators:
     metrics[operator].save(fmetrics[operator], overwrite=overwrite)
 
-run_degradation_reconstruction(overwrite=True)
+run_degradation_reconstruction(overwrite=True)  # must force-regen: now registers a `region` coordinate per entry (was previously absent), so index.qmd's compare_methods()/cluster_permutation() can pair methods by region
 ```
 
 ## Experiment 3: Surrogate-Connectome Reconstruction & Validation
@@ -2554,10 +2662,11 @@ the same reason it didn't in `degradation_reconstruction.py`:
 
 **Parameter choices:**
 
-- `surrogates = ["atlas-a2a", "atlas-a2a-bin", "fused", "fused-bin",
-  "geom-atlas", "geom-atlas-bin"]`: all 6 previously-built surrogates,
-  including their binary (edge-presence-only) variants - unchanged from
-  before, already correct.
+- `surrogates = ["beltrami", "fused", "fused-bin", "geom-atlas",
+  "geom-atlas-bin"]`: the 5 surrogates built by `surrogate_connectivity.py`
+  above - `atlas-a2a`/`atlas-a2a-bin` dropped in favor of the single
+  `beltrami` surrogate (no binary variant for it - see that cell's prose
+  for why).
 - `n_reps_per_region = 8` (changed from 5 - now the full flagship
   repetition count, not a subset - same change already made to
   `degradation_reconstruction.py`).
@@ -2565,12 +2674,22 @@ the same reason it didn't in `degradation_reconstruction.py`:
   superseding this file's earlier `depth=0.8`/`lambda2=1.0` - itself raised
   from `0.1`, see `solve_inverse.py`'s prose above for the
   `lambda2-tuning.ipynb` sweep this comes from). wCSET's `depth = 0.2`,
-  `harm = 0.5`, `harmonic_method="lowpass"` now passed explicitly (also per
-  explicit instruction, superseding the earlier `depth=0.8`/`harm=0.8`/
-  default `"gap"`), `lambda2 = 0.1` unchanged - all unchanged across all 6
-  surrogates - not retuned per surrogate's edge density. This is a
-  documented assumption, not a verified sub-sweep (parallel to the same
+  `harmonic_method="lowpass"`, `lambda2 = 0.1` unchanged across all 5
+  surrogates (also per explicit instruction, superseding the earlier
+  `depth=0.8`/`harm=0.8`/default `"gap"`) - not retuned per surrogate/basis,
+  a documented assumption, not a verified sub-sweep (parallel to the same
   assumption flagged for the noise-robustness experiment).
+- **wCSET's `harm` is the one exception, not shared uniformly**: `harm =
+  5` for every connectome-based surrogate (`fused`, `fused-bin`,
+  `geom-atlas`, `geom-atlas-bin`), but `harm = 30` for `beltrami`
+  specifically (per explicit instruction). Reusing `harm=5` for
+  `beltrami` would not have been meaningful: its mesh-Laplacian eigenvalue
+  spectrum sits on a very different numerical scale than any
+  connectome-Laplacian spectrum (see `beltrami_harmonics_notes.md` in the
+  `mindmap` repo). `harm=30` is not a value invented for this cell - it's
+  the value separately settled (via its own dedicated sweep) for wCSET on
+  this exact mesh-Beltrami basis in `beltrami-prior-tuning.ipynb`, reused
+  here as-is.
 - **CSET/wCSET only** - matches `degradation_reconstruction.py`'s
   convention exactly.
 - Reconstruction at half-rising-phase and peak-phase only, not the full
@@ -2604,7 +2723,7 @@ from scripts.utils import check_files
 dm = SimfManager("simf.config.yml")
 sub = "10"
 
-surrogates = ["atlas-a2a", "atlas-a2a-bin", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin"]
+surrogates = ["beltrami", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin"]
 n_reps_per_region = 8   # full flagship repetition count, not a subset
 
 n_jobs_solve = 25   # reconstruct+score, parallelized across probe-set runs
@@ -2628,6 +2747,9 @@ def run_surrogate_reconstruction(overwrite=False):
   probe_runs = index[
     index["region"].isin(probe_set["region"]) & (index["repetition"] <= n_reps_per_region)
   ]["run"].tolist()
+  # region lookup for registration below - same rationale as
+  # degradation_reconstruction.py.
+  run2region = dict(zip(index["run"], index["region"]))
 
   inverse_tasks = [
     InverseSimTask(
@@ -2656,12 +2778,12 @@ def run_surrogate_reconstruction(overwrite=False):
     )
     return {"phase_data": phase_data, "hrp_idx": hrp_idx, "pp_idx": pp_idx}
 
-  def make_reconstruct(eigvec, eigval):
+  def make_reconstruct(eigvec, eigval, harm):
     def reconstruct(ctx):
       data, ncov = ctx["phase_data"], ctx["ncov"]
       inv_wcset = mm.analysis.inverse.wCSET(
         forward=fwd, noise_cov=ncov, depth=0.2, eigenvectors=eigvec, eigenvalues=eigval,
-        harm=0.5, harmonic_method="lowpass",
+        harm=harm, harmonic_method="lowpass",
       )
       inv_cset = mm.analysis.inverse.CSET(forward=fwd, noise_cov=ncov, depth=0.2, eigenvectors=eigvec)
       solutions = {
@@ -2683,6 +2805,7 @@ def run_surrogate_reconstruction(overwrite=False):
       hit = find_peak_localization_error(sol_hrp, true_source_mask, dipole_positions)
       rows.append({
         "method": method,
+        "run": ctx["task"].run,  # for region lookup at registration time below
         "correlation_hrp": np.corrcoef(gold_hrp, sol_hrp)[0, 1],
         "correlation_pp": np.corrcoef(gold_pp, sol_pp)[0, 1],
         "localization_error_hrp": hit["distance_mm"],
@@ -2701,10 +2824,18 @@ def run_surrogate_reconstruction(overwrite=False):
     eig = dm.load(sub, "eig", desc=surrogate)
     eigvec, eigval = eig["vec"], eig["val"]
 
+    # beltrami's mesh-Laplacian spectrum sits on a different numerical scale
+    # than any connectome-Laplacian spectrum (see beltrami_harmonics_notes.md
+    # in the mindmap repo), so harm=5 (tuned for the connectome side) isn't
+    # meaningful for it; harm=30 is the value separately settled for wCSET
+    # on this exact basis in beltrami-prior-tuning.ipynb (per explicit
+    # instruction) - every other surrogate keeps the shared harm=5
+    harm = 30 if surrogate == "beltrami" else 5
+
     # n_threads_per_job=1: n_jobs already saturates the 32-core budget, see
     # project memory on run_parallel_pipeline thread capping
     results = run_parallel_pipeline(
-      inverse_tasks, preprocess_hrp_pp, make_reconstruct(eigvec, eigval), postprocess_score,
+      inverse_tasks, preprocess_hrp_pp, make_reconstruct(eigvec, eigval, harm), postprocess_score,
       n_jobs=n_jobs_solve, n_threads_per_job=1, verbose="warning",
     )
 
@@ -2712,14 +2843,15 @@ def run_surrogate_reconstruction(overwrite=False):
     for run_rows in results:
       for row in run_rows:
         method = row["method"]
-        metrics.register(method, "correlation_hrp", row["correlation_hrp"])
-        metrics.register(method, "correlation_pp", row["correlation_pp"])
-        metrics.register(method, "localization_error_hrp", row["localization_error_hrp"])
-        metrics.register(method, "ap_hrp", row["ap_hrp"])
-        metrics.register(method, "ap_pp", row["ap_pp"])
+        region = run2region[row["run"]]
+        metrics.register(method, "correlation_hrp", row["correlation_hrp"], region=region)
+        metrics.register(method, "correlation_pp", row["correlation_pp"], region=region)
+        metrics.register(method, "localization_error_hrp", row["localization_error_hrp"], region=region)
+        metrics.register(method, "ap_hrp", row["ap_hrp"], region=region)
+        metrics.register(method, "ap_pp", row["ap_pp"], region=region)
 
     metrics.save(fmetrics[surrogate], overwrite=overwrite)
     print(f"[{surrogate}] done ({len(inverse_tasks)} runs x 2 methods).")
 
-run_surrogate_reconstruction(overwrite=True)  # must force-regen: old metrics used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; wcset now depth=0.2/harm=0.5/harmonic_method="lowpass" (was depth=0.8/harm=0.8/default "gap")
+run_surrogate_reconstruction(overwrite=True)  # must force-regen: old metrics used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; wcset's harm was mistakenly set to 0.5 for connectome-based surrogates, now fixed to the intended harm=5 (harm=30 for beltrami is correct and unaffected; depth=0.2/harmonic_method="lowpass" unaffected, unchanged from the prior run); also now registers a `region` coordinate per entry (was previously absent), so index.qmd's compare_methods()/cluster_permutation() can pair methods by region
 ```
