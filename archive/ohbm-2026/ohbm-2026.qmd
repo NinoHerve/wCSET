@@ -49,7 +49,7 @@ affiliations:
 
 format: html
 
-bibliography: references.bib
+bibliography: ../../references.bib
 ---
 
 # Introduction
