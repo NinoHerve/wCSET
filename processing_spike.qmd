@@ -769,89 +769,124 @@ downstream analysis.
 ```{python filename="resection_evaluation_metrics.py"}
 # | output: false
 
+import shutil
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import mindmap as mm
 from mindmap.analysis.functional.common.metric import (
     find_earliest_resection_cluster,
     find_peak_resection_distance,
 )
-from scripts.utils import loop
+from scripts.utils import loop, check_files
 from scripts.data_manager import SpikeManager
 
 # data manager
 dm = SpikeManager("spike.config.yml")
 
-# output file
-fmetrics = Path("./results/spike_resection_metrics.csv")
-fmetrics.parent.mkdir(exist_ok=True)
+# output: one MetricSuite for the whole cohort, replacing the old flat CSV
+# (results/spike_resection_metrics.csv) - index.qmd's Study II section now
+# only ever loads a MetricSuite, never builds one from a raw CSV. Built by
+# checkpointing each subject's own suite to a transient
+# results/spike/_checkpoint/sub-{N} folder as it finishes (crash-resumable,
+# same pattern as processing_simf.qmd's surrogates and
+# processing_intra.qmd's per-subject suites), then concatenating all of them
+# into results/spike/resection at the end and deleting `_checkpoint/`, since
+# its contents are now fully redundant with the combined suite.
+fmetrics = Path("./results/spike/resection")
+checkpoint_dir = Path("./results/spike/_checkpoint")
 
 METHODS = ["wcset", "cset", "sloreta", "dspm", "wmne"]
 
-@loop(subjects=dm.subjects)
-def evaluate_resection_localization(sub, overwrite=False):
-    # skip subjects without a resection mask (RAMPS not run / not yet QC'd)
-    fresec = dm.get_path(sub, "resec-ramp", space="pre")
-    if not fresec.exists():
+# surgical outcome (ILAE, 1 year post-op): 1 = seizure-free, 2-6 = increasing
+# recurrence - registered as a coordinate so index.qmd's seizure-free filter
+# becomes an ordinary `filters={"ILAE": 1}` rather than a manual pandas step.
+participants = pd.read_csv(dm.roots["raw"]/"participants.tsv", sep="\t")
+ilae_by_sub = participants.set_index(
+    participants["participant_id"].str.removeprefix("sub-")
+)["ILAE"]
+
+def evaluate_resection_localization(overwrite=False):
+    if check_files([fmetrics/"meta.json"]) and not overwrite:
+        print("Already exists, skipping.")
         return
 
-    # skip if already computed
-    if fmetrics.exists() and not overwrite:
-        existing = pd.read_csv(fmetrics)
-        if (existing["subject"] == sub).any():
+    @loop(subjects=dm.subjects)
+    def _evaluate_subject(sub, overwrite=overwrite):
+        fcheckpoint = checkpoint_dir/f"sub-{sub}"
+        if check_files([fcheckpoint/"meta.json"]) and not overwrite:
             return
 
-    # 0. Load data
-    fwd = dm.load(sub, "fwd")                        # forward solution (carries the source space)
-    ave = dm.load(sub, "ave", task="spike")           # averaged EEG (for spike timing)
-    resec = dm.load(sub, "resec-ramp", space="pre")   # resected tissue (ground truth)
-    ras2tkras = dm.load(sub, "ras2tkras")
+        # skip subjects without a resection mask (RAMPS not run / not yet QC'd)
+        fresec = dm.get_path(sub, "resec-ramp", space="pre")
+        if not fresec.exists():
+            return
 
-    src = fwd["src"]
+        # skip subjects with no surgical outcome on file - every registered
+        # row needs this coord for `filters={"ILAE": ...}` downstream to work.
+        ilae = ilae_by_sub.get(sub)
+        if pd.isna(ilae):
+            return
 
-    # 1. Per-subject geometry (reused across methods/phases)
-    adjacency = mm.anatomy.source_space.build_dipole_adjacency(src)
-    patch_area = mm.anatomy.source_space.build_dipole_patch_area(src)
-    resection_vertex_mask = mm.anatomy.source_space.sample_nifti_at_source_space(src, resec, ras2tkras)
+        # 0. Load data
+        fwd = dm.load(sub, "fwd")                        # forward solution (carries the source space)
+        ave = dm.load(sub, "ave", task="spike")           # averaged EEG (for spike timing)
+        resec = dm.load(sub, "resec-ramp", space="pre")   # resected tissue (ground truth)
+        ras2tkras = dm.load(sub, "ras2tkras")
 
-    # 2. Spike phases to evaluate: half rising phase (main) and peak (comparison)
-    phases = {
-        "hrp": mm.analysis.eeg.get_rising_phase(ave, ratio=0.5, as_idx=True),
-        "pp":  mm.analysis.eeg.get_rising_phase(ave, ratio=1.0, as_idx=True),
+        src = fwd["src"]
+
+        # 1. Per-subject geometry (reused across methods/phases)
+        adjacency = mm.anatomy.source_space.build_dipole_adjacency(src)
+        patch_area = mm.anatomy.source_space.build_dipole_patch_area(src)
+        resection_vertex_mask = mm.anatomy.source_space.sample_nifti_at_source_space(src, resec, ras2tkras)
+
+        # 2. Spike phases to evaluate: half rising phase (main) and peak (comparison)
+        phases = {
+            "hrp": mm.analysis.eeg.get_rising_phase(ave, ratio=0.5, as_idx=True),
+            "pp":  mm.analysis.eeg.get_rising_phase(ave, ratio=1.0, as_idx=True),
+        }
+
+        # 3. Evaluate every source reconstruction method at every phase
+        metrics = mm.metric.MetricSuite(f"Spike resection localization, sub-{sub}")
+        for method in METHODS:
+            stc = dm.load(sub, "stc", task="spike", desc=method)
+
+            for phase_name, idx in phases.items():
+                activity = stc.data[:, idx]
+
+                cluster_hit = find_earliest_resection_cluster(
+                    activity, resection_vertex_mask, adjacency, patch_area,
+                )
+                peak_hit = find_peak_resection_distance(activity, src, resec, ras2tkras)
+
+                coords = dict(Method=method, Subject=sub, phase=phase_name, ILAE=int(ilae))
+                metrics.register("peak_distance_mm", peak_hit["distance_mm"], **coords)
+                metrics.register("peak_inside_resection", peak_hit["inside_resection"], **coords)
+                # already scaled to percent here, so index.qmd never touches the raw fraction
+                metrics.register("cluster_fraction_pct", cluster_hit["fraction_of_cortex"] * 100, **coords)
+                metrics.register("cluster_found", cluster_hit["found"], **coords)
+                metrics.register("cluster_area_mm2", cluster_hit["cluster_area_mm2"], **coords)
+                metrics.register("cluster_precision", cluster_hit["cluster_precision"], **coords)
+
+        metrics.save(fcheckpoint, overwrite=True)
+
+    _evaluate_subject()
+
+    # End: concatenate every subject's checkpoint into the final suite, then
+    # remove the now-redundant checkpoint folder.
+    checkpoints = sorted(checkpoint_dir.glob("sub-*"))
+    combined = mm.metric.MetricSuite.concat(
+        [mm.metric.MetricSuite.load(f) for f in checkpoints], name="Spike resection localization",
+    )
+    combined.metadata["units"] = {
+        "peak_distance_mm": "mm", "peak_inside_resection": "boolean", "cluster_fraction_pct": "%",
+        "cluster_area_mm2": "mm^2", "cluster_precision": "fraction (0-1)",
     }
+    combined.save(fmetrics, overwrite=overwrite)
+    shutil.rmtree(checkpoint_dir)
 
-    # 3. Evaluate every source reconstruction method at every phase
-    rows = []
-    for method in METHODS:
-        stc = dm.load(sub, "stc", task="spike", desc=method)
-
-        for phase_name, idx in phases.items():
-            activity = stc.data[:, idx]
-
-            cluster_hit = find_earliest_resection_cluster(
-                activity, resection_vertex_mask, adjacency, patch_area,
-            )
-            peak_hit = find_peak_resection_distance(activity, src, resec, ras2tkras)
-
-            rows.append({
-                "subject": sub,
-                "method": method,
-                "phase": phase_name,
-                "peak_inside_resection": peak_hit["inside_resection"],
-                "peak_distance_mm": peak_hit["distance_mm"],
-                "cluster_found": cluster_hit["found"],
-                "cluster_fraction_of_cortex": cluster_hit["fraction_of_cortex"],
-                "cluster_area_mm2": cluster_hit["cluster_area_mm2"],
-                "cluster_precision": cluster_hit["cluster_precision"],
-            })
-
-    # End: Save
-    rows = pd.DataFrame(rows)
-    mm.core.write_csv_row(fmetrics, rows, index_cols=["subject", "method", "phase"], write_new=True)
-
-evaluate_resection_localization(overwrite=True)  # must force-regen: results/spike_resection_metrics.csv predates this session's solve_inverse.py parameter changes (depth/lambda2/harm, wMNE rename), so overwrite=False would silently skip already-processed subjects and leave them stale
+evaluate_resection_localization(overwrite=True)  # must force-regen: results/spike/resection predates this session's solve_inverse.py parameter changes (depth/lambda2/harm, wMNE rename), so overwrite=False would silently skip already-processed subjects and leave them stale
 ```
 
 ## Chance-Level Cluster Threshold
@@ -880,8 +915,8 @@ from scripts.data_manager import SpikeManager
 dm = SpikeManager("spike.config.yml")
 
 # output file
-fchance = Path("./results/spike_chance_cluster_threshold.csv")
-fchance.parent.mkdir(exist_ok=True)
+fchance = Path("./results/spike/intermediate/chance_cluster_threshold.csv")
+fchance.parent.mkdir(parents=True, exist_ok=True)
 
 MIN_CLUSTER_AREA = 600.0  # mm^2, same floor as find_earliest_resection_cluster's default
 N_TRIALS = 200
@@ -930,4 +965,65 @@ def compute_chance_cluster_threshold(sub, overwrite=False):
     mm.core.write_csv_row(fchance, row, index_cols=["subject"], write_new=True)
 
 compute_chance_cluster_threshold(overwrite=False)
+```
+
+# Statistics
+
+Computes and caches every statistical test - and every derived scalar quoted
+in `index.qmd`'s prose (medians, chance level) - for this study, so
+`index.qmd` only ever reloads already-computed results and plots them; it
+never computes a statistic itself. This works because `MetricSuite.stat.*`
+calls are cached by `(metric, group_by, test, unit_col, pairing_col,
+subject_order, filters, pair)` (not `correction`/`alpha`), and that cache is
+persisted into the suite's `stats/` subfolder by `save()` and restored by
+`load()` - so `index.qmd` calling the exact same `stat.wilcoxon`
+signature below gets an instant cache hit, never a recomputation.
+
+`chance_cluster_threshold.py`'s output stays a plain CSV (per-subject
+calibration data, not naturally a per-method metric - folding it into the
+resection MetricSuite would force an artificial `Method="chance"` row
+nothing else needs); only its mean-across-subjects value moves here.
+
+```{python filename="spike_statistics.py"}
+# | output: false
+from pathlib import Path
+import pandas as pd
+import mindmap as mm
+
+METHODS = ["wcset", "cset", "sloreta", "dspm", "wmne"]
+COMPETITORS = [m for m in METHODS if m != "wcset"]
+
+fmetrics = Path("./results/spike/resection")
+resection = mm.metric.MetricSuite.load(fmetrics)
+
+# seizure-free (ILAE=1) subjects, half rising phase (the primary evaluation
+# point) - the suite-native replacement for a manual df[df["ILAE"]==1] filter.
+FILTERS = {"phase": "hrp", "ILAE": 1}
+comparisons = resection.stat.build_comparisons(["wcset"], COMPETITORS)
+
+# Wilcoxon signed-rank vs. wCSET, subject-paired, FDR-corrected.
+resection.stat.wilcoxon(
+    "peak_distance_mm", group_by="Method", comparisons=comparisons, pairing_col="Subject", filters=FILTERS,
+)
+resection.stat.wilcoxon(
+    "cluster_fraction_pct", group_by="Method", comparisons=comparisons, pairing_col="Subject", filters=FILTERS,
+)
+
+df = resection.to_df(metrics=["peak_distance_mm", "cluster_fraction_pct"], filters=FILTERS)
+peak_df = df[df["Metric"] == "peak_distance_mm"]
+frac_df = df[df["Metric"] == "cluster_fraction_pct"]
+
+# chance level for cluster_fraction_pct: how much cortex a purely random
+# signal needs before ANY cluster reaches the 600 mm^2 size floor, ignoring
+# the "must touch the resection" requirement - a lower bound / reference,
+# not the true chance level (which is strictly harder to reach).
+chance = pd.read_csv("./results/spike/intermediate/chance_cluster_threshold.csv")
+
+resection.metadata["derived"] = {
+    "resection_n": int(peak_df["Subject"].nunique()),
+    "peak_median": peak_df.groupby("Method")["Value"].median().to_dict(),
+    "frac_median": frac_df.groupby("Method")["Value"].median().to_dict(),
+    "chance_pct": float(chance["mean_fraction_of_cortex"].mean() * 100),
+}
+resection.save(fmetrics, overwrite=True)
 ```

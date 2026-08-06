@@ -771,9 +771,10 @@ projected by `estimate_ieeg.py` above (`wcset, sloreta, cset, dspm, wmne`) -
 the tutorial itself also compares 5, but drops wMNE and keeps MCE
 instead; this project drops MCE from every study instead (see
 `processing_spike.qmd`'s `solve_inverse.py` prose) and keeps `wmne`. One
-`MetricSuite` per subject is saved to
-`results/intra_vieeg_metrics/sub-{sub}/`, reloaded and combined across
-subjects in `index.qmd`.
+transient checkpoint `MetricSuite` per subject is saved to
+`results/intra/_checkpoint/sub-{sub}/`, combined across subjects into
+`results/intra/combined` by `intra_statistics.py` below, and reloaded from
+there in `index.qmd`.
 
 **Parameter choices:**
 
@@ -805,8 +806,11 @@ methods = ["wcset", "sloreta", "cset", "dspm", "wmne"]
 
 @loop(subjects=dm.subjects)
 def evaluate_vieeg_fidelity(sub, overwrite):
-    # output folder (one per subject - MetricSuite.load_study-compatible layout)
-    fmetrics = Path(f"./results/intra_vieeg_metrics/sub-{sub}")
+    # output folder - transient checkpoint (one per subject), crash-resumable;
+    # intra_statistics.py concatenates all of these into results/intra/combined
+    # at the end and deletes this whole _checkpoint/ folder, since its
+    # contents become fully redundant with the combined suite.
+    fmetrics = Path(f"./results/intra/_checkpoint/sub-{sub}")
 
     if check_files([fmetrics/"meta.json"]) and not overwrite:
         return
@@ -826,7 +830,7 @@ def evaluate_vieeg_fidelity(sub, overwrite):
     vave_win = {m: v.copy().crop(tmin, tmax) for m, v in vave_norm.items()}
 
     # 3. Compute fidelity metrics
-    metrics = mm.metric.MetricSuite(f"Intra vIEEG fidelity, sub-{sub}", subject=sub)
+    metrics = mm.metric.MetricSuite(f"Intra vIEEG fidelity, sub-{sub}")
 
     for m in methods:
         v_win = vave_win[m]
@@ -840,32 +844,161 @@ def evaluate_vieeg_fidelity(sub, overwrite):
             ("spatio-temporal", {}),
         ]:
             metrics.register(
-                m, f"correlation_{mode}",
+                f"correlation_{mode}",
                 mm.analysis.eeg.compute_evoked_correlation(iave_win, v_win, mode=mode, polarity_invariant=True),
-                **coords,
+                Method=m, Subject=sub, **coords,
             )
             metrics.register(
-                m, f"cosine_{mode}",
+                f"cosine_{mode}",
                 mm.analysis.eeg.compute_evoked_cosine(iave_win, v_win, mode=mode, polarity_invariant=True),
-                **coords,
+                Method=m, Subject=sub, **coords,
             )
 
-        metrics.register(m, "explained_variance",
-                          mm.analysis.eeg.compute_evoked_explained_variance(iave_win, v_win, polarity_invariant=True))
+        metrics.register("explained_variance",
+                          mm.analysis.eeg.compute_evoked_explained_variance(iave_win, v_win, polarity_invariant=True),
+                          Method=m, Subject=sub)
 
         # rem_correlation_{mode}: mirrors correlation_{mode}/cosine_{mode}'s naming --
         # REM has no polarity_invariant option (already polarity-invariant by
         # construction, being built from squared energy)
-        metrics.register(m, "rem_correlation_temporal",
+        metrics.register("rem_correlation_temporal",
                           mm.analysis.eeg.compute_evoked_rem_correlation(iave_win, v_win, mode="temporal"),
-                          channel=v_win.ch_names)
-        metrics.register(m, "rem_correlation_spatial",
+                          Method=m, Subject=sub, channel=v_win.ch_names)
+        metrics.register("rem_correlation_spatial",
                           mm.analysis.eeg.compute_evoked_rem_correlation(iave_win, v_win, mode="spatial"),
-                          times=v_win.times)
+                          Method=m, Subject=sub, times=v_win.times)
 
     # 4. Save
     metrics.save(fmetrics, overwrite=overwrite)
 
-evaluate_vieeg_fidelity(overwrite=True)  # must force-regen: results/intra_vieeg_metrics predates this session's solve_inverse.py/compute_vieeg.py changes, so overwrite=False would silently skip already-processed subjects and leave them stale
+evaluate_vieeg_fidelity(overwrite=True)  # must force-regen: predates this session's solve_inverse.py/compute_vieeg.py changes, so overwrite=False would silently skip already-processed subjects and leave them stale
+```
+
+# Statistics
+
+Computes and caches every statistical test - and every derived scalar quoted
+in `index.qmd`'s prose (win-rates, the exact subject/channel order used per
+test, the sub-12 cross-metric/competitor argmin) - for this study, so
+`index.qmd` only ever reloads already-computed results and plots them; it
+never computes a statistic itself. This works because `MetricSuite.stat.*`
+calls are cached by `(metric, group_by, test, unit_col, pairing_col,
+subject_order, filters, pair)` (not `correction`/`alpha`), and that cache is
+persisted into the suite's `stats/` subfolder by `save()` and restored by
+`load()` - so `index.qmd` calling the exact same `stat.ttest_ess`
+signature below gets an instant cache hit, never a recomputation.
+
+`MetricSuite.load_study()`, used previously to combine every `sub-*/`
+subfolder into one suite, no longer exists - replaced by
+`MetricSuite.concat([MetricSuite.load(f) for f in folders])`. Unlike
+`load_study()`, `concat()` does not pool cached stats, so every statistic is
+computed (and re-saved) here, after concatenation, into one new combined
+suite folder (`results/intra/combined`) - `index.qmd` loads that directly
+and never needs to call `concat()` itself. The per-subject checkpoint
+folders this concatenates (`results/intra/_checkpoint/sub-*`) are deleted
+once the combined suite is saved, since their contents are now fully
+redundant with it.
+
+```{python filename="intra_statistics.py"}
+# | output: false
+import re
+import shutil
+from pathlib import Path
+
+import pandas as pd
+import mindmap as mm
+
+METHODS = ["wcset", "sloreta", "cset", "dspm", "wmne"]
+COMPETITORS = [m for m in METHODS if m != "wcset"]
+SUBJECTS = ["34", "48", "12", "50"]
+METRIC_BLOCKS = [("correlation_temporal", "channel"), ("correlation_spatial", "times")]
+
+
+def natural_channel_order(channels):
+    """sEEG channel names are `<shaft letter code><contact number>` (e.g.
+    "AD1", "AD2", ..., "AD10") - alphabetical sort breaks true within-shaft
+    contact adjacency ("AD1", "AD10", "AD2", ...). Sorts on
+    (shaft, contact number) instead."""
+    def key(ch):
+        m = re.match(r"([A-Za-z]+)(\d+)", ch)
+        return (m.group(1), int(m.group(2))) if m else (ch, 0)
+    return sorted(channels, key=key)
+
+
+fcombined = Path("./results/intra/combined")
+checkpoint_dir = Path("./results/intra/_checkpoint")
+
+def compute_intra_statistics(overwrite=False):
+    if fcombined.exists() and not overwrite:
+        print("Already exists, skipping.")
+        return
+
+    folders = sorted(checkpoint_dir.glob("sub-*"))
+    vieeg = mm.metric.MetricSuite.concat(
+        [mm.metric.MetricSuite.load(f) for f in folders], name="Intra vIEEG fidelity (combined)"
+    )
+
+    win_rates, subject_orders, results = {}, {}, {}
+
+    for subject in SUBJECTS:
+        for metric, coord in METRIC_BLOCKS:
+            df_sub = vieeg.to_df(metrics=metric, filters={"Subject": subject})
+            if coord == "channel":
+                order = natural_channel_order(df_sub["channel"].dropna().unique().tolist())
+            else:
+                order = sorted(df_sub[coord].dropna().unique().tolist())
+
+            # complete-case pivot - mirrors PairwiseResult.compute's own
+            # dropna, so the win-rate denominator matches the paired test's
+            # own n exactly, and the resulting order is what `subject_order`
+            # below (part of the stat cache key) must reuse verbatim.
+            wide = df_sub.pivot_table(index=coord, columns="Method", values="Value", aggfunc="mean").reindex(order)
+            wide = wide.dropna(subset=["wcset"] + COMPETITORS)
+
+            comparisons = vieeg.stat.build_comparisons(["wcset"], COMPETITORS)
+            result = vieeg.stat.ttest_ess(
+                metric, group_by="Method", comparisons=comparisons,
+                pairing_col=coord, subject_order=wide.index.tolist(),
+                filters={"Subject": subject},
+            )
+            results[(subject, metric)] = result
+            subject_orders.setdefault(subject, {})[metric] = wide.index.tolist()
+            for c in COMPETITORS:
+                win_rates[f"{subject}|{metric}|{c}"] = float((wide["wcset"] - wide[c] > 0).mean())
+
+    # smallest p_corrected across every mode/competitor for sub-12 - found
+    # programmatically rather than assumed, so the prose stays correct even
+    # if a different comparison becomes the smallest on reanalysis.
+    def _row(subject, metric, competitor):
+        t = results[(subject, metric)].table
+        row = t[(t["group_a"] == "wcset") & (t["group_b"] == competitor)]
+        if row.empty:
+            row = t[(t["group_a"] == competitor) & (t["group_b"] == "wcset")]
+        return row.iloc[0]
+
+    sub12_rows = [
+        (metric, c, _row("12", metric, c)["p_corrected"])
+        for metric, _ in METRIC_BLOCKS for c in COMPETITORS
+    ]
+    sub12_min_metric, sub12_min_competitor, sub12_min_p = min(sub12_rows, key=lambda t: t[2])
+
+    vieeg.metadata["derived"] = {
+        "win_rate": win_rates,
+        "subject_order": subject_orders,
+        "sub12_min_metric": sub12_min_metric,
+        "sub12_min_competitor": sub12_min_competitor,
+        "sub12_min_p": float(sub12_min_p),
+    }
+    vieeg.metadata["units"] = {
+        "correlation_spatial": "|r|", "correlation_temporal": "|r|", "correlation_spatio-temporal": "|r|",
+        "cosine_spatial": "unitless", "cosine_temporal": "unitless", "cosine_spatio-temporal": "unitless",
+        "explained_variance": "fraction (0-1)",
+        "rem_correlation_temporal": "unitless", "rem_correlation_spatial": "unitless",
+    }
+    vieeg.save(fcombined, overwrite=True)
+
+    # checkpoint contents are now fully redundant with the combined suite
+    shutil.rmtree(checkpoint_dir)
+
+compute_intra_statistics(overwrite=True)  # must force-regen: register() calls above now tag Method/Subject explicitly (old suite-level subject= is gone), so any previously combined/saved suite predates this session's schema
 ```
 

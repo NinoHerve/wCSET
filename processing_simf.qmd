@@ -427,7 +427,7 @@ geometry rather than being tracked/printed separately).
 
 ⚠ Region identities changed as a result: Experiment 3's already-computed
 surrogate reconstructions/metrics
-(`results/sub-10_simf-metrics_{surrogate}`, from `surrogate_reconstruction.py`
+(`results/simf/surrogates`, from `surrogate_reconstruction.py`
 /`surrogate_comparison.py`) were computed against the *old* probe set and are
 now stale - they need to be regenerated against the new one (flagged in
 `TODO_simf_robustness.md`).
@@ -442,8 +442,8 @@ now stale - they need to be regenerated against the new one (flagged in
   ⚠ Changing `n_regions` reshuffles `select_uniform_regions`' greedy
   farthest-point-sampling order, so this is a new region identity set, not a
   superset of the old 60 - every probe-set-dependent output computed against
-  the old file (`results/sub-10_probe-set.csv`,
-  `results/sub-10_simf-metrics_{surrogate}` from `surrogate_reconstruction.py`
+  the old file (`results/simf/intermediate/probe-set.csv`,
+  `results/simf/surrogates` from `surrogate_reconstruction.py`
   /`surrogate_comparison.py`, and the noise-sweep quick-test index) is now
   stale and needs rerunning against the regenerated probe set, same as the
   tercile→FPS switch above.
@@ -470,7 +470,7 @@ base_seed = 42
 
 def run_probe_set_selection(overwrite=False):
   # output file
-  fprobe = Path(f"./results/sub-{sub}_probe-set.csv")
+  fprobe = Path("./results/simf/intermediate/probe-set.csv")
 
   if check_files([fprobe]) and not overwrite:
     print("Already exists, skipping.")
@@ -888,7 +888,7 @@ run_surrogate_connectivity(overwrite=True)
 ## Flagship Dataset
 
 Runs the actual spike simulations: for each of the shared 100-region probe
-set (`results/sub-10_probe-set.csv`, see `probe_set_selection.py`), simulates
+set (`results/simf/intermediate/probe-set.csv`, see `probe_set_selection.py`), simulates
 8 repetitions of a spike originating in that region and propagating across
 the structural connectome to the sensors, at a fixed target SNR.
 
@@ -926,7 +926,7 @@ guess:
   heterogeneity across the full ~400-region atlas. Broader coverage was
   judged worth the extra compute over the bare power-minimal design.
   Concretely, the 100 regions used are the project's own **existing
-  probe set** (`results/sub-10_probe-set.csv`, spatially-uniform
+  probe set** (`results/simf/intermediate/probe-set.csv`, spatially-uniform
   farthest-point sampling, see `probe_set_selection.py`) rather than a fresh
   independent sample - this also means the flagship dataset now shares
   region identities with the connectome-degradation/surrogate/noise-sweep
@@ -956,51 +956,144 @@ guess:
   run (`sub-simf10`, not this project's own `sub-10`) - the pilot notebook
   itself flags this as a caveat if the sizing is meant to generalize further.
 
-⚠ **Unit note:** the inline comments below mark `width`/`onset`/`repeat` on
-`SpikeSignal` as **[ms]**, but `mindmap.analysis.simulation.SpikeSignal`
-actually consumes them in **seconds** (confirmed from source: it indexes the
-generated time array directly as `onset * sampling_rate`, and that time
-array is in seconds). So as written this is actually a 100 ms-wide spike, a
-0.5 s onset, and 1 s between repeats - not 0.1/0.5/1 ms. Worth fixing the
-comments, and double-checking these are the intended values once read under
-the *correct* units.
+⚠ **Unit note (fixed 2026-08-03):** the inline comments below used to mark
+`width`/`onset`/`repeat` on `SpikeSignal` as **[ms]**, but
+`mindmap.analysis.simulation.SpikeSignal` actually consumes them in
+**seconds** (confirmed from source: it indexes the generated time array
+directly as `onset * sampling_rate`, and that time array is in seconds). The
+comments below are now corrected to `[s]`; the values themselves were always
+seconds (a 0.5 s onset, 1 s between repeats), only the width value below
+changed, not its units.
 
 **Parameter choices - spike waveform (`SpikeSignal`):**
 
-- `width = 0.1` (s): spike waveform width. **FILL**
-- `onset = 0.5` (s): spike onset within the generated raw signal. **FILL**
+- `width = 0.05` (s, 50ms): total duration of the double-Hanning-window
+  waveform. Revised down from an earlier `0.1` (100ms) to sit centrally
+  within the classic clinical-EEG convention distinguishing interictal
+  **spikes** (20-70ms duration) from **sharp waves** (70-200ms)
+  [@kane_revised_2017]. Note: this repo's own `parameter_estimates_review.md`
+  had previously *defended* the 100ms value under a broader reading of the
+  same `kane_revised_2017` reference (mean duration ≈72ms, range 15-200ms,
+  under which 100ms isn't an outlier) - the two readings of that citation
+  aren't reconciled; 50ms was adopted here to match the retuned
+  `mindmap` tutorial (`simulation_spike.ipynb` / `PARAMETERS.md`).
+- `onset = 0.5` (s): spike onset within the generated raw signal - an
+  experiment-design/bookkeeping choice, not a literature quantity.
 - `repeat = 1` (s): interval between repeated spikes in the raw signal (only
   one spike ends up inside a single ~0.9 s epoch, given `EpochConfig`
-  below). **FILL**
-- `scale = 1e-8` (A): source dipole moment scale. **FILL**
+  below) - a data-volume choice (how many trials get generated for later
+  epoching/averaging), not a literature quantity.
+- `scale = 1e-8` (A): source dipole moment scale. Has no effect on the final
+  delivered amplitude - `Simulator.run` renormalizes total source activity to
+  a canonical peak immediately after generation, and the SNR-calibration step
+  (see `snr_target` below) rescales again to hit the target; any nonzero
+  value here produces an identical delivered recording.
 
 **Parameter choices - epoch window (`EpochConfig`):**
 
 - `tmin=-0.45, tmax=0.45, baseline=(-0.45,-0.2), signal_window=(-0.1,0.45)`
   (all in seconds): these are exactly `EpochConfig`'s own library defaults,
-  re-specified explicitly here rather than customized. **FILL** if there was
-  a reason to pin them explicitly (e.g. guard against a future default
-  change) vs. just omitting them and relying on the default.
+  re-specified explicitly here rather than customized - kept as-is by this
+  update (no literature citation applies; sized to comfortably contain the
+  observed propagation timescales with margin, not tied to a specific
+  quantitative source). Pinned explicitly here as a defensive guard against a
+  future change to the library's own defaults, rather than a deliberate
+  per-experiment customization.
 
 **Parameter choices - propagation (`PropagationConfig`):**
 
-- `conduction_speed = 30` (mm/ms, i.e. 30 m/s): within the physiological
-  range typically reported for white-matter conduction velocity. **FILL**
-  (specific literature source, if any)
-- `nodal_delay = 10` (ms): per-node relay delay - notably 100x the library
-  default (0.1 ms). **FILL**
-- `spatial_decay = 0.5`: matches the library default exactly. **FILL** if
-  intentional vs. just left untouched.
-- `jitter = 1` (ms): timing jitter added per repetition, vs. the library
-  default of 0. **FILL**
+- `conduction_speed = 4.5` (mm/ms, i.e. 4.5 m/s): long-range (non-U-fiber)
+  axonal conduction speed. Revised down from `30`, which was cited to
+  `caminiti_diameter_2013` - a paper on **callosal** axons specifically,
+  reporting 4.9-11.4 m/s, that doesn't actually support 30 mm/ms for general
+  cortico-cortical fibers. `4.5` instead sits centrally within the ~3-6 m/s
+  band two independent large-sample CCEP studies converge on for adult
+  long-range association fibers [@lemarechal_brain_2022;
+  @van_blooijs_developmental_2023].
+- `u_fiber_speed = 2.5` (mm/ms, i.e. 2.5 m/s), `u_fiber_max_length = 35` (mm):
+  new fields (previously unset/disabled) splitting short association/U-fibers
+  from long-range tracts - edges at or below `u_fiber_max_length` use
+  `u_fiber_speed` instead of `conduction_speed`. Short-range U-fibers conduct
+  distinctly slower (~2-3 m/s) than long-range association fibers
+  [@van_blooijs_developmental_2023]; `2.5` sits centrally in that band, and
+  `35`mm uses the commonly-cited 30-40mm streamline-length cutoff for short
+  association/U-fibers.
+- `nodal_delay = 7` (ms): per-hop relay delay, accumulated once for every
+  graph edge on the shortest path - representing the time a cortical
+  population takes to receive an input, integrate it, and re-fire toward the
+  next node (a broader quantity than pure synaptic transmission delay alone).
+  Revised down from `10`, which was cited to `sabatini_timing_1996` - that
+  paper measures **presynaptic vesicle release** specifically (<1ms), ~100x
+  smaller than the value it was cited for, and doesn't measure population
+  relay time at all. `7`ms instead sits almost exactly at the population-level
+  inhibitory synaptic time-constant median (5.8ms excitatory / 7.3ms
+  inhibitory) that `lemarechal_brain_2022` fits directly from CCEP data.
+- `spatial_decay = 0.5`: unchanged by this update. No literature value exists
+  for a per-hop amplitude decay factor of this kind - comparable published
+  models (e.g. network-diffusion disease-progression models) all treat their
+  analogous decay parameter as free/data-fitted rather than
+  literature-derived, so this is kept as a tuned/free parameter, matching the
+  library default.
+- `jitter = 1` (ms): unchanged value, but its *meaning* changed this update -
+  it's now correctly accumulated per-hop along the shortest path
+  (`jitter*sqrt(hops)`, since independent per-hop noise sums in variance, not
+  linearly) rather than as a single flat perturbation of the already-summed
+  total path delay (the previous behavior, which gave a dipole 20 hops away
+  the same jitter magnitude as one 1 hop away). No literature value is used
+  or sought for the 1ms magnitude itself - a small, arbitrary smoothing term
+  to avoid perfectly deterministic, sample-locked arrival times, not intended
+  to represent a specific physiological source of timing variability.
+
+**Parameter choices - noise (`NoiseConfig`) and SNR calibration
+(`SNRConfig`):**
+
+- `NoiseConfig()` (library defaults): new this update - two independent noise
+  sources (source-space `dipole_noise`, sensor-space `sensor_noise`) combine
+  in quadrature at the delivered channel. `sensor_noise_scale_uv = 2.0` (µV
+  RMS, fixed) represents a small instrument/electrode-noise floor - an
+  order-of-magnitude engineering assumption, not a literature-derived value.
+  `target_sensor_noise_uv = 15.0` (µV RMS, total) is the literature midpoint
+  of the commonly-cited scalp EEG background noise range (~10-20µV RMS,
+  general clinical-EEG convention, no single pinned citation);
+  `dipole_noise`'s Am-scale is solved at run time so the specific head
+  model's forward-projected contribution makes up the remainder.
+  `sensor_noise_color="white"` (standard instrument/thermal-noise assumption)
+  and `dipole_noise_color="pink"` (standard 1/f-type assumption for ongoing
+  background cortical activity) are both standard modeling conventions, not
+  fitted/measured values.
+- `SNRConfig(method="peak", spike_window=(-0.03, 0.03))`: new this update.
+  `method="peak"` (max\|amplitude\| / baseline std) was chosen after
+  whitened/GFP-based estimators introduced calibration mismatches when the
+  whitening noise covariance didn't exactly match the delivered noise - an
+  internal-consistency choice, not literature-driven. `spike_window` is
+  independent of the epoch's plotting window and should roughly match the
+  *observed* (sensor-level) spike duration, which can be wider than the
+  source-level `SpikeSignal.width` once propagation delays/jitter smear it -
+  60ms sits within the 20-70ms interictal spike duration convention
+  [@kane_revised_2017]. `channel_selection="auto"` (library default,
+  calibrating against one pre-selected channel rather than searching all
+  channels) removes a channel-count-dependent "winner's curse" that makes low
+  SNR targets unreachable on many-channel montages, regardless of window
+  width - an artifact of the measurement procedure, not a physiological
+  consideration.
 
 **Parameter choices - dataset generation:**
 
-- Regions: the shared 100-region probe set (`results/sub-10_probe-set.csv`),
+- Regions: the shared 100-region probe set (`results/simf/intermediate/probe-set.csv`),
   not all ~473 parcellation regions - see the power-analysis rationale above.
 - `repetitions = 8`: repeats simulated per source region - see the
   power-analysis rationale above (revised down from an earlier `30`).
-- `snr_target = 10.0`: target single-trial SNR. **FILL**
+- `snr_target = 5.0`: target single-trial peak-amplitude SNR. Revised down
+  from `10` (previously uncited). @gonsisko_electroencephalographic_2024
+  reports individual (single-trial) interictal spikes at ~3-5 dB SNR
+  (linear ratio ~2.0-3.2); averaged spikes reach >10 dB. `5` sits above that
+  single-trial literature band deliberately: an earlier attempt at
+  `snr_target=2.5` was found to sit at or below the level noise alone can
+  randomly generate on this simulator - too close to the floor to reliably
+  read out as "a spike" in a single trial. `5` is a practical compromise,
+  still much closer to the single-trial literature range than the old,
+  averaged-response-scale default of 10, while remaining comfortably above
+  the noise floor - literature-**informed**, not literature-**derived**.
 - `base_seed = 42`: fixed seed for reproducibility - standard practice, not a
   modeling choice.
 - `n_jobs = -1`: `generate_simulation_dataset` now parallelizes execution
@@ -1041,9 +1134,9 @@ def run_simulation(overwrite=False):
 
   # build simulation
   spike = mm.analysis.simulation.SpikeSignal(
-    width = 0.1,    # in [ms]
-    onset = 0.5,    # in [ms]
-    repeat = 1,     # in [ms]
+    width = 0.05,   # in [s]
+    onset = 0.5,    # in [s]
+    repeat = 1,     # in [s]
     scale = 1e-8,   # in [A]
     event_id = 1,
   )
@@ -1068,18 +1161,27 @@ def run_simulation(overwrite=False):
 
   # Propagation configuration
   prop_config = mm.analysis.simulation.PropagationConfig(
-    conduction_speed = 30,          # in [mm/ms]
-    nodal_delay = 10,               # in [ms]
+    conduction_speed = 4.5,         # in [mm/ms]
+    u_fiber_speed = 2.5,            # in [mm/ms]
+    u_fiber_max_length = 35,        # in [mm]
+    nodal_delay = 7,                # in [ms]
     spatial_decay = 0.5,            # [0-1]
     jitter = 1,                     # in [ms]
   )
 
   sim = mm.analysis.simulation.Simulator(head_model, epoch_config)
 
+  # Noise and SNR calibration configuration
+  noise_config = mm.analysis.simulation.NoiseConfig()
+  snr_config = mm.analysis.simulation.SNRConfig(
+    method = "peak",
+    spike_window = (-0.03, 0.03),
+  )
+
   # 8 repetitions per region, over the shared 100-region probe set (spatially
   # uniform sample, see probe_set_selection.py) rather than all ~473
   # parcellation regions - see the power-analysis rationale in the prose above
-  probe_set = pd.read_csv(f"./results/sub-{sub}_probe-set.csv")
+  probe_set = pd.read_csv("./results/simf/intermediate/probe-set.csv")
   brain_regions = probe_set["region"].tolist()
   sources = [mm.analysis.simulation.Source([br], spike) for br in brain_regions]
 
@@ -1090,7 +1192,9 @@ def run_simulation(overwrite=False):
     sources = sources,
     prop_config = prop_config,
     repetitions = 8,
-    snr_targets = [10.0],
+    snr_targets = [5.0],
+    snr_config = snr_config,
+    noise_config = noise_config,
     base_seed = 42,
     entities = {"task":"spk"},
     n_jobs = 20,
@@ -1113,7 +1217,7 @@ computation are separate follow-up steps, not part of this cell - see
 
 ⚠ **Region set changed from the shared 100-region probe set to a dedicated
 50-region one, specifically for this experiment.** The original design
-reused the shared probe set (`results/sub-10_probe-set.csv`) so the noise
+reused the shared probe set (`results/simf/intermediate/probe-set.csv`) so the noise
 sweep stayed region-for-region comparable with the degradation/surrogate
 experiments. A completed power-analysis pilot
 (`tutorials/analysis/simulations/pilot_noise_cluster_permutation_power.ipynb`)
@@ -1163,7 +1267,7 @@ base_seed = 42
 
 def run_noise_sweep_probe_set_selection(overwrite=False):
   # output file
-  fprobe = Path(f"./results/sub-{sub}_probe-set_noisesweep.csv")
+  fprobe = Path("./results/simf/intermediate/probe-set_noisesweep.csv")
 
   if check_files([fprobe]) and not overwrite:
     print("Already exists, skipping.")
@@ -1195,16 +1299,28 @@ def run_noise_sweep_probe_set_selection(overwrite=False):
 run_noise_sweep_probe_set_selection(overwrite=True)
 ```
 
+⚠ **Underlying physical parameters updated 2026-08-03** (spike width,
+propagation conduction speeds, nodal delay, and the new `NoiseConfig`/
+`SNRConfig` noise model) to match the flagship dataset's `simulation.py`
+above - see that section's "Parameter choices" bullets for the full
+rationale, not repeated here. The region count, repetition count, and the
+`snr_levels` sweep below are unchanged: they're power-analysis/experiment-
+design choices independent of those physical parameters.
+
 **Parameter choices:**
 
 - Regions: a dedicated 50-region noise-sweep-specific probe set
-  (`results/sub-10_probe-set_noisesweep.csv`, see "Noise-Sweep Probe Set"
+  (`results/simf/intermediate/probe-set_noisesweep.csv`, see "Noise-Sweep Probe Set"
   above) - not the shared 100-region probe set used by the degradation/
   surrogate experiments. Traded region-for-region comparability with those
   experiments for power-optimal sizing specific to the noise sweep - see the
   ⚠ note above.
 - `snr_levels = [1, 1.5, 2, 3, 5, 7, 10, 14, 20]`: 9 levels, denser than the
   original 5-level log2 grid, still spanning roughly the same 1-20 range.
+  Unchanged by the 2026-08-03 parameter update (see ⚠ note above) - the
+  flagship dataset's single `snr_target` moved from 10 to 5 (see
+  `simulation.py`'s bullets), but this sweep's own point of the exercise is
+  to cover a range of SNR levels, not to track that single-point default.
 - `n_reps = 3` (down from the original 20): per the power-analysis pilot
   referenced above, region count - not repetition count - is what drives
   power for this experiment's outcomes, so the budget was reallocated from
@@ -1281,7 +1397,7 @@ n_jobs = 25   # compute resource setting, not a modeling choice - see prose abov
 def run_noise_sweep_simulation(overwrite=False):
   # output: convenience copy of the sweep's simulation_index.tsv under
   # results/, so downstream cells don't need to know the noisesweep subject id.
-  findex = Path(f"./results/sub-{sub}_noise-sweep_index_v2.tsv")
+  findex = Path("./results/simf/intermediate/noise-sweep_index_v2.tsv")
   fsim_index = dm.roots["sim"]/f"sub-{noisesweep_subject}"/"simulation_index.tsv"
 
   if check_files([findex]) and not overwrite:
@@ -1290,7 +1406,7 @@ def run_noise_sweep_simulation(overwrite=False):
 
   # 0. Probe-set regions - dedicated to this experiment, not the shared one
   # (see "Noise-Sweep Probe Set" above)
-  probe_set = pd.read_csv(f"./results/sub-{sub}_probe-set_noisesweep.csv")
+  probe_set = pd.read_csv("./results/simf/intermediate/probe-set_noisesweep.csv")
   probe_regions = probe_set["region"].tolist()
 
   # 1. Load shared simulation inputs - same original connectome/forward as
@@ -1303,9 +1419,9 @@ def run_noise_sweep_simulation(overwrite=False):
   ras2tkras = dm.load(sub, "ras2tkras")
 
   spike = mm.analysis.simulation.SpikeSignal(
-    width = 0.1,    # in [ms]
-    onset = 0.5,    # in [ms]
-    repeat = 1,     # in [ms]
+    width = 0.05,   # in [s]
+    onset = 0.5,    # in [s]
+    repeat = 1,     # in [s]
     scale = 1e-8,   # in [A]
     event_id = 1,
   )
@@ -1327,13 +1443,22 @@ def run_noise_sweep_simulation(overwrite=False):
   )
 
   prop_config = mm.analysis.simulation.PropagationConfig(
-    conduction_speed = 30,          # in [mm/ms]
-    nodal_delay = 10,               # in [ms]
+    conduction_speed = 4.5,         # in [mm/ms]
+    u_fiber_speed = 2.5,            # in [mm/ms]
+    u_fiber_max_length = 35,        # in [mm]
+    nodal_delay = 7,                # in [ms]
     spatial_decay = 0.5,            # [0-1]
     jitter = 1,                     # in [ms]
   )
 
   sim = mm.analysis.simulation.Simulator(head_model, epoch_config)
+
+  # Noise and SNR calibration configuration (same as simulation.py above)
+  noise_config = mm.analysis.simulation.NoiseConfig()
+  snr_config = mm.analysis.simulation.SNRConfig(
+    method = "peak",
+    spike_window = (-0.03, 0.03),
+  )
 
   sources = [mm.analysis.simulation.Source([br], spike) for br in probe_regions]
 
@@ -1350,6 +1475,8 @@ def run_noise_sweep_simulation(overwrite=False):
     prop_config = prop_config,
     repetitions = n_reps,
     snr_targets = snr_levels,
+    snr_config = snr_config,
+    noise_config = noise_config,
     base_seed = base_seed,
     entities = {"task": "spk"},
     n_jobs = n_jobs,
@@ -1590,14 +1717,19 @@ run_solve_inverse(overwrite=True)  # must force-regen: old STCs used cset depth=
 ## Validation Metrics (Flagship)
 
 For every simulated run, computes (a) the spatial correlation between
-reconstruction and ground truth over time, (b) precision-recall curves at
-the half-rising-phase/peak of the simulated EEG, (c) localization error at
+reconstruction and ground truth over time, (b) localization error at
 the half-rising-phase only - distance from each method's single loudest
-vertex to the true seed region, 0 if inside it - and (d) the half-rising-
+vertex to the true seed region, 0 if inside it - and (c) the half-rising-
 phase/peak time of the simulated *sensor* EEG itself (used only for the
 reference lines drawn on the correlation plot in `index.qmd`, independent of
 source reconstruction method) - one `MetricSuite` per subject, reloaded and
 plotted in `index.qmd`.
+
+⚠ **Precision-recall curves (`precision_hrp`/`precision_pp`) dropped** - only
+ever kept for reference/appendix use (see `plot_configuration.py`'s note in
+`index.qmd`), never plotted or quoted anywhere in the document, so this cell
+no longer computes them at all (per explicit instruction to only compute
+what `index.qmd` actually shows).
 
 Merged from two previously separate cells (`comparison.py`/`spike_timing.py`)
 that looped over the identical `index["run"]` and both read each run's `ave`
@@ -1611,7 +1743,8 @@ seed `Source` (for `select_targets`, same pattern as
 forward model. This also fixes a redundancy that predated the merge:
 `get_rising_phase` used to be recomputed once per `(method, phase)` pair (4
 methods x 2 phases) even though it doesn't depend on `method` - now computed
-once per phase and reused for every method's precision-recall indexing.
+once per phase and reused for every method's localization-error indexing
+(hrp) and sensor-timing metric (hrp/pp).
 
 **Parameter choices:**
 
@@ -1621,10 +1754,7 @@ once per phase and reused for every method's precision-recall indexing.
   (`wmne` was excluded, an open **FILL** question at the time; `mce` was
   briefly included too before being dropped from the whole study - see
   `solve_inverse.py`'s prose above).
-- `n_pr_points = 100`: resolution of the resampled precision-recall curve
-  grid (see `resample_pr_curve`) - a visualization/storage resolution
-  tradeoff rather than a modeling assumption.
-- hrp/pp (for both the precision-recall indexing and the sensor-timing
+- hrp/pp (for both the localization-error indexing and the sensor-timing
   metric below) are picked from `ave` *cropped* to the reconstruction's
   window, not the full uncropped evoked the old `spike_timing.py` used - per
   explicit instruction, the crop window always brackets the simulated spike
@@ -1651,20 +1781,19 @@ from mindmap.analysis.functional.common.metric import find_peak_localization_err
 from mindmap.analysis.functional.inverse import MeasureTask, run_parallel_pipeline
 from mindmap.analysis.simulation.components import Source
 from scripts.data_manager import SimfManager
-from scripts.utils import check_files, resample_pr_curve
+from scripts.utils import check_files
 
 # data manager
 dm = SimfManager("simf.config.yml")
 sub = "10"
 
 methods = ["wcset", "cset", "sloreta", "dspm", "wmne"]
-n_pr_points = 100   # points kept per resampled precision-recall curve
 n_jobs = 25
 
 def make_preprocess(sources_dir):
   """Crops ground/data to the shared STC window (unchanged from before), and
   additionally resolves this run's true seed-source mask for
-  localization_error_hrp below - needs `simulator` (now requested via
+  localization_error below - needs `simulator` (now requested via
   MeasureTask's `simulator_dir`) for hm.src/hm.parc/hm.ras2tkras, and the
   run's own saved Source seed, same pattern as
   noise_sweep_comparison.py/degradation_reconstruction.py."""
@@ -1697,13 +1826,12 @@ def make_postprocess_score(dipole_positions):
       for m, stc in solutions.items()
     }
 
-    prec_hrp, prec_pp = {}, {}
+    # computed once per phase, not once per method: `data` doesn't depend on
+    # which method's stc is being scored. hrp_idx is also this run's
+    # localization-error index below.
     phase_time = {}
-    recall_grid = None
     hrp_idx = None
-    for phase_name, ratio, store in [("hrp", 0.5, prec_hrp), ("pp", 1.0, prec_pp)]:
-      # computed once per phase, not once per (method, phase): ground/data/idx
-      # don't depend on which method's stc is being scored
+    for phase_name, ratio in [("hrp", 0.5), ("pp", 1.0)]:
       idx = mm.analysis.eeg.get_rising_phase(data, ratio=ratio, as_idx=True)
       # `idx` is a length-1 array (mne's `time_as_index` always returns one,
       # even for scalar input) - fine for the fancy-indexing below, but
@@ -1713,28 +1841,22 @@ def make_postprocess_score(dipole_positions):
       if phase_name == "hrp":
         hrp_idx = idx
 
-      activity_mask = ground.data[:, idx] > 0
-      for m, stc in solutions.items():
-        curves = mm.core.calc_pr_curve(activity_mask, stc.data[:, idx])
-        store[m], recall_grid = resample_pr_curve(curves["precision"], curves["recall"], n_points=n_pr_points)
-
     # localization error at half-rising-phase only: distance from each
     # method's single loudest vertex at hrp to the true seed region (0 if
-    # inside it) - the classic single-source localization baseline, read
-    # alongside the PR curve above rather than in place of it
+    # inside it) - the classic single-source localization baseline
     loc_err_hrp = {
       m: find_peak_localization_error(stc.data[:, hrp_idx], true_source_mask, dipole_positions)["distance_mm"]
       for m, stc in solutions.items()
     }
 
-    return corr, prec_hrp, prec_pp, loc_err_hrp, data.times, recall_grid, phase_time["hrp"], phase_time["pp"]
+    return corr, loc_err_hrp, data.times, phase_time["hrp"], phase_time["pp"]
   return postprocess_score
 
 def run_comparison(overwrite=False):
   # one MetricSuite folder regroups every metric of this study (raw per-run
   # curves + context) and is reloaded in a single call from comparison_plots.py
   results_dir = Path("./results")
-  fmetrics = results_dir/f"sub-{sub}_simf-metrics"
+  fmetrics = results_dir/"simf/flagship"
 
   if check_files([fmetrics/"meta.json"]) and not overwrite:
     print("Already exists, skipping.")
@@ -1744,8 +1866,8 @@ def run_comparison(overwrite=False):
   index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
   # region lookup for registration below - same derivation/rationale as
   # noise_sweep_comparison.py/degradation_reconstruction.py/
-  # surrogate_reconstruction.py: lets index.qmd's compare_methods()/
-  # cluster_permutation() pair methods by region (the correct
+  # surrogate_reconstruction.py: lets stat.wilcoxon()/
+  # stat.cluster_permutation() pair methods by region (the correct
   # repeated-measures unit - reps of the same region are correlated draws,
   # not independent trials) instead of the coarser per-run pairing used
   # before.
@@ -1797,62 +1919,63 @@ def run_comparison(overwrite=False):
     tasks, make_preprocess(sources_dir), lambda ctx: None, make_postprocess_score(dipole_positions), n_jobs=n_jobs, n_threads_per_job=1,
   )
 
-  corr_runs, prhrp_runs, prpp_runs, locerr_runs, times, recall_grid, hrp_times, pp_times = zip(*results)
+  corr_runs, locerr_runs, times, hrp_times, pp_times = zip(*results)
   run_ids = [t.run for t in tasks]
   regions = np.array([run2region[r] for r in run_ids])
 
   # one MetricSuite regroups every metric of this study. Each metric is registered
   # as a single (n_runs, n_points) stack and kept as an array internally, which is
   # what makes register/save/reload cheap even at this scale (see mindmap's
-  # MetricSuite.register/.save for details, and scripts/utils.py:resample_pr_curve
-  # for why the PR curves are pre-downsampled onto a common recall grid)
+  # MetricSuite.register/.save for details)
   metrics = mm.metric.MetricSuite(f"sub-{sub} simulation validation")
 
-  # correlation/precision_hrp/precision_pp are 2D (n_runs, n_points) stacks -
-  # register() only accepts point-wise coordinates matching n_points (the
-  # last, within-curve axis: times/recall) or a single constant tag for the
-  # whole call, so a per-run `region` (which varies along the first/reps
-  # axis, not points) can't be attached to one combined all-runs call the
-  # way it can for the 1D localization_error_hrp below. Grouping by region
-  # and registering one stacked call per (method, region) instead - every
-  # call's reps then share that region, so it becomes a valid constant tag -
-  # keeps the same "stack of repeated observations" efficiency the single
-  # all-runs call had, while letting index.qmd's compare_methods()/
-  # cluster_permutation() pair regions across methods (same convention as
+  # correlation is a 2D (n_runs, n_points) stack - register() only accepts
+  # point-wise coordinates matching n_points (the last, within-curve axis:
+  # times) or a single constant tag for the whole call, so a per-run `region`
+  # (which varies along the first/reps axis, not points) can't be attached to
+  # one combined all-runs call the way it can for the 1D localization_error
+  # below. Grouping by region and registering one stacked call per (method,
+  # region) instead - every call's reps then share that region, so it becomes
+  # a valid constant tag - keeps the same "stack of repeated observations"
+  # efficiency the single all-runs call had, while letting stat.wilcoxon()/
+  # stat.cluster_permutation() pair regions across methods (same convention as
   # noise_sweep_comparison.py/degradation_reconstruction.py/
   # surrogate_reconstruction.py).
   unique_regions = np.unique(regions)
   for m in methods:
     for region in unique_regions:
       idx = np.where(regions == region)[0]
-      metrics.register(m, "correlation", np.stack([corr_runs[i][m] for i in idx]), times=times[0], region=region)
-      metrics.register(m, "precision_hrp", np.stack([prhrp_runs[i][m] for i in idx]), recall=recall_grid[0], region=region)
-      metrics.register(m, "precision_pp", np.stack([prpp_runs[i][m] for i in idx]), recall=recall_grid[0], region=region)
-    # scalar per run, half-rising-phase only - same one-point-per-run
-    # pattern as the "timing" entries below - `region` is point-wise here
-    # too (length n_runs, matching `run`), since this is already a flat 1D
-    # array (one point per run), not a 2D per-curve stack.
-    metrics.register(m, "localization_error_hrp", np.array([r[m] for r in locerr_runs]), run=np.array(run_ids), region=regions)
+      metrics.register("correlation", np.stack([corr_runs[i][m] for i in idx]), Method=m, times=times[0], region=region)
+    # scalar per run, half-rising-phase only (always - no pp counterpart
+    # exists anywhere for this metric, but `phase` is tagged anyway for
+    # uniformity with `correlation`'s phase-scalar registrations in the
+    # other experiments, and with spike's own `phase` coord) - same
+    # one-point-per-run pattern as the "timing" entries below - `region` is
+    # point-wise here too (length n_runs, matching `run`), since this is
+    # already a flat 1D array (one point per run), not a 2D per-curve stack.
+    metrics.register("localization_error", np.array([r[m] for r in locerr_runs]), Method=m, run=np.array(run_ids), region=regions, phase="hrp")
 
   # per-run half-rising-phase/peak time of the simulated sensor EEG - a
-  # property of `ave`, not of any solver, so registered under its own
-  # "timing" label rather than one of the method labels above. Same study,
-  # same MetricSuite - replaces the old spike_timing.py's separate
+  # property of `ave`, not of any solver, so registered with no `Method` tag
+  # at all (nothing downstream filters on one). Same study, same MetricSuite
+  # - replaces the old spike_timing.py's separate
   # results/sub-10_simf_spike_timing.csv (index.qmd's only reader of that
   # file now reads this suite instead)
-  metrics.register("timing", "hrp_time", np.array(hrp_times), run=np.array(run_ids))
-  metrics.register("timing", "pp_time", np.array(pp_times), run=np.array(run_ids))
+  metrics.register("hrp_time", np.array(hrp_times), run=np.array(run_ids))
+  metrics.register("pp_time", np.array(pp_times), run=np.array(run_ids))
 
+  metrics.metadata["units"] = {
+    "correlation": "r", "localization_error": "mm", "hrp_time": "s", "pp_time": "s",
+  }
   metrics.save(fmetrics, overwrite=overwrite)
 
-run_comparison(overwrite=True)  # must force-regen: now registers a `region` coordinate on every method-level metric (was previously absent on correlation/precision_hrp/precision_pp, and only `run` on localization_error_hrp), so index.qmd's compare_methods()/cluster_permutation() can pair methods by region
+run_comparison(overwrite=True)  # must force-regen: precision_hrp/precision_pp dropped, localization_error_hrp renamed to localization_error (+ phase="hrp" coord), and now registers a `region` coordinate on every method-level metric (was previously absent on correlation, and only `run` on localization_error_hrp), so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region
 ```
 
-Plots of these results (spatial correlation over time, precision-recall at
-half-rising-phase/peak, sensor hrp/pp timing) live in `index.qmd`'s Results
-section (`results_simf_correlation.py`/`results_simf_precision.py`), not
-here - this file only produces the data (`results/sub-10_simf-metrics`) they
-read.
+Plots of these results (spatial correlation over time, sensor hrp/pp timing)
+live in `index.qmd`'s Results section (`simf_localization_stats.py`/
+`simf_correlation_plot.py`), not here - this file only produces the data
+(`results/simf/flagship`) they read.
 
 ## Experiment 1: Noise/SNR Sweep Reconstruction & Validation
 
@@ -1898,16 +2021,17 @@ oversight:
   instruction) - the noise-sweep's wCSET numbers are therefore directly
   comparable to the flagship/degradation/surrogate wCSET numbers elsewhere
   in the manuscript, unlike in earlier revisions of this file.
-- **5 scalar metrics per run/method** (`correlation_hrp`, `correlation_pp`,
-  `ap_hrp`, `ap_pp`, `localization_error_hrp`), not the 3
-  full-time-course/full-PR-curve metrics `comparison.py`/
-  `surrogate_comparison.py` compute. Only two timepoints (`hrp`/`pp`) are
-  solved and saved per run/method, not the full cropped window - no full
-  time-course correlation, no full PR curves. A deliberate scope reduction
-  from `TODO_simf_robustness.md`'s original plan, justified by volume (up to
-  10,000 runs x 6 methods = 60,000 solves) - the saved STCs stay cheap
-  (2 samples each) even at that scale, unlike the flagship's full-time-course
-  ones.
+- **3 scalar metrics per run/method** (`correlation` at `phase="hrp"`/`"pp"`,
+  `localization_error` at `phase="hrp"`), not the full-time-course metric
+  `comparison.py`/`surrogate_comparison.py` compute (`ap_hrp`/`ap_pp` were
+  also computed here previously but dropped - never plotted or quoted
+  anywhere in `index.qmd`, per explicit instruction to only compute what it
+  actually shows). Only two timepoints (`hrp`/`pp`) are solved and saved per
+  run/method, not the full cropped window - no full time-course correlation.
+  A deliberate scope reduction from `TODO_simf_robustness.md`'s original
+  plan, justified by volume (up to 10,000 runs x 6 methods = 60,000 solves) -
+  the saved STCs stay cheap (2 samples each) even at that scale, unlike the
+  flagship's full-time-course ones.
 - **hrp/pp timing** is picked from each run's own clean `gold`, projected to
   sensor space with the *simulation* forward (`simulator.hm.fwd`,
   noise-immune by construction), not from the noisy `ave` the way
@@ -2053,7 +2177,7 @@ def postprocess_save(ctx):
 
 def run_noise_sweep_reconstruction(overwrite=False):
   # always the full sweep - QUICK_TEST lives in noise_sweep_comparison.py now
-  findex = Path(f"./results/sub-{sub}_noise-sweep_index_v2.tsv")
+  findex = Path("./results/simf/intermediate/noise-sweep_index_v2.tsv")
   df_sweep = pd.read_csv(findex, sep="\t")
 
   simulator_dir = dm.roots["sim"]/f"sub-{noisesweep_subject}"/"simulator"
@@ -2100,14 +2224,14 @@ def run_noise_sweep_reconstruction(overwrite=False):
 run_noise_sweep_reconstruction(overwrite=True)  # must force-regen: old STCs used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; wcset's harm was mistakenly set to 0.5, now fixed to the intended harm=5 (depth=0.2 unaffected, unchanged from the prior run); wMNE (formerly desc="mne") now solved with its own depth=0.8 operator under desc="wmne"
 ```
 
-Computes the same 5 scalar metrics as before (`correlation_hrp`,
-`correlation_pp`, `ap_hrp`, `ap_pp`, `localization_error_hrp`), but now via
+Computes the same 3 scalar metrics as before (`correlation` at
+`phase="hrp"`/`"pp"`, `localization_error` at `phase="hrp"`), but now via
 `MeasureTask` - reloading the STCs `noise_sweep_reconstruction.py` saved
 instead of solving them - the same read-and-score pattern `comparison.py`
 uses for the flagship dataset.
 
 ⚠ `MeasureTask` doesn't carry `fsource`/`src` the way `InverseSimTask` does
-(scoring-only tasks don't usually need it), but `localization_error_hrp`
+(scoring-only tasks don't usually need it), but `localization_error`
 needs `src.select_targets(...)` to build `true_source_mask` - loaded
 directly here (`Source.load(sources_dir/f"run-{run:03d}_source.json")`)
 inside this cell's own preprocessing step instead. `dipole_positions` stays
@@ -2119,7 +2243,7 @@ computed once, outside the pipeline, same as before (run-independent).
   only selects which subset of *already-solved* runs to score, from the same
   full index. When `True`, subsamples `n_quick_per_level` runs per SNR level
   instead of scoring all 1,350 runs x 6 methods. `suffix` keeps the
-  quick-test output (`results/sub-10_noise-sweep-metrics_test`) from
+  quick-test output (`results/simf/noise_sweep_test`) from
   colliding with the real, full-sweep one. `QUICK_TEST = False` here: this
   is the full scoring pass.
 - `n_quick_per_level = 30`: sample size per SNR level under `QUICK_TEST` -
@@ -2183,7 +2307,7 @@ def make_preprocess(sources_dir):
 
 def make_score(dipole_positions):
   """Scores each of the six saved solutions against this run's own gold,
-  returns 5 scalars/method. sol.data[:, 0]/[:, 1] are hrp/pp by construction
+  returns 3 scalars/method. sol.data[:, 0]/[:, 1] are hrp/pp by construction
   order (see noise_sweep_reconstruction.py), so hrp_idx/pp_idx re-derived
   above are only used to index into `gold`, never into `sol`/`stc.times`."""
   def score(ctx):
@@ -2203,9 +2327,7 @@ def make_score(dipole_positions):
         "method": method,
         "correlation_hrp": np.corrcoef(gold_hrp, sol_hrp)[0, 1],
         "correlation_pp": np.corrcoef(gold_pp, sol_pp)[0, 1],
-        "localization_error_hrp": hit["distance_mm"],
-        "ap_hrp": mm.core.calc_pr_curve(gold_hrp > 0, sol_hrp)["ap"],
-        "ap_pp": mm.core.calc_pr_curve(gold_pp > 0, sol_pp)["ap"],
+        "localization_error": hit["distance_mm"],
       })
     return rows
 
@@ -2213,7 +2335,7 @@ def make_score(dipole_positions):
 
 def run_noise_sweep_comparison(overwrite=QUICK_TEST):
   # output: one MetricSuite for the whole sweep (all methods x SNR levels)
-  fmetrics = Path(f"./results/sub-{sub}_noise-sweep-metrics{suffix}")
+  fmetrics = Path(f"./results/simf/noise_sweep{suffix}")
 
   if check_files([fmetrics/"meta.json"]) and not overwrite:
     print("Already exists, skipping.")
@@ -2231,7 +2353,7 @@ def run_noise_sweep_comparison(overwrite=QUICK_TEST):
   # convenience copy rather than the raw per-subject simulation_index.tsv) -
   # always the full sweep's index; QUICK_TEST subsamples it below rather
   # than pointing at a separate dataset
-  findex = Path(f"./results/sub-{sub}_noise-sweep_index_v2.tsv")
+  findex = Path("./results/simf/intermediate/noise-sweep_index_v2.tsv")
   df_sweep = pd.read_csv(findex, sep="\t")
 
   if QUICK_TEST:
@@ -2245,7 +2367,7 @@ def run_noise_sweep_comparison(overwrite=QUICK_TEST):
   # copy - source_index_list is a stringified single-element list (e.g.
   # "['ctx-lh-inferiortemporal_3']"), same derivation
   # degradation_reconstruction.py/surrogate_reconstruction.py already use.
-  # Lets compare_methods()/cluster_permutation() in index.qmd pair
+  # Lets stat.wilcoxon()/stat.cluster_permutation() in index.qmd pair
   # methods by region (the correct repeated-measures unit - reps of the same
   # region are correlated draws, not independent trials) instead of having
   # no pairing key at all.
@@ -2290,35 +2412,46 @@ def run_noise_sweep_comparison(overwrite=QUICK_TEST):
   )
 
   # 3. Register into one MetricSuite (method x snr), same pattern as
-  # comparison.py/surrogate_comparison.py
+  # comparison.py/surrogate_comparison.py. `correlation` collapses the old
+  # correlation_hrp/correlation_pp pair into one metric name + a `phase`
+  # coord (matching spike's own `phase` coord convention), rather than
+  # baking the phase into the metric name.
   metrics = mm.metric.MetricSuite(f"sub-{sub} noise/SNR sweep validation")
   for task, run_rows in zip(tasks, results):
     snr = run2snr[task.run]
     region = run2region[task.run]
     for row in run_rows:
       method = row["method"]
-      metrics.register(method, "correlation_hrp", row["correlation_hrp"], method=method, snr=snr, region=region)
-      metrics.register(method, "correlation_pp", row["correlation_pp"], method=method, snr=snr, region=region)
-      metrics.register(method, "localization_error_hrp", row["localization_error_hrp"], method=method, snr=snr, region=region)
-      metrics.register(method, "ap_hrp", row["ap_hrp"], method=method, snr=snr, region=region)
-      metrics.register(method, "ap_pp", row["ap_pp"], method=method, snr=snr, region=region)
+      metrics.register("correlation", row["correlation_hrp"], Method=method, snr=snr, region=region, phase="hrp")
+      metrics.register("correlation", row["correlation_pp"], Method=method, snr=snr, region=region, phase="pp")
+      metrics.register("localization_error", row["localization_error"], Method=method, snr=snr, region=region, phase="hrp")
 
+  metrics.metadata["units"] = {"correlation": "r", "localization_error": "mm"}
   metrics.save(fmetrics, overwrite=overwrite)
 
-run_noise_sweep_comparison(overwrite=True)  # must force-regen: now registers a `region` coordinate per entry (was previously absent), so index.qmd's compare_methods()/cluster_permutation() can pair methods by region
+run_noise_sweep_comparison(overwrite=True)  # must force-regen: now registers a `region` coordinate per entry (was previously absent) and collapses correlation_hrp/correlation_pp/localization_error_hrp into correlation/localization_error + a `phase` coord, so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region and filter by phase
 ```
 
 ## Experiment 2: Connectome Degradation (Rewiring)
 
-Sweeps three degradation operators on the *reconstruction-side* connectome
-only, at 0-100% severity, and rerun CSET/wCSET on the probe-set runs at each
-level - dSPM/sLORETA are connectome-agnostic, so their flagship probe-set
-results are reused unchanged as a flat reference (not recomputed here), same
-pattern as Experiment 3 (surrogates). No new simulation is needed: like
-Experiment 3, this reuses the flagship's existing SNR=10, original-connectome
-`ave`/`cov`/`gold` files for the probe-set runs - only the reconstruction-side
-connectome changes. Purpose: figure out how much of the true connectome has
-to be correct before CSET/wCSET's advantage over dSPM/sLORETA erodes.
+Sweeps the permutation degradation operator on the *reconstruction-side*
+connectome only, at 0-100% severity, and rerun CSET/wCSET on the probe-set
+runs at each level - dSPM/sLORETA are connectome-agnostic, so their flagship
+probe-set results are reused unchanged as a flat reference (not recomputed
+here), same pattern as Experiment 3 (surrogates). No new simulation is
+needed: like Experiment 3, this reuses the flagship's existing SNR=5,
+original-connectome `ave`/`cov`/`gold` files for the probe-set runs - only
+the reconstruction-side connectome changes. Purpose: figure out how much of
+the true connectome has to be correct before CSET/wCSET's advantage over
+dSPM/sLORETA erodes.
+
+⚠ **Deletion/addition operators dropped** - this cell used to also sweep
+`deletion`/`addition` (`perturb_connectome_topology`), but neither is plotted
+or discussed anywhere in `index.qmd` (only the permutation experiment is),
+so per explicit instruction to only compute what `index.qmd` actually shows,
+this cell now runs permutation only. This is a real compute reduction, not
+just less data kept: Stage 1 caches 10 connectomes instead of 30, and Stage 2
+reconstructs+scores 11 `(operator, percentage)` combinations instead of 33.
 
 Two-stage parallel design, ported from
 `tutorials/analysis/inverse/sabotage_connectome.ipynb` in the `mindmap` repo:
@@ -2351,17 +2484,16 @@ connectome cache already **is** that checkpoint - reconstruction itself is
 cheap (probe-set runs x 2 methods x 2 timepoints per connectome), so a third
 persisted layer would just be redundant disk writes for something that
 regenerates in seconds. Stage 1's cache, by contrast, **is** kept permanently
-- at 3 operators x 10 non-zero percentage levels x ~426MB, that's only
-~13GB, cheap against this machine's free space, and it protects the actually
-slow step (eigendecomposition, ~70-115s each per this project's own surrogate
-notes).
+- at 10 non-zero percentage levels x ~426MB, that's only ~4.3GB, cheap
+against this machine's free space, and it protects the actually slow step
+(eigendecomposition, ~70-115s each per this project's own surrogate notes).
 
 **Parameter choices:**
 
 - **Percentage grid**: 0, 10, 20, ..., 100 (11 levels), per
   `TODO_simf_robustness.md` §2 - not the notebook's `[0,20,40,60,80,100]` or
-  the noise-sweep's log2 grid. 0% is a no-op for all three operators - the
-  clean `eig` is reused directly, never cached.
+  the noise-sweep's log2 grid. 0% is a no-op - the clean `eig` is reused
+  directly, never cached.
 - **permutation** = `swap_rewire_connectome` (degree-preserving double-edge
   swap). Needs the same empirical calibration as the notebook's "swap"
   method: `n_swaps = n_edges` does **not** reach "100% different from
@@ -2369,15 +2501,12 @@ notes).
   effect, documented in `swap_rewire_connectome`'s own docstring) - so a
   multiplier grid is probed once and inverted to hit each target percentage
   of the empirically measured ceiling, exactly like the notebook.
-- **deletion**/**addition** = `perturb_connectome_topology` with only
-  `n_deletions`/`n_additions` set (the other at 0) - exact closed form,
-  `k = round(percentage/100 * total_edges)`, no calibration needed.
-- No repeats per `(operator, percentage)` (single `seed=0` connectome
-  instance each) - matches `TODO_simf_robustness.md`'s plan. A completed
-  pilot (`pilot_degradation_draws_*`, connectome-draw-count sizing, per
-  project memory) validated a 5-repeat-per-level design as a possible
-  follow-up, but this was deliberately not adopted here - single draw per
-  level stays the design for this dataset.
+- No repeats per percentage (single `seed=0` connectome instance each) -
+  matches `TODO_simf_robustness.md`'s plan. A completed pilot
+  (`pilot_degradation_draws_*`, connectome-draw-count sizing, per project
+  memory) validated a 5-repeat-per-level design as a possible follow-up, but
+  this was deliberately not adopted here - single draw per level stays the
+  design for this dataset.
 - **CSET/wCSET only**, not the noise-sweep's SNR-adaptive-lambda2/6-method
   convention (this experiment doesn't vary noise, so SNR-adaptive `lambda2`
   has no reason to apply here). wCSET's `depth` and `harm` are now fixed at
@@ -2389,18 +2518,19 @@ notes).
   superseding this file's earlier `depth=0.8`/`lambda2=1.0` (itself raised
   from `0.1`, see `solve_inverse.py`'s prose above for the
   `lambda2-tuning.ipynb` sweep this comes from).
-- **5 scalar metrics per run/method** (`correlation_hrp`/`_pp`, `ap_hrp`/
-  `_pp`, `localization_error_hrp`) - a small scope addition beyond
-  `TODO_simf_robustness.md` §2's literal "peak-phase spatial correlation"
-  bullet, added because `InverseSimTask` already loads `simulator`/`src` for
-  free, so `localization_error_hrp` costs nothing extra and keeps this
-  experiment's metric set consistent with Experiment 1 (noise sweep).
+- **2 scalar metrics per run/method** (`correlation`, `localization_error`,
+  both registered at `phase="hrp"` only) - `correlation` at `phase="pp"` and
+  `ap_hrp`/`ap_pp` (and the peak-phase reconstruction they needed) were
+  dropped, never plotted or quoted anywhere in `index.qmd` for this
+  experiment. `localization_error` costs nothing extra beyond
+  `correlation` since `InverseSimTask` already loads `simulator`/`src`
+  for free.
 - Probe-set runs selected exactly like `surrogate_reconstruction.py`
   (100 regions x `n_reps_per_region=8` reps - the flagship dataset's full
   repetition count, not a subset - from the flagship's own
   `simulation_index.tsv`; no new subject, no new simulation).
-- **Output**: one `MetricSuite` per operator
-  (`results/sub-10_simf-metrics_degradation-{operator}`), matching
+- **Output**: one `MetricSuite`
+  (`results/simf/degradation`), matching
   `surrogate_comparison.py`'s per-condition file convention (`coord=
   "percentage"`), not the notebook's single combined suite.
 
@@ -2425,7 +2555,7 @@ from scripts.utils import check_files
 dm = SimfManager("simf.config.yml")
 sub = "10"
 
-operators = ["permutation", "deletion", "addition"]
+operator = "permutation"   # deletion/addition dropped - see prose above
 
 percentages = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 n_reps_per_region = 8   # full flagship repetition count, not a subset
@@ -2434,8 +2564,8 @@ n_jobs_cache = 4
 n_jobs_solve = 25   # Stage 2: reconstruct+score, parallelized across probe-set runs
 
 def run_degradation_reconstruction(overwrite=False):
-  fmetrics = {op: Path(f"./results/sub-{sub}_simf-metrics_degradation-{op}") for op in operators}
-  if all(check_files([f/"meta.json"]) for f in fmetrics.values()) and not overwrite:
+  fmetrics = Path("./results/simf/degradation")
+  if check_files([fmetrics/"meta.json"]) and not overwrite:
     print("Already exists, skipping.")
     return
 
@@ -2481,30 +2611,20 @@ def run_degradation_reconstruction(overwrite=False):
   print(f"swap_rewire_connectome empirical ceiling (treated as '100%'): {swap_ceiling:.4f}")
   print(f"calibrated n_swaps per percentage: {calibrated_n_swaps}")
 
-  edit_counts = {pct: round(pct / 100 * total_edges) for pct in percentages}
-
-  def corrupt(operator, percentage, seed):
-    if operator == "permutation":
-      return mm.analysis.connectivity.swap_rewire_connectome(
-        con_strength, n_swaps=calibrated_n_swaps[percentage], seed=seed
-      )
-    if operator == "deletion":
-      return mm.analysis.connectivity.perturb_connectome_topology(
-        con_strength, n_deletions=edit_counts[percentage], n_additions=0, seed=seed
-      )
-    if operator == "addition":
-      return mm.analysis.connectivity.perturb_connectome_topology(
-        con_strength, n_deletions=0, n_additions=edit_counts[percentage], seed=seed
-      )
-    raise ValueError(f"unknown operator {operator!r}")
+  def corrupt(percentage, seed):
+    return mm.analysis.connectivity.swap_rewire_connectome(
+      con_strength, n_swaps=calibrated_n_swaps[percentage], seed=seed
+    )
 
   # 2. Stage 1: parallel corrupt + eigendecompose + cache (permanent - see
-  # prose above for why this differs from the no-STC-saved choice below)
+  # prose above for why this differs from the no-STC-saved choice below).
+  # Cache labels kept as "{operator}_pct{pct}" (not just "pct{pct}") so any
+  # already-cached permutation connectomes from before deletion/addition were
+  # dropped are found and reused rather than needlessly re-eigendecomposed.
   cache_dir = dm.roots["mm"]/f"sub-{sub}"/"cst_cache"
 
   cache_tasks = [
-    ConnectomeCacheTask(label=f"{operator}_pct{pct}", args=(operator, pct, 0))
-    for operator in operators
+    ConnectomeCacheTask(label=f"{operator}_pct{pct}", args=(pct, 0))
     for pct in percentages
     if pct != 0
   ]
@@ -2513,14 +2633,14 @@ def run_degradation_reconstruction(overwrite=False):
   cache_paths = cache_cst_batch(cache_tasks, corrupt, cache_dir, n_jobs=n_jobs_cache, n_threads_per_job=2, overwrite=overwrite)
 
   # 3. Probe-set runs (same selection as surrogate_reconstruction.py)
-  probe_set = pd.read_csv(f"./results/sub-{sub}_probe-set.csv")
+  probe_set = pd.read_csv("./results/simf/intermediate/probe-set.csv")
   index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
   index["region"] = index["source_index_list"].apply(lambda s: ast.literal_eval(s)[0])
   probe_runs = index[
     index["region"].isin(probe_set["region"]) & (index["repetition"] <= n_reps_per_region)
   ]["run"].tolist()
-  # region lookup for registration below - lets index.qmd's compare_methods()/
-  # cluster_permutation() pair methods by region (the correct repeated-
+  # region lookup for registration below - lets stat.wilcoxon()/
+  # stat.cluster_permutation() pair methods by region (the correct repeated-
   # measures unit here - reps of the same region are correlated draws, not
   # independent trials) instead of having no pairing key at all.
   run2region = dict(zip(index["run"], index["region"]))
@@ -2538,19 +2658,20 @@ def run_degradation_reconstruction(overwrite=False):
   ]
   print(f"{len(inverse_tasks)} probe-set runs ({len(probe_set)} regions x {n_reps_per_region} reps).")
 
-  # 4. Stage 2 setup: preprocess/reconstruct/postprocess - hrp/pp picked from
+  # 4. Stage 2 setup: preprocess/reconstruct/postprocess - hrp picked from
   # each run's own clean gold, same fix noise_sweep_reconstruction.py uses,
-  # needed here too since hrp/pp indices must be identical across every
-  # connectome variant for a given run to stay comparable
-  def preprocess_hrp_pp(ctx):
+  # needed here too since the hrp index must be identical across every
+  # connectome variant for a given run to stay comparable. Half-rising-phase
+  # only now (pp dropped along with correlation_pp/ap_hrp/ap_pp above) - one
+  # timepoint solved per connectome/run instead of two.
+  def preprocess_hrp(ctx):
     ave, gold, simulator = ctx["ave"], ctx["gold"], ctx["simulator"]
     clean_ave = mne.apply_forward(simulator.hm.fwd, gold, ave.info)
     hrp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=0.5, as_idx=True)[0]
-    pp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=1, as_idx=True)[0]
     phase_data = mne.EvokedArray(
-      ave.data[:, [hrp_idx, pp_idx]], ave.info, tmin=0, nave=ave.nave, kind=ave.kind
+      ave.data[:, [hrp_idx]], ave.info, tmin=0, nave=ave.nave, kind=ave.kind
     )
-    return {"phase_data": phase_data, "hrp_idx": hrp_idx, "pp_idx": pp_idx}
+    return {"phase_data": phase_data, "hrp_idx": hrp_idx}
 
   def make_reconstruct(eigvec, eigval):
     def reconstruct(ctx):
@@ -2568,61 +2689,54 @@ def run_degradation_reconstruction(overwrite=False):
     return reconstruct
 
   def postprocess_score(ctx):
-    gold, hrp_idx, pp_idx = ctx["gold"], ctx["hrp_idx"], ctx["pp_idx"]
+    gold, hrp_idx = ctx["gold"], ctx["hrp_idx"]
     src, simulator = ctx["src"], ctx["simulator"]
     true_source_mask = src.select_targets(simulator.hm.src, simulator.hm.parc, simulator.hm.ras2tkras)
-    gold_hrp, gold_pp = gold.data[:, hrp_idx], gold.data[:, pp_idx]
+    gold_hrp = gold.data[:, hrp_idx]
 
     rows = []
     for method, sol in ctx["solutions"].items():
-      sol_hrp, sol_pp = sol.data[:, 0], sol.data[:, 1]
+      sol_hrp = sol.data[:, 0]
       hit = find_peak_localization_error(sol_hrp, true_source_mask, dipole_positions)
       rows.append({
         "method": method,
         "run": ctx["task"].run,  # for region lookup at registration time below
         "correlation_hrp": np.corrcoef(gold_hrp, sol_hrp)[0, 1],
-        "correlation_pp": np.corrcoef(gold_pp, sol_pp)[0, 1],
         "localization_error_hrp": hit["distance_mm"],
-        "ap_hrp": mm.core.calc_pr_curve(gold_hrp > 0, sol_hrp)["ap"],
-        "ap_pp": mm.core.calc_pr_curve(gold_pp > 0, sol_pp)["ap"],
       })
     return rows
 
   # 5. Stage 2: sequential connectomes x parallel runs - no STC ever written
   # to disk, solutions discarded right after scoring (see prose above)
-  metrics = {op: mm.metric.MetricSuite(f"sub-{sub} connectome degradation - {op}") for op in operators}
+  metrics = mm.metric.MetricSuite(f"sub-{sub} connectome degradation - {operator}")
 
-  for operator in operators:
-    for pct in percentages:
-      if pct == 0:
-        eigvec, eigval = eigvec_clean, eigval_clean
-      else:
-        cached = np.load(cache_paths[f"{operator}_pct{pct}"])
-        eigvec, eigval = cached["vec"], cached["val"]
+  for pct in percentages:
+    if pct == 0:
+      eigvec, eigval = eigvec_clean, eigval_clean
+    else:
+      cached = np.load(cache_paths[f"{operator}_pct{pct}"])
+      eigvec, eigval = cached["vec"], cached["val"]
 
-      # n_threads_per_job=1: n_jobs already saturates the 32-core budget, see
-      # project memory on run_parallel_pipeline thread capping
-      results = run_parallel_pipeline(
-        inverse_tasks, preprocess_hrp_pp, make_reconstruct(eigvec, eigval), postprocess_score,
-        n_jobs=n_jobs_solve, n_threads_per_job=1, verbose="warning",
-      )
+    # n_threads_per_job=1: n_jobs already saturates the 32-core budget, see
+    # project memory on run_parallel_pipeline thread capping
+    results = run_parallel_pipeline(
+      inverse_tasks, preprocess_hrp, make_reconstruct(eigvec, eigval), postprocess_score,
+      n_jobs=n_jobs_solve, n_threads_per_job=1, verbose="warning",
+    )
 
-      for run_rows in results:
-        for row in run_rows:
-          method = row["method"]
-          region = run2region[row["run"]]
-          metrics[operator].register(method, "correlation_hrp", row["correlation_hrp"], percentage=pct, region=region)
-          metrics[operator].register(method, "correlation_pp", row["correlation_pp"], percentage=pct, region=region)
-          metrics[operator].register(method, "localization_error_hrp", row["localization_error_hrp"], percentage=pct, region=region)
-          metrics[operator].register(method, "ap_hrp", row["ap_hrp"], percentage=pct, region=region)
-          metrics[operator].register(method, "ap_pp", row["ap_pp"], percentage=pct, region=region)
+    for run_rows in results:
+      for row in run_rows:
+        method = row["method"]
+        region = run2region[row["run"]]
+        metrics.register("correlation", row["correlation_hrp"], Method=method, percentage=pct, region=region, phase="hrp")
+        metrics.register("localization_error", row["localization_error_hrp"], Method=method, percentage=pct, region=region, phase="hrp")
 
-      print(f"[{operator}] {pct}% done ({len(inverse_tasks)} runs x 2 methods).")
+    print(f"{pct}% done ({len(inverse_tasks)} runs x 2 methods).")
 
-  for operator in operators:
-    metrics[operator].save(fmetrics[operator], overwrite=overwrite)
+  metrics.metadata["units"] = {"correlation": "r", "localization_error": "mm"}
+  metrics.save(fmetrics, overwrite=overwrite)
 
-run_degradation_reconstruction(overwrite=True)  # must force-regen: now registers a `region` coordinate per entry (was previously absent), so index.qmd's compare_methods()/cluster_permutation() can pair methods by region
+run_degradation_reconstruction(overwrite=True)  # must force-regen: permutation-only now (deletion/addition dropped), correlation_pp/ap_hrp/ap_pp dropped, correlation_hrp/localization_error_hrp renamed to correlation/localization_error (+ phase="hrp" coord), and now registers a `region` coordinate per entry (was previously absent), so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region
 ```
 
 ## Experiment 3: Surrogate-Connectome Reconstruction & Validation
@@ -2652,13 +2766,35 @@ degradation severity does.
 computed a full spatial-correlation-over-time curve and full
 precision-recall curves at hrp/pp (mirroring `comparison.py`'s flagship
 figures) - not possible anymore once solving is reduced to 2 timepoints.
-Now computes the same 5 scalars per run/method as
-`degradation_reconstruction.py` (`correlation_hrp`/`_pp`, `ap_hrp`/`_pp`,
-`localization_error_hrp` - the last one new, wasn't computed for surrogates
-before), trading full-curve figures for speed and consistency with
-Experiment 2. `localization_error_hrp` costs nothing extra here either, for
-the same reason it didn't in `degradation_reconstruction.py`:
-`InverseSimTask` already loads `simulator`/`src` for free.
+Now computes 2 scalars per run/method (`correlation` at both
+`phase="hrp"`/`"pp"`, `localization_error` at `phase="hrp"` - the last one
+new, wasn't computed for surrogates before), trading full-curve figures for
+speed and consistency with Experiment 2. `localization_error` costs nothing
+extra here either, for the same reason it didn't in
+`degradation_reconstruction.py`: `InverseSimTask` already loads
+`simulator`/`src` for free. `ap_hrp`/`ap_pp` were also computed here at one
+point but dropped - never plotted or quoted anywhere in `index.qmd`, per
+explicit instruction to only compute what it actually shows (unlike
+`degradation_reconstruction.py`, `correlation` at `phase="pp"` *is* kept
+here: both hrp/pp phases are used in the surrogate comparison figures, so pp
+reconstruction still happens for both methods).
+
+⚠ **Suite structure changed**: rather than one permanent `MetricSuite` per
+surrogate (5 separate files, each with `Method=`/`region=` coords), this
+cell now checkpoints each surrogate's suite to a transient
+`results/simf/surrogates/_checkpoint/{surrogate}` folder as it finishes
+(tagged `Surrogate=` in addition to `Method=`/`region=`/`phase=`) - giving
+the same crash-resumability the old per-surrogate files gave, without
+keeping 5 files around permanently. `simf_statistics_surrogate.py` below
+(in the Statistics section) concatenates all 5 checkpoints, merges in the
+flagship's "original" (undegraded) values under `Surrogate="original"`, and
+saves the result as one combined `results/simf/surrogates` suite - then
+deletes `_checkpoint/`, since its contents are now fully redundant with the
+combined suite. That merge step needs the flagship suite's own
+`metadata["derived"]` (for the hrp/pp median interpolation), which is only
+populated once `simf_statistics_flagship.py` has run - which is why the
+merge happens in the Statistics section (already ordered after flagship's
+own stats cell) rather than here.
 
 **Parameter choices:**
 
@@ -2694,10 +2830,10 @@ the same reason it didn't in `degradation_reconstruction.py`:
   convention exactly.
 - Reconstruction at half-rising-phase and peak-phase only, not the full
   cropped window - see ⚠ notes above.
-- **Output**: one `MetricSuite` per surrogate, saved to
-  `results/sub-10_simf-metrics_{surrogate}` - same file paths as the old
-  `surrogate_comparison.py` used, so anything already pointed at these
-  paths keeps working once this cell is rerun.
+- **Output**: one checkpoint `MetricSuite` per surrogate, saved to
+  `results/simf/surrogates/_checkpoint/{surrogate}` - transient, see ⚠ note
+  above; combined into the final `results/simf/surrogates` suite by
+  `simf_statistics_surrogate.py` in the Statistics section.
 - `n_threads_per_job=1` on the `run_parallel_pipeline` call - see project
   memory on thread capping; `n_jobs_solve=25` already saturates this
   machine's 32-core budget, so no per-worker headroom for more than 1 BLAS
@@ -2729,7 +2865,11 @@ n_reps_per_region = 8   # full flagship repetition count, not a subset
 n_jobs_solve = 25   # reconstruct+score, parallelized across probe-set runs
 
 def run_surrogate_reconstruction(overwrite=False):
-  fmetrics = {s: Path(f"./results/sub-{sub}_simf-metrics_{s}") for s in surrogates}
+  # checkpoint folder - transient, see prose above. Not the final suite
+  # (results/simf/surrogates), which simf_statistics_surrogate.py builds by
+  # concatenating these 5 plus the flagship's "original" values.
+  checkpoint_dir = Path("./results/simf/surrogates/_checkpoint")
+  fmetrics = {s: checkpoint_dir/s for s in surrogates}
   if all(check_files([f/"meta.json"]) for f in fmetrics.values()) and not overwrite:
     print("Already exists, skipping.")
     return
@@ -2741,7 +2881,7 @@ def run_surrogate_reconstruction(overwrite=False):
   sources_dir = dm.roots["sim"]/f"sub-{sub}"/"sources"
 
   # 1. Probe-set runs (same selection as degradation_reconstruction.py)
-  probe_set = pd.read_csv(f"./results/sub-{sub}_probe-set.csv")
+  probe_set = pd.read_csv("./results/simf/intermediate/probe-set.csv")
   index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
   index["region"] = index["source_index_list"].apply(lambda s: ast.literal_eval(s)[0])
   probe_runs = index[
@@ -2809,8 +2949,6 @@ def run_surrogate_reconstruction(overwrite=False):
         "correlation_hrp": np.corrcoef(gold_hrp, sol_hrp)[0, 1],
         "correlation_pp": np.corrcoef(gold_pp, sol_pp)[0, 1],
         "localization_error_hrp": hit["distance_mm"],
-        "ap_hrp": mm.core.calc_pr_curve(gold_hrp > 0, sol_hrp)["ap"],
-        "ap_pp": mm.core.calc_pr_curve(gold_pp > 0, sol_pp)["ap"],
       })
     return rows
 
@@ -2844,14 +2982,309 @@ def run_surrogate_reconstruction(overwrite=False):
       for row in run_rows:
         method = row["method"]
         region = run2region[row["run"]]
-        metrics.register(method, "correlation_hrp", row["correlation_hrp"], region=region)
-        metrics.register(method, "correlation_pp", row["correlation_pp"], region=region)
-        metrics.register(method, "localization_error_hrp", row["localization_error_hrp"], region=region)
-        metrics.register(method, "ap_hrp", row["ap_hrp"], region=region)
-        metrics.register(method, "ap_pp", row["ap_pp"], region=region)
+        metrics.register("correlation", row["correlation_hrp"], Method=method, region=region, Surrogate=surrogate, phase="hrp")
+        metrics.register("correlation", row["correlation_pp"], Method=method, region=region, Surrogate=surrogate, phase="pp")
+        metrics.register("localization_error", row["localization_error_hrp"], Method=method, region=region, Surrogate=surrogate, phase="hrp")
 
     metrics.save(fmetrics[surrogate], overwrite=overwrite)
     print(f"[{surrogate}] done ({len(inverse_tasks)} runs x 2 methods).")
 
-run_surrogate_reconstruction(overwrite=True)  # must force-regen: old metrics used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; wcset's harm was mistakenly set to 0.5 for connectome-based surrogates, now fixed to the intended harm=5 (harm=30 for beltrami is correct and unaffected; depth=0.2/harmonic_method="lowpass" unaffected, unchanged from the prior run); also now registers a `region` coordinate per entry (was previously absent), so index.qmd's compare_methods()/cluster_permutation() can pair methods by region
+run_surrogate_reconstruction(overwrite=True)  # must force-regen: old metrics used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; wcset's harm was mistakenly set to 0.5 for connectome-based surrogates, now fixed to the intended harm=5 (harm=30 for beltrami is correct and unaffected; depth=0.2/harmonic_method="lowpass" unaffected, unchanged from the prior run); ap_hrp/ap_pp dropped; correlation_hrp/correlation_pp/localization_error_hrp renamed to correlation/localization_error (+ phase= coord); now registers `Surrogate=`/`region=` coordinates per entry (were previously absent/implicit in the filename), so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region and select surrogates by filter instead of by file
+```
+
+# Statistics
+
+Computes and caches every statistical test - and every derived scalar quoted
+in `index.qmd`'s prose (medians, chance/reference lines, interpolated
+values) - for this study, so `index.qmd` only ever reloads already-computed
+results and plots them; it never computes a statistic itself. This works
+because `MetricSuite.stat.*` calls are cached by
+`(metric, group_by, test, unit_col, pairing_col, subject_order, filters, pair)`
+(not `correction`/`alpha`) and that cache is persisted into each suite's
+`stats/` subfolder by `save()` and restored by `load()` - so `index.qmd`
+calling the exact same `stat.wilcoxon`/`.cluster_permutation` signature
+below gets an instant cache hit, never a recomputation. Every suite here is
+reloaded from disk, augmented with `stat.*` results and a
+`metadata["derived"]` dict, and re-saved in place (`overwrite=True`) -
+except the combined surrogates suite, which is assembled here from
+`surrogate_reconstruction.py`'s per-surrogate checkpoints plus the
+flagship's "original" values (previously built ad-hoc inside `index.qmd`,
+which can no longer construct suites of its own).
+
+## Flagship
+
+```{python filename="simf_statistics_flagship.py"}
+# | output: false
+from pathlib import Path
+import mindmap as mm
+
+METHODS = ["wcset", "cset", "sloreta", "dspm", "wmne"]
+COMPETITORS = [m for m in METHODS if m != "wcset"]
+
+fmetrics = Path("./results/simf/flagship")
+flag_metrics = mm.metric.MetricSuite.load(fmetrics)
+
+comparisons = flag_metrics.stat.build_comparisons(["wcset"], COMPETITORS)
+
+# Wilcoxon signed-rank vs. wCSET, region-paired - same test simf_localization_stats.py
+# in index.qmd will ask for again (cache hit). phase="hrp" always (no pp
+# counterpart exists for this metric).
+flag_metrics.stat.wilcoxon(
+    "localization_error", group_by="Method", comparisons=comparisons, pairing_col="region", filters={"phase": "hrp"},
+)
+
+# Region-paired cluster-permutation vs. wCSET, over time.
+times_order = sorted(flag_metrics.to_df(metrics="correlation")["times"].unique())
+flag_metrics.stat.cluster_permutation(
+    "correlation", coord="times", group_by="Method", comparisons=comparisons, pairing_col="region",
+    coord_order=times_order, higher_is_better=True,
+    n_permutations=3000, seed=0,
+)
+
+loc_df = flag_metrics.to_df(metrics="localization_error", filters={"phase": "hrp"})
+flag_metrics.metadata["derived"] = {
+    "loc_median": loc_df.groupby("Method")["Value"].median().to_dict(),
+    "hrp_time_median": float(flag_metrics.to_df(metrics="hrp_time")["Value"].median()),
+    "pp_time_median": float(flag_metrics.to_df(metrics="pp_time")["Value"].median()),
+}
+flag_metrics.metadata["units"] = {"correlation": "r", "localization_error": "mm", "hrp_time": "s", "pp_time": "s"}
+flag_metrics.save(fmetrics, overwrite=True)
+```
+
+## Noise/SNR Sweep (Experiment 1)
+
+```{python filename="simf_statistics_noise_sweep.py"}
+# | output: false
+from pathlib import Path
+import mindmap as mm
+
+METHODS = ["wcset", "cset", "sloreta", "dspm", "wmne"]
+COMPETITORS = [m for m in METHODS if m != "wcset"]
+
+fnoise = Path("./results/simf/noise_sweep")
+noise_metrics = mm.metric.MetricSuite.load(fnoise)
+comparisons = noise_metrics.stat.build_comparisons(["wcset"], COMPETITORS)
+
+# localization error is lower-is-better, unlike correlation below. phase="hrp"
+# always (no pp counterpart exists for this metric).
+noise_loc_snr_order = sorted(
+    noise_metrics.to_df(metrics="localization_error", filters={"phase": "hrp"})["snr"].unique(), reverse=True
+)
+noise_metrics.stat.cluster_permutation(
+    "localization_error", coord="snr", group_by="Method", comparisons=comparisons, pairing_col="region",
+    coord_order=noise_loc_snr_order, higher_is_better=False, filters={"phase": "hrp"},
+    n_permutations=3000, seed=0,
+)
+
+# correlation, once per phase (hrp/pp) - higher-is-better.
+noise_corr_snr_order = sorted(
+    noise_metrics.to_df(metrics="correlation", filters={"phase": "hrp"})["snr"].unique(), reverse=True
+)
+for phase in ["hrp", "pp"]:
+    noise_metrics.stat.cluster_permutation(
+        "correlation", coord="snr", group_by="Method", comparisons=comparisons, pairing_col="region",
+        coord_order=noise_corr_snr_order, higher_is_better=True, filters={"phase": phase},
+        n_permutations=3000, seed=0,
+    )
+
+def _nested_median(df):
+    # str(float(snr)), not str(snr): `snr` may come through as numpy int64 or
+    # float64 depending on pandas' dtype inference, but the sweep itself
+    # includes non-integer levels (e.g. 1.5), so the underlying column is
+    # always float - normalizing the key through float() first keeps lookups
+    # consistent regardless of which dtype this particular groupby produced.
+    out = {}
+    for (method, snr), v in df.groupby(["Method", "snr"])["Value"].median().items():
+        out.setdefault(method, {})[str(float(snr))] = float(v)
+    return out
+
+noise_metrics.metadata["derived"] = {
+    "loc_median": _nested_median(noise_metrics.to_df(metrics="localization_error", filters={"phase": "hrp"})),
+    "corr_hrp_median": _nested_median(noise_metrics.to_df(metrics="correlation", filters={"phase": "hrp"})),
+    "corr_pp_median": _nested_median(noise_metrics.to_df(metrics="correlation", filters={"phase": "pp"})),
+}
+noise_metrics.metadata["units"] = {"correlation": "r", "localization_error": "mm"}
+noise_metrics.save(fnoise, overwrite=True)
+```
+
+## Connectome Degradation (Experiment 2)
+
+```{python filename="simf_statistics_degradation.py"}
+# | output: false
+from pathlib import Path
+import numpy as np
+import mindmap as mm
+
+# per explicit instruction, only the permutation experiment is
+# computed/plotted anywhere in this document - deletion/addition are no
+# longer produced by degradation_reconstruction.py either.
+operator = "permutation"
+
+flag_metrics = mm.metric.MetricSuite.load("./results/simf/flagship")
+
+# dSPM/sLORETA are connectome-agnostic (not recomputed per degradation
+# level), so their flagship (undegraded) values are reused as flat
+# reference lines for both metrics.
+flag_loc = flag_metrics.to_df(metrics="localization_error", filters={"phase": "hrp"})
+deg_ref_loc = {m: float(flag_loc[flag_loc["Method"] == m]["Value"].median()) for m in ["dspm", "sloreta"]}
+
+hrp_median = flag_metrics.metadata["derived"]["hrp_time_median"]
+corr_raw_df = flag_metrics.to_df(metrics="correlation", filters={"Method": ["dspm", "sloreta"]})
+deg_ref_corr = {}
+for m in ["dspm", "sloreta"]:
+    curve = corr_raw_df[corr_raw_df["Method"] == m].groupby("times")["Value"].median().sort_index()
+    deg_ref_corr[m] = float(np.interp(hrp_median, curve.index, curve.values))
+
+def _median_at(df, method, pct):
+    return float(df[(df["Method"] == method) & (df["percentage"] == pct)]["Value"].median())
+
+def _median_range(df, method, pct_min, pct_max):
+    """(min, max) of the per-percentage median, over percentages in
+    [pct_min, pct_max] - used for the 'stayed within X-Y' range claims in
+    prose, computed from the data rather than eyeballed off the figure."""
+    sub = df[(df["Method"] == method) & (df["percentage"] >= pct_min) & (df["percentage"] <= pct_max)]
+    by_pct = sub.groupby("percentage")["Value"].median()
+    return float(by_pct.min()), float(by_pct.max())
+
+fdeg = Path("./results/simf/degradation")
+deg_metrics = mm.metric.MetricSuite.load(fdeg)
+deg_comparisons = deg_metrics.stat.build_comparisons(["wcset"], ["cset"])
+
+pct_order = sorted(deg_metrics.to_df(metrics="localization_error", filters={"phase": "hrp"})["percentage"].unique())
+deg_metrics.stat.cluster_permutation(
+    "localization_error", coord="percentage", group_by="Method", comparisons=deg_comparisons,
+    pairing_col="region", coord_order=pct_order, higher_is_better=False, filters={"phase": "hrp"},
+    n_permutations=3000, seed=0,
+)
+pct_order_c = sorted(deg_metrics.to_df(metrics="correlation", filters={"phase": "hrp"})["percentage"].unique())
+deg_metrics.stat.cluster_permutation(
+    "correlation", coord="percentage", group_by="Method", comparisons=deg_comparisons,
+    pairing_col="region", coord_order=pct_order_c, higher_is_better=True, filters={"phase": "hrp"},
+    n_permutations=3000, seed=0,
+)
+
+loc_df = deg_metrics.to_df(metrics="localization_error", filters={"phase": "hrp"})
+corr_df = deg_metrics.to_df(metrics="correlation", filters={"phase": "hrp"})
+
+# permutation-specific median/median-range claims quoted in index.qmd's prose.
+derived = {
+    "ref_loc": deg_ref_loc,
+    "ref_corr": deg_ref_corr,
+    "loc_wcset_0_60": _median_range(loc_df, "wcset", 0, 60),
+    "loc_wcset_70": _median_at(loc_df, "wcset", 70),
+    "loc_wcset_100": _median_at(loc_df, "wcset", 100),
+    "corr_wcset_0": _median_at(corr_df, "wcset", 0),
+    "corr_wcset_100": _median_at(corr_df, "wcset", 100),
+    "corr_cset_0_60": _median_range(corr_df, "cset", 0, 60),
+    "corr_cset_100": _median_at(corr_df, "cset", 100),
+}
+
+deg_metrics.metadata["derived"] = derived
+deg_metrics.metadata["units"] = {"correlation": "r", "localization_error": "mm"}
+deg_metrics.save(fdeg, overwrite=True)
+```
+
+## Surrogate Connectomes (Experiment 3)
+
+Concatenates `surrogate_reconstruction.py`'s 5 per-surrogate checkpoints,
+merges in the flagship's "original" (true-connectome) values under
+`Surrogate="original"`, and saves the result as one combined
+`results/simf/surrogates` suite - `stat.wilcoxon(group_by="Surrogate", ...)`
+then tests original-vs-surrogate directly, region-paired, selecting a
+method/phase via `filters=` instead of loading a separate per-condition
+file. Once the combined suite is saved, `_checkpoint/` is deleted - its
+contents are now fully redundant with the combined suite.
+
+```{python filename="simf_statistics_surrogate.py"}
+# | output: false
+import shutil
+from pathlib import Path
+import numpy as np
+import pandas as pd
+import mindmap as mm
+
+surrogates = ["beltrami", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin"]
+methods2 = ["cset", "wcset"]
+
+flag_metrics = mm.metric.MetricSuite.load("./results/simf/flagship")
+flag_loc = flag_metrics.to_df(metrics="localization_error", filters={"phase": "hrp"})
+ref_loc = {m: float(flag_loc[flag_loc["Method"] == m]["Value"].median()) for m in ["dspm", "sloreta"]}
+
+hrp_median = flag_metrics.metadata["derived"]["hrp_time_median"]
+pp_median = flag_metrics.metadata["derived"]["pp_time_median"]
+ref_methods = ["dspm", "sloreta"]
+corr_ref_df = flag_metrics.to_df(metrics="correlation", filters={"Method": ref_methods})
+ref_corr = {"hrp": {}, "pp": {}}
+for m in ref_methods:
+    curve = corr_ref_df[corr_ref_df["Method"] == m].groupby("times")["Value"].median().sort_index()
+    ref_corr["hrp"][m] = float(np.interp(hrp_median, curve.index, curve.values))
+    ref_corr["pp"][m] = float(np.interp(pp_median, curve.index, curve.values))
+
+# The flagship suite has no correlation phase-scalar for cset/wcset (only
+# the continuous correlation-over-time curve), so build one: for each
+# (region, rep), interpolate that run's own curve at the population median
+# hrp/pp time.
+corr_cw_df = flag_metrics.to_df(metrics="correlation", filters={"Method": methods2})
+
+def original_phase_scalar(method, phase_time):
+    df = corr_cw_df[corr_cw_df["Method"] == method]
+    rows = []
+    for (region, rep), g in df.groupby(["region", "rep"]):
+        g = g.sort_values("times")
+        rows.append((region, np.interp(phase_time, g["times"], g["Value"])))
+    return pd.DataFrame(rows, columns=["region", "Value"])
+
+phase_time = {"hrp": hrp_median, "pp": pp_median}
+
+# -- build the "original" (undegraded, true-connectome) entries -----------
+original = mm.metric.MetricSuite("original connectome (flagship)")
+for method in methods2:
+    method_loc_df = flag_loc[flag_loc["Method"] == method]
+    original.register(
+        "localization_error", method_loc_df["Value"].values,
+        Method=method, region=method_loc_df["region"].values.astype(str), Surrogate="original", phase="hrp",
+    )
+    for phase in ["hrp", "pp"]:
+        orig_df = original_phase_scalar(method, phase_time[phase])
+        original.register(
+            "correlation", orig_df["Value"].values,
+            Method=method, region=orig_df["region"].values.astype(str), Surrogate="original", phase=phase,
+        )
+
+# -- load the 5 per-surrogate checkpoints and concatenate everything ------
+checkpoint_dir = Path("./results/simf/surrogates/_checkpoint")
+checkpoints = [mm.metric.MetricSuite.load(checkpoint_dir/s) for s in surrogates]
+combined = mm.metric.MetricSuite.concat([original] + checkpoints, name="sub-10 simulation validation - surrogates")
+
+# -- statistics: original vs. each surrogate, per method (localization
+# error, phase="hrp" only) and per (method, phase) (correlation) ----------
+comparisons = combined.stat.build_comparisons(["original"], surrogates)
+for method in methods2:
+    combined.stat.wilcoxon(
+        "localization_error", group_by="Surrogate", comparisons=comparisons,
+        pairing_col="region", filters={"Method": method, "phase": "hrp"},
+    )
+    for phase in ["hrp", "pp"]:
+        combined.stat.wilcoxon(
+            "correlation", group_by="Surrogate", comparisons=comparisons,
+            pairing_col="region", filters={"Method": method, "phase": phase},
+        )
+
+# one-off medians quoted directly in index.qmd's prose
+_beltrami_hrp = combined.to_df(metrics="correlation", filters={"Method": "wcset", "Surrogate": "beltrami", "phase": "hrp"})
+_beltrami_pp = combined.to_df(metrics="correlation", filters={"Method": "wcset", "Surrogate": "beltrami", "phase": "pp"})
+
+combined.metadata["derived"] = {
+    "ref_loc": ref_loc,
+    "ref_corr": ref_corr,
+    "wcset_beltrami_hrp_median": float(_beltrami_hrp["Value"].median()),
+    "wcset_beltrami_pp_median": float(_beltrami_pp["Value"].median()),
+}
+combined.metadata["units"] = {"correlation": "r", "localization_error": "mm"}
+
+fsurrogates = Path("./results/simf/surrogates")
+combined.save(fsurrogates, overwrite=True)
+
+# checkpoint contents are now fully redundant with the combined suite
+shutil.rmtree(checkpoint_dir)
 ```
