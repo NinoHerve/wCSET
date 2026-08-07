@@ -775,90 +775,118 @@ import mindmap as mm
 operator = "permutation"
 
 deg_metrics = mm.metric.MetricSuite.load("./results/simf/degradation")
-# flat reference: dSPM/sLORETA are connectome-agnostic (not recomputed
-# per degradation level), so their flagship (undegraded) medians were
-# reused as-is by processing_simf.qmd's Statistics section.
+# flat reference: dSPM is connectome-agnostic (not recomputed per
+# degradation level), so its flagship (undegraded) median is reused as-is
+# by processing_simf.qmd's Statistics section. sLORETA is also
+# connectome-agnostic, but is no longer a flat, untested reference here -
+# its flagship values were injected into deg_metrics itself (replicated at
+# every percentage) so it can be the tested baseline below.
 deg_ref_loc = deg_metrics.metadata["derived"]["ref_loc"]
 deg_ref_corr = deg_metrics.metadata["derived"]["ref_corr"]
 
-# --- localization error panel --- identical call to the one already
-# cached by processing_simf.qmd's Statistics section. phase="hrp" always
-# (no pp counterpart exists for this metric).
-deg_comparisons = deg_metrics.stat.build_comparisons(["wcset"], ["cset"])
+# --- localization error panel --- reference=sLORETA (doesn't degrade),
+# competitors=CSET/wCSET: tests when a corrupted connectome makes CSET/
+# wCSET perform significantly worse than using no connectome at all,
+# rather than a relative CSET-vs-wCSET comparison. Identical call to the
+# one already cached by processing_simf.qmd's Statistics section.
+# phase="hrp" always (no pp counterpart exists for this metric).
+deg_comparisons = deg_metrics.stat.build_comparisons(["sloreta"], ["cset", "wcset"])
 pct_order = sorted(deg_metrics.to_df(metrics="localization_error", filters={"phase": "hrp"})["percentage"].unique())
 loc_result = deg_metrics.stat.cluster_permutation(
     "localization_error", coord="percentage", group_by="Method", comparisons=deg_comparisons,
     pairing_col="region", coord_order=pct_order, higher_is_better=False, filters={"phase": "hrp"},
     n_permutations=3000, seed=0,
 )
-# single-pair result (wcset vs cset only) -> plot.cluster_permutation()
-# dispatches to the detailed single-curve view, which colors shaded
-# clusters by sign ("positive"/"negative") - sign>0 means wCSET (the
-# reference) wins that cluster, sign<0 means CSET does, so map those
-# directly to each method's own color for visual consistency with every
-# other figure.
+# two-pair result (sLORETA vs CSET, sLORETA vs wCSET) -> plot.cluster_permutation()
+# dispatches to the compact multi-competitor overlay (same pattern as the
+# noise-sweep figures above, simf_noise_stats.py), reference (sLORETA)
+# auto-inferred from the group shared by both pairs.
 deg_loc_fig, deg_loc_ax = plt.subplots(figsize=(6, 5))
 deg_loc_fig, deg_loc_ax = deg_metrics.plot.cluster_permutation(
-    loc_result, colors={"positive": COLORS["wcset"], "negative": COLORS["cset"]}, marker="o", markersize=4, ax=deg_loc_ax,
+    loc_result, colors=COLORS, marker="o", markersize=4, ax=deg_loc_ax,
 )
-deg_loc_clusters = loc_result.clusters_by_pair[("wcset", "cset")]
-for method in ["dspm", "sloreta"]:
-    deg_loc_ax.axhline(deg_ref_loc[method], color=COLORS[method], linestyle="--", linewidth=1.5, zorder=0.5)
+loc_clusters_cset = loc_result.clusters_by_pair[("sloreta", "cset")]
+loc_clusters_wcset = loc_result.clusters_by_pair[("sloreta", "wcset")]
+# dSPM stays a flat, untested reference line (still connectome-agnostic,
+# just not part of this comparison) - sLORETA no longer needs one, it's
+# plotted as its own tested curve above.
+deg_loc_ax.axhline(deg_ref_loc["dspm"], color=COLORS["dspm"], linestyle="--", linewidth=1.5, zorder=0.5)
 deg_loc_ax.set_xlabel("Connectome degradation (%)")
 deg_loc_ax.set_ylabel("Localization error (mm)")
 deg_loc_ax.spines[["top", "right"]].set_visible(False)
 
-# --- spatial correlation panel --- phase="hrp" always (no pp counterpart
-# is computed for degradation, see degradation_reconstruction.py).
+# --- spatial correlation panel --- same sLORETA-reference comparison as
+# above. phase="hrp" always (no pp counterpart is computed for
+# degradation, see degradation_reconstruction.py).
 pct_order_c = sorted(deg_metrics.to_df(metrics="correlation", filters={"phase": "hrp"})["percentage"].unique())
 corr_result = deg_metrics.stat.cluster_permutation(
     "correlation", coord="percentage", group_by="Method", comparisons=deg_comparisons,
     pairing_col="region", coord_order=pct_order_c, higher_is_better=True, filters={"phase": "hrp"},
     n_permutations=3000, seed=0,
 )
-# same single-pair "positive"/"negative" color mapping as the
-# localization panel above.
 deg_corr_fig, deg_corr_ax = plt.subplots(figsize=(6, 5))
 deg_corr_fig, deg_corr_ax = deg_metrics.plot.cluster_permutation(
-    corr_result, colors={"positive": COLORS["wcset"], "negative": COLORS["cset"]}, marker="o", markersize=4, ax=deg_corr_ax,
+    corr_result, colors=COLORS, marker="o", markersize=4, ax=deg_corr_ax,
 )
-deg_corr_clusters = corr_result.clusters_by_pair[("wcset", "cset")]
-for method in ["dspm", "sloreta"]:
-    deg_corr_ax.axhline(deg_ref_corr[method], color=COLORS[method], linestyle="--", linewidth=1.5, zorder=0.5)
+corr_clusters_cset = corr_result.clusters_by_pair[("sloreta", "cset")]
+corr_clusters_wcset = corr_result.clusters_by_pair[("sloreta", "wcset")]
+deg_corr_ax.axhline(deg_ref_corr["dspm"], color=COLORS["dspm"], linestyle="--", linewidth=1.5, zorder=0.5)
 deg_corr_ax.set_xlabel("Connectome degradation (%)")
 deg_corr_ax.set_ylabel("Spatial correlation (ground truth vs. reconstruction)")
 deg_corr_ax.spines[["top", "right"]].set_visible(False)
 
 for fig_ in [deg_loc_fig, deg_corr_fig]:
     legend_handles = [
-        Line2D([0], [0], color=COLORS[m], linestyle="--", linewidth=1.5, label=f"{m} (flagship, undegraded)")
-        for m in ["dspm", "sloreta"]
+        Line2D([0], [0], color=COLORS["dspm"], linestyle="--", linewidth=1.5, label="dspm (flagship, undegraded)"),
     ]
-    fig_.legend(handles=legend_handles, loc="lower center", ncol=2, bbox_to_anchor=(0.5, -0.04))
+    fig_.legend(handles=legend_handles, loc="lower center", ncol=1, bbox_to_anchor=(0.5, -0.04))
 
 deg_loc_fig.suptitle(
     "Simulation study: localization error vs. connectome degradation, permutation (sub-10)\n"
-    "median curve, thin IQR whisker; solid/filled = wCSET significantly better (region-paired cluster-permutation); dashed = flagship (undegraded) reference",
+    "median curve, thin IQR whisker; solid/filled = significantly different from sLORETA (region-paired cluster-permutation); dashed = dSPM flagship (undegraded) reference",
     fontsize=13, fontweight="bold",
 )
 deg_corr_fig.suptitle(
     "Simulation study: spatial correlation vs. connectome degradation, permutation, half rising phase (sub-10)\n"
-    "median curve, thin IQR whisker; solid/filled = wCSET significantly better (region-paired cluster-permutation); dashed = flagship (undegraded) reference",
+    "median curve, thin IQR whisker; solid/filled = significantly different from sLORETA (region-paired cluster-permutation); dashed = dSPM flagship (undegraded) reference",
     fontsize=13, fontweight="bold",
 )
 deg_loc_fig.tight_layout()
 deg_corr_fig.tight_layout()
 
-# --- statistics quoted in the prose below ---
+# --- statistics quoted in the prose below --- each pair has at most 2
+# clusters (one per crossing direction), sorted by percentage_start so
+# "early"/"late" below are unambiguous. Verified against the actual
+# computed result (not assumed): loc/cset has 1 cluster (worse from 60% on);
+# loc/wcset, corr/cset, corr/wcset each have 2. main_cluster()'s own
+# significance caveat applies to each cluster individually here too -
+# corr/wcset's late cluster does NOT survive FDR correction (p_corrected
+# `0.058` > 0.05), so the prose below must describe it as a trend, not a
+# significant effect.
 
-# permutation, localization: two clusters (0-20%, then 50-100%)
-_p = deg_loc_clusters.sort_values("percentage_start")
-deg_loc_perm_c1, deg_loc_perm_c2 = _p.iloc[0], _p.iloc[1]
-deg_loc_perm_c1_p, deg_loc_perm_c1_dz = fmt_p(deg_loc_perm_c1["p_corrected"]), fmt_stat(deg_loc_perm_c1["effect_size"])
-deg_loc_perm_c2_p, deg_loc_perm_c2_dz = fmt_p(deg_loc_perm_c2["p_corrected"]), fmt_stat(deg_loc_perm_c2["effect_size"])
+_loc_cset = loc_clusters_cset.sort_values("percentage_start")
+deg_loc_cset_c = _loc_cset.iloc[0]
+deg_loc_cset_p, deg_loc_cset_dz = fmt_p(deg_loc_cset_c["p_corrected"]), fmt_stat(deg_loc_cset_c["effect_size"])
+deg_loc_cset_start = fmt_num(deg_loc_cset_c["percentage_start"], 0)
 
-deg_corr_perm_c = main_cluster(deg_corr_clusters)
-deg_corr_perm_p, deg_corr_perm_dz = fmt_p(deg_corr_perm_c["p_corrected"]), fmt_stat(deg_corr_perm_c["effect_size"])
+_loc_wcset = loc_clusters_wcset.sort_values("percentage_start")
+deg_loc_wcset_early, deg_loc_wcset_late = _loc_wcset.iloc[0], _loc_wcset.iloc[1]
+deg_loc_wcset_early_p, deg_loc_wcset_early_dz = fmt_p(deg_loc_wcset_early["p_corrected"]), fmt_stat(deg_loc_wcset_early["effect_size"])
+deg_loc_wcset_late_p, deg_loc_wcset_late_dz = fmt_p(deg_loc_wcset_late["p_corrected"]), fmt_stat(deg_loc_wcset_late["effect_size"])
+deg_loc_wcset_late_start = fmt_num(deg_loc_wcset_late["percentage_start"], 0)
+
+_corr_cset = corr_clusters_cset.sort_values("percentage_start")
+deg_corr_cset_early, deg_corr_cset_late = _corr_cset.iloc[0], _corr_cset.iloc[1]
+deg_corr_cset_early_p, deg_corr_cset_early_dz = fmt_p(deg_corr_cset_early["p_corrected"]), fmt_stat(deg_corr_cset_early["effect_size"])
+deg_corr_cset_early_end = fmt_num(deg_corr_cset_early["percentage_end"], 0)
+deg_corr_cset_late_p, deg_corr_cset_late_dz = fmt_p(deg_corr_cset_late["p_corrected"]), fmt_stat(deg_corr_cset_late["effect_size"])
+deg_corr_cset_late_start = fmt_num(deg_corr_cset_late["percentage_start"], 0)
+
+_corr_wcset = corr_clusters_wcset.sort_values("percentage_start")
+deg_corr_wcset_early, deg_corr_wcset_late = _corr_wcset.iloc[0], _corr_wcset.iloc[1]
+deg_corr_wcset_early_p, deg_corr_wcset_early_dz = fmt_p(deg_corr_wcset_early["p_corrected"]), fmt_stat(deg_corr_wcset_early["effect_size"])
+deg_corr_wcset_early_end = fmt_num(deg_corr_wcset_early["percentage_end"], 0)
+deg_corr_wcset_late_p = fmt_p(deg_corr_wcset_late["p_corrected"])  # does not survive correction - quoted as a trend only
 
 # localization/correlation medians quoted in prose - read from
 # processing_simf.qmd's precomputed metadata["derived"], not recomputed here.
@@ -880,11 +908,11 @@ deg_corr_perm_cset_hi = fmt_num(_cset_hi, 2)
 deg_corr_perm_cset_100 = fmt_num(_perm_d["corr_cset_100"], 2)
 ```
 
-In the simulation, the true connectome is known; in practice it never is exactly. To test what happens when the wrong connectome is used, we systematically permuted the true connectome before reconstruction (Section 2.3.3) and re-evaluated localization error and spatial correlation for CSET and wCSET. dSPM and sLORETA are connectome-agnostic and are not recomputed per degradation level; they appear only as flat reference lines in the figures below.
+In the simulation, the true connectome is known; in practice it never is exactly. To test what happens when the wrong connectome is used, we systematically permuted the true connectome before reconstruction (Section 2.3.3) and re-evaluated localization error and spatial correlation for CSET and wCSET, this time benchmarked directly against sLORETA rather than against each other: sLORETA is connectome-agnostic, so its performance cannot be affected by connectome corruption, making it a natural floor — the degradation level at which a connectivity-informed method becomes significantly worse than sLORETA is the point past which using the (corrupted) connectome is actively counterproductive, rather than merely less helpful. dSPM remains connectome-agnostic too and is shown only as a flat, untested reference line.
 
-wCSET's localization error remained essentially flat under permutation up to 60% (`{python} deg_loc_perm_wcset_lo_s`–`{python} deg_loc_perm_wcset_hi_s` mm), only climbing noticeably beyond that point (`{python} deg_loc_perm_wcset_70_s` mm at 70%, `{python} deg_loc_perm_wcset_100_s` mm at 100%). CSET was significantly worse than wCSET under permutation (region-paired cluster-permutation: 0–20%, p_corrected `{python} deg_loc_perm_c1_p`, Cohen's dz = `{python} deg_loc_perm_c1_dz`; 50–100%, p_corrected `{python} deg_loc_perm_c2_p`, dz = `{python} deg_loc_perm_c2_dz`).
+wCSET's localization error remained essentially flat under permutation up to 60% (`{python} deg_loc_perm_wcset_lo_s`–`{python} deg_loc_perm_wcset_hi_s` mm), only climbing noticeably beyond that point (`{python} deg_loc_perm_wcset_70_s` mm at 70%, `{python} deg_loc_perm_wcset_100_s` mm at 100%). Benchmarked against sLORETA (region-paired cluster-permutation), wCSET was actually significantly *more* accurate at low degradation (0–20%, p_corrected `{python} deg_loc_wcset_early_p`, Cohen's dz = `{python} deg_loc_wcset_early_dz`), and only became significantly worse once degradation reached `{python} deg_loc_wcset_late_start`% (p_corrected `{python} deg_loc_wcset_late_p`, dz = `{python} deg_loc_wcset_late_dz`). CSET fared worse: it never reached a significant advantage over sLORETA at any degradation level, and became significantly worse from `{python} deg_loc_cset_start`% onward (p_corrected `{python} deg_loc_cset_p`, dz = `{python} deg_loc_cset_dz`) — twenty percentage points earlier than wCSET's own crossover.
 
-Spatial correlation with the ground truth showed the pattern anticipated: permutation slowly degraded wCSET's correlation (`{python} deg_corr_perm_wcset_0` at 0% down to `{python} deg_corr_perm_wcset_100` at 100%), while CSET's own correlation stayed comparatively flat through 60% (`{python} deg_corr_perm_cset_lo`–`{python} deg_corr_perm_cset_hi`) before also declining sharply thereafter (`{python} deg_corr_perm_cset_100` at 100%) — but wCSET remained significantly higher than CSET across the entire permutation range (region-paired cluster-permutation, p_corrected `{python} deg_corr_perm_p`, dz = `{python} deg_corr_perm_dz`), confirming that CSET's greater apparent stability up to 60% is stability at a lower level, not a genuine advantage.
+Spatial correlation with the ground truth showed a similar but more pronounced pattern: permutation slowly degraded wCSET's correlation (`{python} deg_corr_perm_wcset_0` at 0% down to `{python} deg_corr_perm_wcset_100` at 100%), while CSET's own correlation stayed comparatively flat through 60% (`{python} deg_corr_perm_cset_lo`–`{python} deg_corr_perm_cset_hi`) before also declining sharply thereafter (`{python} deg_corr_perm_cset_100` at 100%). Against sLORETA, both methods started out significantly better (region-paired cluster-permutation: CSET 0–`{python} deg_corr_cset_early_end`%, p_corrected `{python} deg_corr_cset_early_p`, dz = `{python} deg_corr_cset_early_dz`; wCSET 0–`{python} deg_corr_wcset_early_end`%, p_corrected `{python} deg_corr_wcset_early_p`, dz = `{python} deg_corr_wcset_early_dz`), but only CSET's advantage reversed into a significant deficit, from `{python} deg_corr_cset_late_start`% onward (p_corrected `{python} deg_corr_cset_late_p`, dz = `{python} deg_corr_cset_late_dz`). wCSET's correlation, by contrast, never became significantly worse than sLORETA's, even at full permutation — its apparent dip at 100% did not reach significance (p_corrected `{python} deg_corr_wcset_late_p`) — confirming that CSET's greater apparent stability up to 60% was stability at a lower level, not a genuine advantage, and that wCSET tolerates connectome corruption meaningfully better than CSET does.
 
 ```{python filename="simf_localization_degradation_plot.py"}
 #| echo: false
@@ -1550,7 +1578,7 @@ To verify that this improvement is not merely a noise-free artifact, we repeated
 
 One limitation of this analysis is that SNR was calibrated on the single trial, before averaging 20 epochs into the evoked response used for reconstruction; since averaging itself raises the effective SNR of the signal that is actually reconstructed, the single-trial value we vary does not equal the SNR of the reconstructed evoked response. We did not additionally vary the number of averaged epochs, so how the two factors trade off against one another remains untested.
 
-Degrading the connectome produced a single, monotonic decline in performance for both methods, rather than the two-phase pattern we initially suspected. Under permutation, CSET's spatial correlation stayed comparatively flat (`{python} deg_corr_perm_cset_lo`–`{python} deg_corr_perm_cset_hi`) through 60% degradation (Section 3.1.3), which first suggested that the harmonics driving reconstruction accuracy might simply be the most robust ones, irrespective of graph frequency. We initially attempted to encode this directly, weighting harmonics with a U-shaped profile based on @sipes_integrative_2024's finding that harmonic robustness to connectome perturbation follows the gap-spectrum (the difference between consecutive eigenvalues), favoring so-called integrative harmonics (the low-frequency end of the spectrum) and segregative harmonics (the high-frequency end) over the intermediate, degenerate ones. In practice, however, retaining the high-frequency end of this U introduced visible reconstruction artifacts, likely a consequence of how sparse high-frequency harmonics are. We therefore aligned with the broader literature and instead adopted an exponential decay, weighting only the low-frequency end of the spectrum — the choice that became wCSET — which improved on CSET's spatial correlation with the ground truth (region-paired cluster-permutation: wCSET remained significantly higher than CSET across the entire permutation range). The absolute gap between them nonetheless narrowed steadily as degradation increased, and the two converged toward similarly low correlation values by full permutation. Localization error told a different story: wCSET's advantage over CSET did not narrow in the same way, and by full permutation, wCSET's correlation nearly matched that of the connectome-agnostic sLORETA and dSPM, which makes sense — a fully permuted connectome carries essentially no genuine structural information at that point, leaving wCSET in much the same position as methods that never used the connectome at all. Its localization error, however, ended up somewhat worse than either of theirs despite this equivalent loss of structural information, a discrepancy we do not yet fully understand. This indicates that our methods tolerate substantial rewiring while still benefiting from whatever structure remains, which is encouraging given the well-documented limitations of tractography, which produces substantially more false-positive than true-positive white matter bundles [@maier-hein_challenge_2017], and it further suggests that even fairly crude connectome surrogates should support reasonable reconstruction accuracy.
+Degrading the connectome produced a single, monotonic decline in performance for both methods, rather than the two-phase pattern we initially suspected. Under permutation, CSET's spatial correlation stayed comparatively flat (`{python} deg_corr_perm_cset_lo`–`{python} deg_corr_perm_cset_hi`) through 60% degradation (Section 3.1.3), which first suggested that the harmonics driving reconstruction accuracy might simply be the most robust ones, irrespective of graph frequency. We initially attempted to encode this directly, weighting harmonics with a U-shaped profile based on @sipes_integrative_2024's finding that harmonic robustness to connectome perturbation follows the gap-spectrum (the difference between consecutive eigenvalues), favoring so-called integrative harmonics (the low-frequency end of the spectrum) and segregative harmonics (the high-frequency end) over the intermediate, degenerate ones. In practice, however, retaining the high-frequency end of this U introduced visible reconstruction artifacts, likely a consequence of how sparse high-frequency harmonics are. We therefore aligned with the broader literature and instead adopted an exponential decay, weighting only the low-frequency end of the spectrum — the choice that became wCSET — which improved on CSET's spatial correlation with the ground truth: benchmarked directly against the connectome-agnostic sLORETA baseline (which cannot itself be affected by connectome corruption), CSET's correlation advantage reversed into a significant deficit from 80% permutation onward, while wCSET's held significant through 80% and only became statistically indistinguishable from sLORETA at full permutation (region-paired cluster-permutation vs. sLORETA; Section 3.1.3). The absolute gap between wCSET and CSET nonetheless narrowed steadily as degradation increased, and the two converged toward similarly low correlation values by full permutation. Localization error told a different story: wCSET's advantage over CSET did not narrow in the same way — CSET fell significantly below the sLORETA baseline already at 60% permutation, twenty points before wCSET's own crossover at 80% — which makes sense: a fully permuted connectome carries essentially no genuine structural information at that point, leaving wCSET's correlation in much the same position as sLORETA and dSPM, methods that never used the connectome at all. wCSET's localization error, however, ended up somewhat worse than either of theirs despite this equivalent loss of structural information, a discrepancy we do not yet fully understand. This indicates that our methods tolerate substantial rewiring while still benefiting from whatever structure remains, which is encouraging given the well-documented limitations of tractography, which produces substantially more false-positive than true-positive white matter bundles [@maier-hein_challenge_2017], and it further suggests that even fairly crude connectome surrogates should support reasonable reconstruction accuracy.
 
 ### Using surrogates
 

@@ -3113,6 +3113,7 @@ noise_metrics.save(fnoise, overwrite=True)
 # | output: false
 from pathlib import Path
 import numpy as np
+import pandas as pd
 import mindmap as mm
 
 # per explicit instruction, only the permutation experiment is
@@ -3148,18 +3149,76 @@ def _median_range(df, method, pct_min, pct_max):
 
 fdeg = Path("./results/simf/degradation")
 deg_metrics = mm.metric.MetricSuite.load(fdeg)
-deg_comparisons = deg_metrics.stat.build_comparisons(["wcset"], ["cset"])
 
-pct_order = sorted(deg_metrics.to_df(metrics="localization_error", filters={"phase": "hrp"})["percentage"].unique())
+# sLORETA reference, injected into deg_metrics itself: sLORETA is
+# connectome-agnostic, so degradation_reconstruction.py never recomputes it
+# per level - its flagship (undegraded, same noise level/probe set)
+# per-region values are reused as a flat "no connectome" baseline,
+# replicated at every percentage, so stat.cluster_permutation can test
+# CSET/wCSET against it with the same region-paired machinery (it needs the
+# comparison method present as its own `Method=` row in deg_metrics, not
+# just a plotted reference line).
+
+# localization_error: flagship already stores this as a raw per-run scalar
+# at phase="hrp", tagged by region - same shape/semantics degradation
+# itself uses, so reuse the raw values directly.
+sloreta_loc = flag_metrics.to_df(metrics="localization_error", filters={"phase": "hrp", "Method": "sloreta"})
+
+# correlation: flagship stores this as a full per-run curve over `times`
+# (no phase tag) - interpolate each run's own curve at hrp_median (the same
+# reference time deg_ref_corr above already uses) to get one
+# hrp-comparable scalar per run, matching degradation's own
+# correlation_hrp semantics.
+sloreta_corr_curves = flag_metrics.to_df(metrics="correlation", filters={"Method": "sloreta"})
+sloreta_corr_rows = []
+for (region, rep), curve in sloreta_corr_curves.groupby(["region", "rep"]):
+    curve = curve.sort_values("times")
+    value = np.interp(hrp_median, curve["times"].to_numpy(), curve["Value"].to_numpy())
+    sloreta_corr_rows.append({"region": region, "Value": value})
+sloreta_corr = pd.DataFrame(sloreta_corr_rows)
+
+# percentages shared by both metrics - computed before injection (from the
+# existing wcset/cset rows only) so it can drive both the injection loop
+# below and coord_order for both cluster_permutation calls.
+percentages = sorted(deg_metrics.to_df(metrics="localization_error", filters={"phase": "hrp"})["percentage"].unique())
+
+deg_regions = set(deg_metrics.to_df(metrics="localization_error", filters={"phase": "hrp"})["region"].unique())
+missing_loc = deg_regions - set(sloreta_loc["region"].unique())
+missing_corr = deg_regions - set(sloreta_corr["region"].unique())
+if missing_loc or missing_corr:
+    raise ValueError(
+        f"flagship sLORETA data missing regions needed by degradation: "
+        f"localization_error missing {sorted(missing_loc)}, correlation missing {sorted(missing_corr)}."
+    )
+
+# .to_numpy() on a pandas string column stays dtype=object (needs pickle to
+# round-trip), unlike every other region array in this codebase (built via
+# plain np.array(list_of_str), which numpy infers as fixed-width unicode) -
+# .astype(str) matches that convention so MetricSuite.save()'s
+# allow_pickle=False npz writer can serialize it.
+sloreta_loc_regions = sloreta_loc["region"].to_numpy().astype(str)
+sloreta_corr_regions = sloreta_corr["region"].to_numpy().astype(str)
+
+for pct in percentages:
+    deg_metrics.register(
+        "localization_error", sloreta_loc["Value"].to_numpy(),
+        Method="sloreta", percentage=pct, region=sloreta_loc_regions, phase="hrp",
+    )
+    deg_metrics.register(
+        "correlation", sloreta_corr["Value"].to_numpy(),
+        Method="sloreta", percentage=pct, region=sloreta_corr_regions, phase="hrp",
+    )
+
+deg_comparisons = deg_metrics.stat.build_comparisons(["sloreta"], ["cset", "wcset"])
+
 deg_metrics.stat.cluster_permutation(
     "localization_error", coord="percentage", group_by="Method", comparisons=deg_comparisons,
-    pairing_col="region", coord_order=pct_order, higher_is_better=False, filters={"phase": "hrp"},
+    pairing_col="region", coord_order=percentages, higher_is_better=False, filters={"phase": "hrp"},
     n_permutations=3000, seed=0,
 )
-pct_order_c = sorted(deg_metrics.to_df(metrics="correlation", filters={"phase": "hrp"})["percentage"].unique())
 deg_metrics.stat.cluster_permutation(
     "correlation", coord="percentage", group_by="Method", comparisons=deg_comparisons,
-    pairing_col="region", coord_order=pct_order_c, higher_is_better=True, filters={"phase": "hrp"},
+    pairing_col="region", coord_order=percentages, higher_is_better=True, filters={"phase": "hrp"},
     n_permutations=3000, seed=0,
 )
 

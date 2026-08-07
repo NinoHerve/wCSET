@@ -828,6 +828,13 @@ def evaluate_resection_localization(overwrite=False):
         if pd.isna(ilae):
             return
 
+        # skip subjects without a source reconstruction for every method
+        # (solve_inverse.py failed/was never run for them) - localization
+        # error needs both this and the resection mask above.
+        stc_paths = [dm.get_path(sub, "stc", task="spike", desc=m) for m in METHODS]
+        if not all((p.parent/f"{p.name}-lh.stc").exists() for p in stc_paths):
+            return
+
         # 0. Load data
         fwd = dm.load(sub, "fwd")                        # forward solution (carries the source space)
         ave = dm.load(sub, "ave", task="spike")           # averaged EEG (for spike timing)
@@ -874,8 +881,11 @@ def evaluate_resection_localization(overwrite=False):
     _evaluate_subject()
 
     # End: concatenate every subject's checkpoint into the final suite, then
-    # remove the now-redundant checkpoint folder.
-    checkpoints = sorted(checkpoint_dir.glob("sub-*"))
+    # remove the now-redundant checkpoint folder. Filtered to folders that
+    # actually have a meta.json - check_files() mkdir's fcheckpoint's parent
+    # as a side effect of the existence check above even for subjects that
+    # get skipped before ever calling metrics.save(), leaving empty dirs.
+    checkpoints = [f for f in sorted(checkpoint_dir.glob("sub-*")) if (f/"meta.json").exists()]
     combined = mm.metric.MetricSuite.concat(
         [mm.metric.MetricSuite.load(f) for f in checkpoints], name="Spike resection localization",
     )
