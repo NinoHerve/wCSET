@@ -1718,8 +1718,8 @@ run_solve_inverse(overwrite=True)  # must force-regen: old STCs used cset depth=
 
 For every simulated run, computes (a) the spatial correlation between
 reconstruction and ground truth over time, (b) localization error at
-the half-rising-phase only - distance from each method's single loudest
-vertex to the true seed region, 0 if inside it - and (c) the half-rising-
+the quarter-rising-phase only - distance from each method's single loudest
+vertex to the true seed region, 0 if inside it - and (c) the quarter-rising-
 phase/peak time of the simulated *sensor* EEG itself (used only for the
 reference lines drawn on the correlation plot in `index.qmd`, independent of
 source reconstruction method) - one `MetricSuite` per subject, reloaded and
@@ -1744,7 +1744,7 @@ forward model. This also fixes a redundancy that predated the merge:
 `get_rising_phase` used to be recomputed once per `(method, phase)` pair (4
 methods x 2 phases) even though it doesn't depend on `method` - now computed
 once per phase and reused for every method's localization-error indexing
-(hrp) and sensor-timing metric (hrp/pp).
+(qrp) and sensor-timing metric (qrp/pp).
 
 **Parameter choices:**
 
@@ -1754,14 +1754,14 @@ once per phase and reused for every method's localization-error indexing
   (`wmne` was excluded, an open **FILL** question at the time; `mce` was
   briefly included too before being dropped from the whole study - see
   `solve_inverse.py`'s prose above).
-- hrp/pp (for both the localization-error indexing and the sensor-timing
+- qrp/pp (for both the localization-error indexing and the sensor-timing
   metric below) are picked from `ave` *cropped* to the reconstruction's
   window, not the full uncropped evoked the old `spike_timing.py` used - per
   explicit instruction, the crop window always brackets the simulated spike
   here, so this doesn't change which sample gets picked, and it's what lets
   the two cells' `get_rising_phase` calls collapse into one.
-- Localization error is computed at half-rising-phase only, not peak phase -
-  hrp is the phase actually used for source localization throughout this
+- Localization error is computed at quarter-rising-phase only, not peak phase -
+  qrp is the phase actually used for source localization throughout this
   study (Section 2.6.2 of `index.qmd`), so a peak-phase counterpart would be
   extra volume without a use.
 - `n_jobs = 25`: compute resource setting, not a modeling choice - matches the
@@ -1813,8 +1813,8 @@ def make_preprocess(sources_dir):
   return preprocess
 
 def make_postprocess_score(dipole_positions):
-  """Scores every method's solution against gold, derives this run's hrp/pp
-  sensor timing, and localization error at half-rising-phase only (see
+  """Scores every method's solution against gold, derives this run's qrp/pp
+  sensor timing, and localization error at quarter-rising-phase only (see
   prose above for why no peak-phase counterpart) - one pass per run replaces
   the old comparison.py/spike_timing.py's two separate loops."""
   def postprocess_score(ctx):
@@ -1827,29 +1827,29 @@ def make_postprocess_score(dipole_positions):
     }
 
     # computed once per phase, not once per method: `data` doesn't depend on
-    # which method's stc is being scored. hrp_idx is also this run's
+    # which method's stc is being scored. qrp_idx is also this run's
     # localization-error index below.
     phase_time = {}
-    hrp_idx = None
-    for phase_name, ratio in [("hrp", 0.5), ("pp", 1.0)]:
+    qrp_idx = None
+    for phase_name, ratio in [("qrp", 0.25), ("pp", 1.0)]:
       idx = mm.analysis.eeg.get_rising_phase(data, ratio=ratio, as_idx=True)
       # `idx` is a length-1 array (mne's `time_as_index` always returns one,
       # even for scalar input) - fine for the fancy-indexing below, but
       # `data.times[idx]` would stay a length-1 array too, so np.stack-ing one
       # per run would add a stray extra axis instead of a flat (n_runs,) array
       phase_time[phase_name] = data.times[idx].item()
-      if phase_name == "hrp":
-        hrp_idx = idx
+      if phase_name == "qrp":
+        qrp_idx = idx
 
-    # localization error at half-rising-phase only: distance from each
-    # method's single loudest vertex at hrp to the true seed region (0 if
+    # localization error at quarter-rising-phase only: distance from each
+    # method's single loudest vertex at qrp to the true seed region (0 if
     # inside it) - the classic single-source localization baseline
-    loc_err_hrp = {
-      m: find_peak_localization_error(stc.data[:, hrp_idx], true_source_mask, dipole_positions)["distance_mm"]
+    loc_err_qrp = {
+      m: find_peak_localization_error(stc.data[:, qrp_idx], true_source_mask, dipole_positions)["distance_mm"]
       for m, stc in solutions.items()
     }
 
-    return corr, loc_err_hrp, data.times, phase_time["hrp"], phase_time["pp"]
+    return corr, loc_err_qrp, data.times, phase_time["qrp"], phase_time["pp"]
   return postprocess_score
 
 def run_comparison(overwrite=False):
@@ -1919,7 +1919,7 @@ def run_comparison(overwrite=False):
     tasks, make_preprocess(sources_dir), lambda ctx: None, make_postprocess_score(dipole_positions), n_jobs=n_jobs, n_threads_per_job=1,
   )
 
-  corr_runs, locerr_runs, times, hrp_times, pp_times = zip(*results)
+  corr_runs, locerr_runs, times, qrp_times, pp_times = zip(*results)
   run_ids = [t.run for t in tasks]
   regions = np.array([run2region[r] for r in run_ids])
 
@@ -1946,33 +1946,33 @@ def run_comparison(overwrite=False):
     for region in unique_regions:
       idx = np.where(regions == region)[0]
       metrics.register("correlation", np.stack([corr_runs[i][m] for i in idx]), Method=m, times=times[0], region=region)
-    # scalar per run, half-rising-phase only (always - no pp counterpart
+    # scalar per run, quarter-rising-phase only (always - no pp counterpart
     # exists anywhere for this metric, but `phase` is tagged anyway for
     # uniformity with `correlation`'s phase-scalar registrations in the
     # other experiments, and with spike's own `phase` coord) - same
     # one-point-per-run pattern as the "timing" entries below - `region` is
     # point-wise here too (length n_runs, matching `run`), since this is
     # already a flat 1D array (one point per run), not a 2D per-curve stack.
-    metrics.register("localization_error", np.array([r[m] for r in locerr_runs]), Method=m, run=np.array(run_ids), region=regions, phase="hrp")
+    metrics.register("localization_error", np.array([r[m] for r in locerr_runs]), Method=m, run=np.array(run_ids), region=regions, phase="qrp")
 
-  # per-run half-rising-phase/peak time of the simulated sensor EEG - a
+  # per-run quarter-rising-phase/peak time of the simulated sensor EEG - a
   # property of `ave`, not of any solver, so registered with no `Method` tag
   # at all (nothing downstream filters on one). Same study, same MetricSuite
   # - replaces the old spike_timing.py's separate
   # results/sub-10_simf_spike_timing.csv (index.qmd's only reader of that
   # file now reads this suite instead)
-  metrics.register("hrp_time", np.array(hrp_times), run=np.array(run_ids))
+  metrics.register("qrp_time", np.array(qrp_times), run=np.array(run_ids))
   metrics.register("pp_time", np.array(pp_times), run=np.array(run_ids))
 
   metrics.metadata["units"] = {
-    "correlation": "r", "localization_error": "mm", "hrp_time": "s", "pp_time": "s",
+    "correlation": "r", "localization_error": "mm", "qrp_time": "s", "pp_time": "s",
   }
   metrics.save(fmetrics, overwrite=overwrite)
 
-run_comparison(overwrite=True)  # must force-regen: precision_hrp/precision_pp dropped, localization_error_hrp renamed to localization_error (+ phase="hrp" coord), and now registers a `region` coordinate on every method-level metric (was previously absent on correlation, and only `run` on localization_error_hrp), so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region
+run_comparison(overwrite=True)  # must force-regen: switched from half- to quarter-rising-phase (ratio=0.25, still tagged "qrp" throughout - was "hrp"/ratio=0.5); precision_hrp/precision_pp dropped, localization_error_hrp renamed to localization_error (+ phase="qrp" coord), and now registers a `region` coordinate on every method-level metric (was previously absent on correlation, and only `run` on localization_error_qrp), so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region
 ```
 
-Plots of these results (spatial correlation over time, sensor hrp/pp timing)
+Plots of these results (spatial correlation over time, sensor qrp/pp timing)
 live in `index.qmd`'s Results section (`simf_localization_stats.py`/
 `simf_correlation_plot.py`), not here - this file only produces the data
 (`results/simf/flagship`) they read.
@@ -2021,18 +2021,18 @@ oversight:
   instruction) - the noise-sweep's wCSET numbers are therefore directly
   comparable to the flagship/degradation/surrogate wCSET numbers elsewhere
   in the manuscript, unlike in earlier revisions of this file.
-- **3 scalar metrics per run/method** (`correlation` at `phase="hrp"`/`"pp"`,
-  `localization_error` at `phase="hrp"`), not the full-time-course metric
-  `comparison.py`/`surrogate_comparison.py` compute (`ap_hrp`/`ap_pp` were
+- **3 scalar metrics per run/method** (`correlation` at `phase="qrp"`/`"pp"`,
+  `localization_error` at `phase="qrp"`), not the full-time-course metric
+  `comparison.py`/`surrogate_comparison.py` compute (`ap_qrp`/`ap_pp` were
   also computed here previously but dropped - never plotted or quoted
   anywhere in `index.qmd`, per explicit instruction to only compute what it
-  actually shows). Only two timepoints (`hrp`/`pp`) are solved and saved per
+  actually shows). Only two timepoints (`qrp`/`pp`) are solved and saved per
   run/method, not the full cropped window - no full time-course correlation.
   A deliberate scope reduction from `TODO_simf_robustness.md`'s original
   plan, justified by volume (up to 10,000 runs x 6 methods = 60,000 solves) -
   the saved STCs stay cheap (2 samples each) even at that scale, unlike the
   flagship's full-time-course ones.
-- **hrp/pp timing** is picked from each run's own clean `gold`, projected to
+- **qrp/pp timing** is picked from each run's own clean `gold`, projected to
   sensor space with the *simulation* forward (`simulator.hm.fwd`,
   noise-immune by construction), not from the noisy `ave` the way
   `comparison.py`/`spike_timing.py` do it elsewhere in this file. Picking
@@ -2040,10 +2040,10 @@ oversight:
   with "how accurate is the reconstruction" - a real risk specifically here,
   since this experiment deliberately varies noise level. Not applied
   retroactively to `comparison.py`/`spike_timing.py` - out of scope for this
-  cell. This also means the saved STCs' two timepoints carry hrp/pp identity
-  only by *column order* (0 = hrp, 1 = pp), not by any time value tied to
+  cell. This also means the saved STCs' two timepoints carry qrp/pp identity
+  only by *column order* (0 = qrp, 1 = pp), not by any time value tied to
   `ave`/`gold`'s own clock (`phase_data` is built with `tmin=0`) -
-  `noise_sweep_comparison.py` re-derives `hrp_idx`/`pp_idx` itself rather
+  `noise_sweep_comparison.py` re-derives `qrp_idx`/`pp_idx` itself rather
   than reading them off `stc.times`.
 - STCs are saved under `noisesweep_subject` ("10-noisesweep-v2"), not `sub`
   ("10") - reusing `sub` would silently collide with the flagship's own
@@ -2101,21 +2101,21 @@ noisesweep_subject = f"{sub}-noisesweep-v2"   # distinct bids subject - see nois
 methods = ["wcset", "cset", "sloreta", "dspm", "wmne"]
 n_jobs = 25   # compute resource setting, not a modeling choice - see prose above
 
-def preprocess_hrp_pp(ctx):
-  """Picks hrp/pp from this run's own noise-free gold (immune to noise/SNR by
+def preprocess_qrp_pp(ctx):
+  """Picks qrp/pp from this run's own noise-free gold (immune to noise/SNR by
   construction), projected to sensor space with the simulation forward."""
   ave, gold, simulator = ctx["ave"], ctx["gold"], ctx["simulator"]
 
   clean_ave = mne.apply_forward(simulator.hm.fwd, gold, ave.info)
-  hrp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=0.5, as_idx=True)[0]
+  qrp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=0.25, as_idx=True)[0]
   pp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=1, as_idx=True)[0]
 
   # solve only at those two phases - on the actual noisy `ave`, not the clean
   # projection - instead of the whole cropped window. tmin=0 means the saved
-  # STC's two columns carry hrp/pp identity by order only, not by a time
+  # STC's two columns carry qrp/pp identity by order only, not by a time
   # value tied to ave/gold's own clock - see prose above.
   phase_data = mne.EvokedArray(
-    ave.data[:, [hrp_idx, pp_idx]], ave.info, tmin=0, nave=ave.nave, kind=ave.kind
+    ave.data[:, [qrp_idx, pp_idx]], ave.info, tmin=0, nave=ave.nave, kind=ave.kind
   )
 
   return {"phase_data": phase_data}
@@ -2129,7 +2129,7 @@ def make_reconstruct(fwd, eig):
     data, ncov, needed = ctx["phase_data"], ctx["ncov"], ctx["task"].foutputs
 
     # SNR from the full-length `ave`, not `phase_data` - the latter is just
-    # the two HRP/PP samples reindexed to tmin=0, so the pre-stimulus
+    # the two QRP/PP samples reindexed to tmin=0, so the pre-stimulus
     # baseline window falls outside it and yields an empty slice (NaN SNR).
     snr, _ = mm.analysis.eeg.estimate_evoked_snr(
       evoked=ctx["ave"], baseline=ctx["simulator"].epoch_config.baseline, noise_cov=ncov
@@ -2218,14 +2218,14 @@ def run_noise_sweep_reconstruction(overwrite=False):
   # n_threads_per_job=1: n_jobs already saturates the 32-core budget, see
   # project memory on run_parallel_pipeline thread capping
   run_parallel_pipeline(
-    tasks, preprocess_hrp_pp, make_reconstruct(fwd, eig), postprocess_save, n_jobs=n_jobs, n_threads_per_job=1,
+    tasks, preprocess_qrp_pp, make_reconstruct(fwd, eig), postprocess_save, n_jobs=n_jobs, n_threads_per_job=1,
   )
 
-run_noise_sweep_reconstruction(overwrite=True)  # must force-regen: old STCs used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; wcset's harm was mistakenly set to 0.5, now fixed to the intended harm=5 (depth=0.2 unaffected, unchanged from the prior run); wMNE (formerly desc="mne") now solved with its own depth=0.8 operator under desc="wmne"
+run_noise_sweep_reconstruction(overwrite=True)  # must force-regen: switched from half- to quarter-rising-phase (ratio=0.25, "qrp" - was "hrp"/ratio=0.5); old STCs used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; wcset's harm was mistakenly set to 0.5, now fixed to the intended harm=5 (depth=0.2 unaffected, unchanged from the prior run); wMNE (formerly desc="mne") now solved with its own depth=0.8 operator under desc="wmne"
 ```
 
 Computes the same 3 scalar metrics as before (`correlation` at
-`phase="hrp"`/`"pp"`, `localization_error` at `phase="hrp"`), but now via
+`phase="qrp"`/`"pp"`, `localization_error` at `phase="qrp"`), but now via
 `MeasureTask` - reloading the STCs `noise_sweep_reconstruction.py` saved
 instead of solving them - the same read-and-score pattern `comparison.py`
 uses for the flagship dataset.
@@ -2290,42 +2290,42 @@ suffix = "_test" if QUICK_TEST else ""   # keeps quick-test output from collidin
 n_jobs = 25
 
 def make_preprocess(sources_dir):
-  """Re-derives hrp/pp from this run's own noise-free gold (same recipe as
-  noise_sweep_reconstruction.py's preprocess_hrp_pp - the saved STCs' two
+  """Re-derives qrp/pp from this run's own noise-free gold (same recipe as
+  noise_sweep_reconstruction.py's preprocess_qrp_pp - the saved STCs' two
   columns don't carry a usable time axis, see prose above), and loads this
   run's `src` manually since MeasureTask doesn't."""
   def preprocess(ctx):
     ave, gold, simulator = ctx["ave"], ctx["gold"], ctx["simulator"]
 
     clean_ave = mne.apply_forward(simulator.hm.fwd, gold, ave.info)
-    hrp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=0.5, as_idx=True)[0]
+    qrp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=0.25, as_idx=True)[0]
     pp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=1, as_idx=True)[0]
 
     fsource = sources_dir/f"run-{ctx['task'].run:03d}_source.json"
-    return {"hrp_idx": hrp_idx, "pp_idx": pp_idx, "src": Source.load(fsource)}
+    return {"qrp_idx": qrp_idx, "pp_idx": pp_idx, "src": Source.load(fsource)}
   return preprocess
 
 def make_score(dipole_positions):
   """Scores each of the six saved solutions against this run's own gold,
-  returns 3 scalars/method. sol.data[:, 0]/[:, 1] are hrp/pp by construction
-  order (see noise_sweep_reconstruction.py), so hrp_idx/pp_idx re-derived
+  returns 3 scalars/method. sol.data[:, 0]/[:, 1] are qrp/pp by construction
+  order (see noise_sweep_reconstruction.py), so qrp_idx/pp_idx re-derived
   above are only used to index into `gold`, never into `sol`/`stc.times`."""
   def score(ctx):
-    gold, hrp_idx, pp_idx = ctx["gold"], ctx["hrp_idx"], ctx["pp_idx"]
+    gold, qrp_idx, pp_idx = ctx["gold"], ctx["qrp_idx"], ctx["pp_idx"]
     src, simulator = ctx["src"], ctx["simulator"]
 
     true_source_mask = src.select_targets(simulator.hm.src, simulator.hm.parc, simulator.hm.ras2tkras)
-    gold_hrp, gold_pp = gold.data[:, hrp_idx], gold.data[:, pp_idx]
+    gold_qrp, gold_pp = gold.data[:, qrp_idx], gold.data[:, pp_idx]
 
     rows = []
     for method, sol in ctx["solutions"].items():
-      sol_hrp, sol_pp = sol.data[:, 0], sol.data[:, 1]
+      sol_qrp, sol_pp = sol.data[:, 0], sol.data[:, 1]
 
-      hit = find_peak_localization_error(sol_hrp, true_source_mask, dipole_positions)
+      hit = find_peak_localization_error(sol_qrp, true_source_mask, dipole_positions)
 
       rows.append({
         "method": method,
-        "correlation_hrp": np.corrcoef(gold_hrp, sol_hrp)[0, 1],
+        "correlation_qrp": np.corrcoef(gold_qrp, sol_qrp)[0, 1],
         "correlation_pp": np.corrcoef(gold_pp, sol_pp)[0, 1],
         "localization_error": hit["distance_mm"],
       })
@@ -2397,7 +2397,7 @@ def run_noise_sweep_comparison(overwrite=QUICK_TEST):
   if not tasks:
     return
 
-  # 2. Read-and-score pipeline: re-derive hrp/pp from the clean gold, score
+  # 2. Read-and-score pipeline: re-derive qrp/pp from the clean gold, score
   # the previously-saved 2-timepoint solutions against gold - mirrors
   # inverse-noisesweep.ipynb's pipeline exactly (see prose above)
   # n_threads_per_job=1: n_jobs already saturates the 32-core budget, see
@@ -2413,7 +2413,7 @@ def run_noise_sweep_comparison(overwrite=QUICK_TEST):
 
   # 3. Register into one MetricSuite (method x snr), same pattern as
   # comparison.py/surrogate_comparison.py. `correlation` collapses the old
-  # correlation_hrp/correlation_pp pair into one metric name + a `phase`
+  # correlation_qrp/correlation_pp pair into one metric name + a `phase`
   # coord (matching spike's own `phase` coord convention), rather than
   # baking the phase into the metric name.
   metrics = mm.metric.MetricSuite(f"sub-{sub} noise/SNR sweep validation")
@@ -2422,14 +2422,14 @@ def run_noise_sweep_comparison(overwrite=QUICK_TEST):
     region = run2region[task.run]
     for row in run_rows:
       method = row["method"]
-      metrics.register("correlation", row["correlation_hrp"], Method=method, snr=snr, region=region, phase="hrp")
+      metrics.register("correlation", row["correlation_qrp"], Method=method, snr=snr, region=region, phase="qrp")
       metrics.register("correlation", row["correlation_pp"], Method=method, snr=snr, region=region, phase="pp")
-      metrics.register("localization_error", row["localization_error"], Method=method, snr=snr, region=region, phase="hrp")
+      metrics.register("localization_error", row["localization_error"], Method=method, snr=snr, region=region, phase="qrp")
 
   metrics.metadata["units"] = {"correlation": "r", "localization_error": "mm"}
   metrics.save(fmetrics, overwrite=overwrite)
 
-run_noise_sweep_comparison(overwrite=True)  # must force-regen: now registers a `region` coordinate per entry (was previously absent) and collapses correlation_hrp/correlation_pp/localization_error_hrp into correlation/localization_error + a `phase` coord, so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region and filter by phase
+run_noise_sweep_comparison(overwrite=True)  # must force-regen: switched from half- to quarter-rising-phase (ratio=0.25, "qrp" - was "hrp"/ratio=0.5); now registers a `region` coordinate per entry (was previously absent) and collapses correlation_qrp/correlation_pp/localization_error_qrp into correlation/localization_error + a `phase` coord, so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region and filter by phase
 ```
 
 ## Experiment 2: Connectome Degradation (Rewiring)
@@ -2519,8 +2519,8 @@ against this machine's free space, and it protects the actually slow step
   from `0.1`, see `solve_inverse.py`'s prose above for the
   `lambda2-tuning.ipynb` sweep this comes from).
 - **2 scalar metrics per run/method** (`correlation`, `localization_error`,
-  both registered at `phase="hrp"` only) - `correlation` at `phase="pp"` and
-  `ap_hrp`/`ap_pp` (and the peak-phase reconstruction they needed) were
+  both registered at `phase="qrp"` only) - `correlation` at `phase="pp"` and
+  `ap_qrp`/`ap_pp` (and the peak-phase reconstruction they needed) were
   dropped, never plotted or quoted anywhere in `index.qmd` for this
   experiment. `localization_error` costs nothing extra beyond
   `correlation` since `InverseSimTask` already loads `simulator`/`src`
@@ -2658,20 +2658,20 @@ def run_degradation_reconstruction(overwrite=False):
   ]
   print(f"{len(inverse_tasks)} probe-set runs ({len(probe_set)} regions x {n_reps_per_region} reps).")
 
-  # 4. Stage 2 setup: preprocess/reconstruct/postprocess - hrp picked from
+  # 4. Stage 2 setup: preprocess/reconstruct/postprocess - qrp picked from
   # each run's own clean gold, same fix noise_sweep_reconstruction.py uses,
-  # needed here too since the hrp index must be identical across every
-  # connectome variant for a given run to stay comparable. Half-rising-phase
-  # only now (pp dropped along with correlation_pp/ap_hrp/ap_pp above) - one
+  # needed here too since the qrp index must be identical across every
+  # connectome variant for a given run to stay comparable. Quarter-rising-phase
+  # only now (pp dropped along with correlation_pp/ap_qrp/ap_pp above) - one
   # timepoint solved per connectome/run instead of two.
-  def preprocess_hrp(ctx):
+  def preprocess_qrp(ctx):
     ave, gold, simulator = ctx["ave"], ctx["gold"], ctx["simulator"]
     clean_ave = mne.apply_forward(simulator.hm.fwd, gold, ave.info)
-    hrp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=0.5, as_idx=True)[0]
+    qrp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=0.25, as_idx=True)[0]
     phase_data = mne.EvokedArray(
-      ave.data[:, [hrp_idx]], ave.info, tmin=0, nave=ave.nave, kind=ave.kind
+      ave.data[:, [qrp_idx]], ave.info, tmin=0, nave=ave.nave, kind=ave.kind
     )
-    return {"phase_data": phase_data, "hrp_idx": hrp_idx}
+    return {"phase_data": phase_data, "qrp_idx": qrp_idx}
 
   def make_reconstruct(eigvec, eigval):
     def reconstruct(ctx):
@@ -2689,20 +2689,20 @@ def run_degradation_reconstruction(overwrite=False):
     return reconstruct
 
   def postprocess_score(ctx):
-    gold, hrp_idx = ctx["gold"], ctx["hrp_idx"]
+    gold, qrp_idx = ctx["gold"], ctx["qrp_idx"]
     src, simulator = ctx["src"], ctx["simulator"]
     true_source_mask = src.select_targets(simulator.hm.src, simulator.hm.parc, simulator.hm.ras2tkras)
-    gold_hrp = gold.data[:, hrp_idx]
+    gold_qrp = gold.data[:, qrp_idx]
 
     rows = []
     for method, sol in ctx["solutions"].items():
-      sol_hrp = sol.data[:, 0]
-      hit = find_peak_localization_error(sol_hrp, true_source_mask, dipole_positions)
+      sol_qrp = sol.data[:, 0]
+      hit = find_peak_localization_error(sol_qrp, true_source_mask, dipole_positions)
       rows.append({
         "method": method,
         "run": ctx["task"].run,  # for region lookup at registration time below
-        "correlation_hrp": np.corrcoef(gold_hrp, sol_hrp)[0, 1],
-        "localization_error_hrp": hit["distance_mm"],
+        "correlation_qrp": np.corrcoef(gold_qrp, sol_qrp)[0, 1],
+        "localization_error_qrp": hit["distance_mm"],
       })
     return rows
 
@@ -2720,7 +2720,7 @@ def run_degradation_reconstruction(overwrite=False):
     # n_threads_per_job=1: n_jobs already saturates the 32-core budget, see
     # project memory on run_parallel_pipeline thread capping
     results = run_parallel_pipeline(
-      inverse_tasks, preprocess_hrp, make_reconstruct(eigvec, eigval), postprocess_score,
+      inverse_tasks, preprocess_qrp, make_reconstruct(eigvec, eigval), postprocess_score,
       n_jobs=n_jobs_solve, n_threads_per_job=1, verbose="warning",
     )
 
@@ -2728,15 +2728,15 @@ def run_degradation_reconstruction(overwrite=False):
       for row in run_rows:
         method = row["method"]
         region = run2region[row["run"]]
-        metrics.register("correlation", row["correlation_hrp"], Method=method, percentage=pct, region=region, phase="hrp")
-        metrics.register("localization_error", row["localization_error_hrp"], Method=method, percentage=pct, region=region, phase="hrp")
+        metrics.register("correlation", row["correlation_qrp"], Method=method, percentage=pct, region=region, phase="qrp")
+        metrics.register("localization_error", row["localization_error_qrp"], Method=method, percentage=pct, region=region, phase="qrp")
 
     print(f"{pct}% done ({len(inverse_tasks)} runs x 2 methods).")
 
   metrics.metadata["units"] = {"correlation": "r", "localization_error": "mm"}
   metrics.save(fmetrics, overwrite=overwrite)
 
-run_degradation_reconstruction(overwrite=True)  # must force-regen: permutation-only now (deletion/addition dropped), correlation_pp/ap_hrp/ap_pp dropped, correlation_hrp/localization_error_hrp renamed to correlation/localization_error (+ phase="hrp" coord), and now registers a `region` coordinate per entry (was previously absent), so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region
+run_degradation_reconstruction(overwrite=True)  # must force-regen: switched from half- to quarter-rising-phase (ratio=0.25, "qrp" - was "hrp"/ratio=0.5); permutation-only now (deletion/addition dropped), correlation_pp/ap_qrp/ap_pp dropped, correlation_qrp/localization_error_qrp renamed to correlation/localization_error (+ phase="qrp" coord), and now registers a `region` coordinate per entry (was previously absent), so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region
 ```
 
 ## Experiment 3: Surrogate-Connectome Reconstruction & Validation
@@ -2754,9 +2754,9 @@ reconstruction/comparison pair in the first place: reconstruction here is
 cheap enough (probe-set runs x 2 methods x 2 timepoints per surrogate) that
 a persisted-STC checkpoint is unneeded overhead, not a real resume point.
 The old two-cell version also reconstructed on the *entire* cropped
-`[-0.01, 0.15]` window (not just hrp/pp) via raw `joblib.Parallel`, rather
+`[-0.01, 0.15]` window (not just qrp/pp) via raw `joblib.Parallel`, rather
 than `InverseSimTask`/`run_parallel_pipeline` - both fixed here, matching
-`degradation_reconstruction.py`'s design exactly: `preprocess_hrp_pp`/
+`degradation_reconstruction.py`'s design exactly: `preprocess_qrp_pp`/
 `make_reconstruct`/`postprocess_score` below are the same functions, just
 looping over `surrogates` (a flat list) instead of `(operator, percentage)`
 pairs, since surrogate identity has no natural sweep ordering the way
@@ -2764,19 +2764,19 @@ degradation severity does.
 
 ⚠ **Metric set changed as a result**: the old `surrogate_comparison.py`
 computed a full spatial-correlation-over-time curve and full
-precision-recall curves at hrp/pp (mirroring `comparison.py`'s flagship
+precision-recall curves at qrp/pp (mirroring `comparison.py`'s flagship
 figures) - not possible anymore once solving is reduced to 2 timepoints.
 Now computes 2 scalars per run/method (`correlation` at both
-`phase="hrp"`/`"pp"`, `localization_error` at `phase="hrp"` - the last one
+`phase="qrp"`/`"pp"`, `localization_error` at `phase="qrp"` - the last one
 new, wasn't computed for surrogates before), trading full-curve figures for
 speed and consistency with Experiment 2. `localization_error` costs nothing
 extra here either, for the same reason it didn't in
 `degradation_reconstruction.py`: `InverseSimTask` already loads
-`simulator`/`src` for free. `ap_hrp`/`ap_pp` were also computed here at one
+`simulator`/`src` for free. `ap_qrp`/`ap_pp` were also computed here at one
 point but dropped - never plotted or quoted anywhere in `index.qmd`, per
 explicit instruction to only compute what it actually shows (unlike
 `degradation_reconstruction.py`, `correlation` at `phase="pp"` *is* kept
-here: both hrp/pp phases are used in the surrogate comparison figures, so pp
+here: both qrp/pp phases are used in the surrogate comparison figures, so pp
 reconstruction still happens for both methods).
 
 ⚠ **Suite structure changed**: rather than one permanent `MetricSuite` per
@@ -2791,7 +2791,7 @@ flagship's "original" (undegraded) values under `Surrogate="original"`, and
 saves the result as one combined `results/simf/surrogates` suite - then
 deletes `_checkpoint/`, since its contents are now fully redundant with the
 combined suite. That merge step needs the flagship suite's own
-`metadata["derived"]` (for the hrp/pp median interpolation), which is only
+`metadata["derived"]` (for the qrp/pp median interpolation), which is only
 populated once `simf_statistics_flagship.py` has run - which is why the
 merge happens in the Statistics section (already ordered after flagship's
 own stats cell) rather than here.
@@ -2815,20 +2815,37 @@ own stats cell) rather than here.
   `depth=0.8`/`harm=0.8`/default `"gap"`) - not retuned per surrogate/basis,
   a documented assumption, not a verified sub-sweep (parallel to the same
   assumption flagged for the noise-robustness experiment).
-- **wCSET's `harm` is the one exception, not shared uniformly**: `harm =
-  5` for every connectome-based surrogate (`fused`, `fused-bin`,
-  `geom-atlas`, `geom-atlas-bin`), but `harm = 30` for `beltrami`
-  specifically (per explicit instruction). Reusing `harm=5` for
-  `beltrami` would not have been meaningful: its mesh-Laplacian eigenvalue
-  spectrum sits on a very different numerical scale than any
-  connectome-Laplacian spectrum (see `beltrami_harmonics_notes.md` in the
-  `mindmap` repo). `harm=30` is not a value invented for this cell - it's
-  the value separately settled (via its own dedicated sweep) for wCSET on
-  this exact mesh-Beltrami basis in `beltrami-prior-tuning.ipynb`, reused
-  here as-is.
+- **wCSET's harmonic-weighting mechanism is not shared uniformly**: every
+  connectome-based surrogate (`fused`, `fused-bin`, `geom-atlas`,
+  `geom-atlas-bin`) keeps `depth=0.2`, `harm=5`, `harmonic_method="lowpass"`
+  (the exponential-decay prior), but `beltrami` now uses a different
+  mechanism entirely: `depth=0`, `harmonic_method="logpass"`, `cutoff=150`,
+  no `harm=`. This is the log-form spectral prior from the GBF paper (Wang
+  et al. 2026, *Nat Biomed Eng*, "A geometry aware framework enhances
+  noninvasive mapping of whole human brain dynamics"), `Σ⁻¹ =
+  diag(-β/log(λ))` over the first `cutoff` eigenmodes (their Eq. 5, applied
+  to their Eq. 2 basis) rather than `lowpass`'s uniform exponential decay
+  over the whole spectrum. `depth=0` is paper-faithful (their MAP derivation
+  has no depth term at all); `harm` (their `β`/`relaxation`) is dropped for
+  `beltrami` since it's mathematically inert under `"logpass"` - a uniform
+  multiplicative constant exactly cancelled by `wCSET`'s own
+  trace-renormalization before the ridge solve, so only `cutoff` actually
+  shapes the prior (passing a non-default `harm` here would just trigger a
+  `RuntimeWarning`). `cutoff=150` is not the paper's own value (`S=300`) but
+  the value a dedicated cutoff sweep on this exact mesh-Beltrami basis
+  settled on in `beltrami-prior-tuning.ipynb` (best `ap_hrp`/tied-best
+  `loc_err_hrp` across a `[50...4000]` grid, evaluated on `sub-simf10` runs
+  1-10) - reused here as-is, not independently re-verified on this cohort.
+  This supersedes the file's earlier `harm=30`/`"lowpass"` convention for
+  `beltrami` (itself an earlier sweep in the same tutorial notebook, before
+  `mindmap` implemented the paper's own log-form prior directly - see
+  `beltrami_harmonics_notes.md` in the `mindmap` repo for that superseded
+  decision). `lambda2=0.1` (shared with CSET, fixed per this experiment's
+  own convention) is unaffected by this change, for `beltrami` or any other
+  surrogate.
 - **CSET/wCSET only** - matches `degradation_reconstruction.py`'s
   convention exactly.
-- Reconstruction at half-rising-phase and peak-phase only, not the full
+- Reconstruction at quarter-rising-phase and peak-phase only, not the full
   cropped window - see ⚠ notes above.
 - **Output**: one checkpoint `MetricSuite` per surrogate, saved to
   `results/simf/surrogates/_checkpoint/{surrogate}` - transient, see ⚠ note
@@ -2904,27 +2921,37 @@ def run_surrogate_reconstruction(overwrite=False):
   ]
   print(f"{len(inverse_tasks)} probe-set runs ({len(probe_set)} regions x {n_reps_per_region} reps).")
 
-  # 2. Preprocess/reconstruct/postprocess - hrp/pp picked from each run's own
+  # 2. Preprocess/reconstruct/postprocess - qrp/pp picked from each run's own
   # clean gold, same fix noise_sweep_reconstruction.py/
-  # degradation_reconstruction.py use, needed here too so hrp/pp indices stay
+  # degradation_reconstruction.py use, needed here too so qrp/pp indices stay
   # identical across every surrogate for a given run
-  def preprocess_hrp_pp(ctx):
+  def preprocess_qrp_pp(ctx):
     ave, gold, simulator = ctx["ave"], ctx["gold"], ctx["simulator"]
     clean_ave = mne.apply_forward(simulator.hm.fwd, gold, ave.info)
-    hrp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=0.5, as_idx=True)[0]
+    qrp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=0.25, as_idx=True)[0]
     pp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=1, as_idx=True)[0]
     phase_data = mne.EvokedArray(
-      ave.data[:, [hrp_idx, pp_idx]], ave.info, tmin=0, nave=ave.nave, kind=ave.kind
+      ave.data[:, [qrp_idx, pp_idx]], ave.info, tmin=0, nave=ave.nave, kind=ave.kind
     )
-    return {"phase_data": phase_data, "hrp_idx": hrp_idx, "pp_idx": pp_idx}
+    return {"phase_data": phase_data, "qrp_idx": qrp_idx, "pp_idx": pp_idx}
 
-  def make_reconstruct(eigvec, eigval, harm):
+  def make_reconstruct(eigvec, eigval, surrogate):
     def reconstruct(ctx):
       data, ncov = ctx["phase_data"], ctx["ncov"]
-      inv_wcset = mm.analysis.inverse.wCSET(
-        forward=fwd, noise_cov=ncov, depth=0.2, eigenvectors=eigvec, eigenvalues=eigval,
-        harm=harm, harmonic_method="lowpass",
-      )
+      if surrogate == "beltrami":
+        # GBF paper's log-form spectral prior (Wang et al. 2026, Nat Biomed
+        # Eng) - depth=0 and cutoff=150 per the dedicated sweep in
+        # beltrami-prior-tuning.ipynb, see prose above. harm/relaxation
+        # dropped: mathematically inert under harmonic_method="logpass".
+        inv_wcset = mm.analysis.inverse.wCSET(
+          forward=fwd, noise_cov=ncov, depth=0, eigenvectors=eigvec, eigenvalues=eigval,
+          harmonic_method="logpass", cutoff=150,
+        )
+      else:
+        inv_wcset = mm.analysis.inverse.wCSET(
+          forward=fwd, noise_cov=ncov, depth=0.2, eigenvectors=eigvec, eigenvalues=eigval,
+          harm=5, harmonic_method="lowpass",
+        )
       inv_cset = mm.analysis.inverse.CSET(forward=fwd, noise_cov=ncov, depth=0.2, eigenvectors=eigvec)
       solutions = {
         "wcset": inv_wcset.solve(data, lambda2=0.1),
@@ -2934,21 +2961,21 @@ def run_surrogate_reconstruction(overwrite=False):
     return reconstruct
 
   def postprocess_score(ctx):
-    gold, hrp_idx, pp_idx = ctx["gold"], ctx["hrp_idx"], ctx["pp_idx"]
+    gold, qrp_idx, pp_idx = ctx["gold"], ctx["qrp_idx"], ctx["pp_idx"]
     src, simulator = ctx["src"], ctx["simulator"]
     true_source_mask = src.select_targets(simulator.hm.src, simulator.hm.parc, simulator.hm.ras2tkras)
-    gold_hrp, gold_pp = gold.data[:, hrp_idx], gold.data[:, pp_idx]
+    gold_qrp, gold_pp = gold.data[:, qrp_idx], gold.data[:, pp_idx]
 
     rows = []
     for method, sol in ctx["solutions"].items():
-      sol_hrp, sol_pp = sol.data[:, 0], sol.data[:, 1]
-      hit = find_peak_localization_error(sol_hrp, true_source_mask, dipole_positions)
+      sol_qrp, sol_pp = sol.data[:, 0], sol.data[:, 1]
+      hit = find_peak_localization_error(sol_qrp, true_source_mask, dipole_positions)
       rows.append({
         "method": method,
         "run": ctx["task"].run,  # for region lookup at registration time below
-        "correlation_hrp": np.corrcoef(gold_hrp, sol_hrp)[0, 1],
+        "correlation_qrp": np.corrcoef(gold_qrp, sol_qrp)[0, 1],
         "correlation_pp": np.corrcoef(gold_pp, sol_pp)[0, 1],
-        "localization_error_hrp": hit["distance_mm"],
+        "localization_error_qrp": hit["distance_mm"],
       })
     return rows
 
@@ -2962,18 +2989,10 @@ def run_surrogate_reconstruction(overwrite=False):
     eig = dm.load(sub, "eig", desc=surrogate)
     eigvec, eigval = eig["vec"], eig["val"]
 
-    # beltrami's mesh-Laplacian spectrum sits on a different numerical scale
-    # than any connectome-Laplacian spectrum (see beltrami_harmonics_notes.md
-    # in the mindmap repo), so harm=5 (tuned for the connectome side) isn't
-    # meaningful for it; harm=30 is the value separately settled for wCSET
-    # on this exact basis in beltrami-prior-tuning.ipynb (per explicit
-    # instruction) - every other surrogate keeps the shared harm=5
-    harm = 30 if surrogate == "beltrami" else 5
-
     # n_threads_per_job=1: n_jobs already saturates the 32-core budget, see
     # project memory on run_parallel_pipeline thread capping
     results = run_parallel_pipeline(
-      inverse_tasks, preprocess_hrp_pp, make_reconstruct(eigvec, eigval, harm), postprocess_score,
+      inverse_tasks, preprocess_qrp_pp, make_reconstruct(eigvec, eigval, surrogate), postprocess_score,
       n_jobs=n_jobs_solve, n_threads_per_job=1, verbose="warning",
     )
 
@@ -2982,14 +3001,14 @@ def run_surrogate_reconstruction(overwrite=False):
       for row in run_rows:
         method = row["method"]
         region = run2region[row["run"]]
-        metrics.register("correlation", row["correlation_hrp"], Method=method, region=region, Surrogate=surrogate, phase="hrp")
+        metrics.register("correlation", row["correlation_qrp"], Method=method, region=region, Surrogate=surrogate, phase="qrp")
         metrics.register("correlation", row["correlation_pp"], Method=method, region=region, Surrogate=surrogate, phase="pp")
-        metrics.register("localization_error", row["localization_error_hrp"], Method=method, region=region, Surrogate=surrogate, phase="hrp")
+        metrics.register("localization_error", row["localization_error_qrp"], Method=method, region=region, Surrogate=surrogate, phase="qrp")
 
     metrics.save(fmetrics[surrogate], overwrite=overwrite)
     print(f"[{surrogate}] done ({len(inverse_tasks)} runs x 2 methods).")
 
-run_surrogate_reconstruction(overwrite=True)  # must force-regen: old metrics used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; wcset's harm was mistakenly set to 0.5 for connectome-based surrogates, now fixed to the intended harm=5 (harm=30 for beltrami is correct and unaffected; depth=0.2/harmonic_method="lowpass" unaffected, unchanged from the prior run); ap_hrp/ap_pp dropped; correlation_hrp/correlation_pp/localization_error_hrp renamed to correlation/localization_error (+ phase= coord); now registers `Surrogate=`/`region=` coordinates per entry (were previously absent/implicit in the filename), so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region and select surrogates by filter instead of by file
+run_surrogate_reconstruction(overwrite=True)  # must force-regen: beltrami's wCSET switched from depth=0.2/harm=30/"lowpass" to the GBF paper's depth=0/"logpass"/cutoff=150 mechanism (every other surrogate's depth=0.2/harm=5/"lowpass" is unaffected); switched from half- to quarter-rising-phase (ratio=0.25, "qrp" - was "hrp"/ratio=0.5); old metrics used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; ap_qrp/ap_pp dropped; correlation_qrp/correlation_pp/localization_error_qrp renamed to correlation/localization_error (+ phase= coord); now registers `Surrogate=`/`region=` coordinates per entry (were previously absent/implicit in the filename), so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region and select surrogates by filter instead of by file
 ```
 
 # Statistics
@@ -3027,10 +3046,10 @@ flag_metrics = mm.metric.MetricSuite.load(fmetrics)
 comparisons = flag_metrics.stat.build_comparisons(["wcset"], COMPETITORS)
 
 # Wilcoxon signed-rank vs. wCSET, region-paired - same test simf_localization_stats.py
-# in index.qmd will ask for again (cache hit). phase="hrp" always (no pp
+# in index.qmd will ask for again (cache hit). phase="qrp" always (no pp
 # counterpart exists for this metric).
 flag_metrics.stat.wilcoxon(
-    "localization_error", group_by="Method", comparisons=comparisons, pairing_col="region", filters={"phase": "hrp"},
+    "localization_error", group_by="Method", comparisons=comparisons, pairing_col="region", filters={"phase": "qrp"},
 )
 
 # Region-paired cluster-permutation vs. wCSET, over time.
@@ -3041,13 +3060,13 @@ flag_metrics.stat.cluster_permutation(
     n_permutations=3000, seed=0,
 )
 
-loc_df = flag_metrics.to_df(metrics="localization_error", filters={"phase": "hrp"})
+loc_df = flag_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})
 flag_metrics.metadata["derived"] = {
     "loc_median": loc_df.groupby("Method")["Value"].median().to_dict(),
-    "hrp_time_median": float(flag_metrics.to_df(metrics="hrp_time")["Value"].median()),
+    "qrp_time_median": float(flag_metrics.to_df(metrics="qrp_time")["Value"].median()),
     "pp_time_median": float(flag_metrics.to_df(metrics="pp_time")["Value"].median()),
 }
-flag_metrics.metadata["units"] = {"correlation": "r", "localization_error": "mm", "hrp_time": "s", "pp_time": "s"}
+flag_metrics.metadata["units"] = {"correlation": "r", "localization_error": "mm", "qrp_time": "s", "pp_time": "s"}
 flag_metrics.save(fmetrics, overwrite=True)
 ```
 
@@ -3065,22 +3084,22 @@ fnoise = Path("./results/simf/noise_sweep")
 noise_metrics = mm.metric.MetricSuite.load(fnoise)
 comparisons = noise_metrics.stat.build_comparisons(["wcset"], COMPETITORS)
 
-# localization error is lower-is-better, unlike correlation below. phase="hrp"
+# localization error is lower-is-better, unlike correlation below. phase="qrp"
 # always (no pp counterpart exists for this metric).
 noise_loc_snr_order = sorted(
-    noise_metrics.to_df(metrics="localization_error", filters={"phase": "hrp"})["snr"].unique(), reverse=True
+    noise_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})["snr"].unique(), reverse=True
 )
 noise_metrics.stat.cluster_permutation(
     "localization_error", coord="snr", group_by="Method", comparisons=comparisons, pairing_col="region",
-    coord_order=noise_loc_snr_order, higher_is_better=False, filters={"phase": "hrp"},
+    coord_order=noise_loc_snr_order, higher_is_better=False, filters={"phase": "qrp"},
     n_permutations=3000, seed=0,
 )
 
-# correlation, once per phase (hrp/pp) - higher-is-better.
+# correlation, once per phase (qrp/pp) - higher-is-better.
 noise_corr_snr_order = sorted(
-    noise_metrics.to_df(metrics="correlation", filters={"phase": "hrp"})["snr"].unique(), reverse=True
+    noise_metrics.to_df(metrics="correlation", filters={"phase": "qrp"})["snr"].unique(), reverse=True
 )
-for phase in ["hrp", "pp"]:
+for phase in ["qrp", "pp"]:
     noise_metrics.stat.cluster_permutation(
         "correlation", coord="snr", group_by="Method", comparisons=comparisons, pairing_col="region",
         coord_order=noise_corr_snr_order, higher_is_better=True, filters={"phase": phase},
@@ -3099,8 +3118,8 @@ def _nested_median(df):
     return out
 
 noise_metrics.metadata["derived"] = {
-    "loc_median": _nested_median(noise_metrics.to_df(metrics="localization_error", filters={"phase": "hrp"})),
-    "corr_hrp_median": _nested_median(noise_metrics.to_df(metrics="correlation", filters={"phase": "hrp"})),
+    "loc_median": _nested_median(noise_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})),
+    "corr_qrp_median": _nested_median(noise_metrics.to_df(metrics="correlation", filters={"phase": "qrp"})),
     "corr_pp_median": _nested_median(noise_metrics.to_df(metrics="correlation", filters={"phase": "pp"})),
 }
 noise_metrics.metadata["units"] = {"correlation": "r", "localization_error": "mm"}
@@ -3126,15 +3145,15 @@ flag_metrics = mm.metric.MetricSuite.load("./results/simf/flagship")
 # dSPM/sLORETA are connectome-agnostic (not recomputed per degradation
 # level), so their flagship (undegraded) values are reused as flat
 # reference lines for both metrics.
-flag_loc = flag_metrics.to_df(metrics="localization_error", filters={"phase": "hrp"})
+flag_loc = flag_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})
 deg_ref_loc = {m: float(flag_loc[flag_loc["Method"] == m]["Value"].median()) for m in ["dspm", "sloreta"]}
 
-hrp_median = flag_metrics.metadata["derived"]["hrp_time_median"]
+qrp_median = flag_metrics.metadata["derived"]["qrp_time_median"]
 corr_raw_df = flag_metrics.to_df(metrics="correlation", filters={"Method": ["dspm", "sloreta"]})
 deg_ref_corr = {}
 for m in ["dspm", "sloreta"]:
     curve = corr_raw_df[corr_raw_df["Method"] == m].groupby("times")["Value"].median().sort_index()
-    deg_ref_corr[m] = float(np.interp(hrp_median, curve.index, curve.values))
+    deg_ref_corr[m] = float(np.interp(qrp_median, curve.index, curve.values))
 
 def _median_at(df, method, pct):
     return float(df[(df["Method"] == method) & (df["percentage"] == pct)]["Value"].median())
@@ -3160,29 +3179,29 @@ deg_metrics = mm.metric.MetricSuite.load(fdeg)
 # just a plotted reference line).
 
 # localization_error: flagship already stores this as a raw per-run scalar
-# at phase="hrp", tagged by region - same shape/semantics degradation
+# at phase="qrp", tagged by region - same shape/semantics degradation
 # itself uses, so reuse the raw values directly.
-sloreta_loc = flag_metrics.to_df(metrics="localization_error", filters={"phase": "hrp", "Method": "sloreta"})
+sloreta_loc = flag_metrics.to_df(metrics="localization_error", filters={"phase": "qrp", "Method": "sloreta"})
 
 # correlation: flagship stores this as a full per-run curve over `times`
-# (no phase tag) - interpolate each run's own curve at hrp_median (the same
+# (no phase tag) - interpolate each run's own curve at qrp_median (the same
 # reference time deg_ref_corr above already uses) to get one
-# hrp-comparable scalar per run, matching degradation's own
-# correlation_hrp semantics.
+# qrp-comparable scalar per run, matching degradation's own
+# correlation_qrp semantics.
 sloreta_corr_curves = flag_metrics.to_df(metrics="correlation", filters={"Method": "sloreta"})
 sloreta_corr_rows = []
 for (region, rep), curve in sloreta_corr_curves.groupby(["region", "rep"]):
     curve = curve.sort_values("times")
-    value = np.interp(hrp_median, curve["times"].to_numpy(), curve["Value"].to_numpy())
+    value = np.interp(qrp_median, curve["times"].to_numpy(), curve["Value"].to_numpy())
     sloreta_corr_rows.append({"region": region, "Value": value})
 sloreta_corr = pd.DataFrame(sloreta_corr_rows)
 
 # percentages shared by both metrics - computed before injection (from the
 # existing wcset/cset rows only) so it can drive both the injection loop
 # below and coord_order for both cluster_permutation calls.
-percentages = sorted(deg_metrics.to_df(metrics="localization_error", filters={"phase": "hrp"})["percentage"].unique())
+percentages = sorted(deg_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})["percentage"].unique())
 
-deg_regions = set(deg_metrics.to_df(metrics="localization_error", filters={"phase": "hrp"})["region"].unique())
+deg_regions = set(deg_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})["region"].unique())
 missing_loc = deg_regions - set(sloreta_loc["region"].unique())
 missing_corr = deg_regions - set(sloreta_corr["region"].unique())
 if missing_loc or missing_corr:
@@ -3202,28 +3221,28 @@ sloreta_corr_regions = sloreta_corr["region"].to_numpy().astype(str)
 for pct in percentages:
     deg_metrics.register(
         "localization_error", sloreta_loc["Value"].to_numpy(),
-        Method="sloreta", percentage=pct, region=sloreta_loc_regions, phase="hrp",
+        Method="sloreta", percentage=pct, region=sloreta_loc_regions, phase="qrp",
     )
     deg_metrics.register(
         "correlation", sloreta_corr["Value"].to_numpy(),
-        Method="sloreta", percentage=pct, region=sloreta_corr_regions, phase="hrp",
+        Method="sloreta", percentage=pct, region=sloreta_corr_regions, phase="qrp",
     )
 
 deg_comparisons = deg_metrics.stat.build_comparisons(["sloreta"], ["cset", "wcset"])
 
 deg_metrics.stat.cluster_permutation(
     "localization_error", coord="percentage", group_by="Method", comparisons=deg_comparisons,
-    pairing_col="region", coord_order=percentages, higher_is_better=False, filters={"phase": "hrp"},
+    pairing_col="region", coord_order=percentages, higher_is_better=False, filters={"phase": "qrp"},
     n_permutations=3000, seed=0,
 )
 deg_metrics.stat.cluster_permutation(
     "correlation", coord="percentage", group_by="Method", comparisons=deg_comparisons,
-    pairing_col="region", coord_order=percentages, higher_is_better=True, filters={"phase": "hrp"},
+    pairing_col="region", coord_order=percentages, higher_is_better=True, filters={"phase": "qrp"},
     n_permutations=3000, seed=0,
 )
 
-loc_df = deg_metrics.to_df(metrics="localization_error", filters={"phase": "hrp"})
-corr_df = deg_metrics.to_df(metrics="correlation", filters={"phase": "hrp"})
+loc_df = deg_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})
+corr_df = deg_metrics.to_df(metrics="correlation", filters={"phase": "qrp"})
 
 # permutation-specific median/median-range claims quoted in index.qmd's prose.
 derived = {
@@ -3266,23 +3285,23 @@ surrogates = ["beltrami", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin"]
 methods2 = ["cset", "wcset"]
 
 flag_metrics = mm.metric.MetricSuite.load("./results/simf/flagship")
-flag_loc = flag_metrics.to_df(metrics="localization_error", filters={"phase": "hrp"})
+flag_loc = flag_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})
 ref_loc = {m: float(flag_loc[flag_loc["Method"] == m]["Value"].median()) for m in ["dspm", "sloreta"]}
 
-hrp_median = flag_metrics.metadata["derived"]["hrp_time_median"]
+qrp_median = flag_metrics.metadata["derived"]["qrp_time_median"]
 pp_median = flag_metrics.metadata["derived"]["pp_time_median"]
 ref_methods = ["dspm", "sloreta"]
 corr_ref_df = flag_metrics.to_df(metrics="correlation", filters={"Method": ref_methods})
-ref_corr = {"hrp": {}, "pp": {}}
+ref_corr = {"qrp": {}, "pp": {}}
 for m in ref_methods:
     curve = corr_ref_df[corr_ref_df["Method"] == m].groupby("times")["Value"].median().sort_index()
-    ref_corr["hrp"][m] = float(np.interp(hrp_median, curve.index, curve.values))
+    ref_corr["qrp"][m] = float(np.interp(qrp_median, curve.index, curve.values))
     ref_corr["pp"][m] = float(np.interp(pp_median, curve.index, curve.values))
 
 # The flagship suite has no correlation phase-scalar for cset/wcset (only
 # the continuous correlation-over-time curve), so build one: for each
 # (region, rep), interpolate that run's own curve at the population median
-# hrp/pp time.
+# qrp/pp time.
 corr_cw_df = flag_metrics.to_df(metrics="correlation", filters={"Method": methods2})
 
 def original_phase_scalar(method, phase_time):
@@ -3293,7 +3312,7 @@ def original_phase_scalar(method, phase_time):
         rows.append((region, np.interp(phase_time, g["times"], g["Value"])))
     return pd.DataFrame(rows, columns=["region", "Value"])
 
-phase_time = {"hrp": hrp_median, "pp": pp_median}
+phase_time = {"qrp": qrp_median, "pp": pp_median}
 
 # -- build the "original" (undegraded, true-connectome) entries -----------
 original = mm.metric.MetricSuite("original connectome (flagship)")
@@ -3301,9 +3320,9 @@ for method in methods2:
     method_loc_df = flag_loc[flag_loc["Method"] == method]
     original.register(
         "localization_error", method_loc_df["Value"].values,
-        Method=method, region=method_loc_df["region"].values.astype(str), Surrogate="original", phase="hrp",
+        Method=method, region=method_loc_df["region"].values.astype(str), Surrogate="original", phase="qrp",
     )
-    for phase in ["hrp", "pp"]:
+    for phase in ["qrp", "pp"]:
         orig_df = original_phase_scalar(method, phase_time[phase])
         original.register(
             "correlation", orig_df["Value"].values,
@@ -3316,27 +3335,27 @@ checkpoints = [mm.metric.MetricSuite.load(checkpoint_dir/s) for s in surrogates]
 combined = mm.metric.MetricSuite.concat([original] + checkpoints, name="sub-10 simulation validation - surrogates")
 
 # -- statistics: original vs. each surrogate, per method (localization
-# error, phase="hrp" only) and per (method, phase) (correlation) ----------
+# error, phase="qrp" only) and per (method, phase) (correlation) ----------
 comparisons = combined.stat.build_comparisons(["original"], surrogates)
 for method in methods2:
     combined.stat.wilcoxon(
         "localization_error", group_by="Surrogate", comparisons=comparisons,
-        pairing_col="region", filters={"Method": method, "phase": "hrp"},
+        pairing_col="region", filters={"Method": method, "phase": "qrp"},
     )
-    for phase in ["hrp", "pp"]:
+    for phase in ["qrp", "pp"]:
         combined.stat.wilcoxon(
             "correlation", group_by="Surrogate", comparisons=comparisons,
             pairing_col="region", filters={"Method": method, "phase": phase},
         )
 
 # one-off medians quoted directly in index.qmd's prose
-_beltrami_hrp = combined.to_df(metrics="correlation", filters={"Method": "wcset", "Surrogate": "beltrami", "phase": "hrp"})
+_beltrami_qrp = combined.to_df(metrics="correlation", filters={"Method": "wcset", "Surrogate": "beltrami", "phase": "qrp"})
 _beltrami_pp = combined.to_df(metrics="correlation", filters={"Method": "wcset", "Surrogate": "beltrami", "phase": "pp"})
 
 combined.metadata["derived"] = {
     "ref_loc": ref_loc,
     "ref_corr": ref_corr,
-    "wcset_beltrami_hrp_median": float(_beltrami_hrp["Value"].median()),
+    "wcset_beltrami_qrp_median": float(_beltrami_qrp["Value"].median()),
     "wcset_beltrami_pp_median": float(_beltrami_pp["Value"].median()),
 }
 combined.metadata["units"] = {"correlation": "r", "localization_error": "mm"}

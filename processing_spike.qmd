@@ -8,6 +8,17 @@ modeling. Notch filtering, referencing, and baseline windows are all applied
 per-subject via hardcoded subject lists (presumably from earlier per-subject
 QC), not a single global setting.
 
+⚠ **pat01 excluded: no channel locations.** Unlike every other subject,
+pat01's channels are generic-numbered (`E001`, `E002`, ...) with `NaN` 3D
+positions rather than named, digitized electrode coordinates (e.g. pat02's
+channels are named `1`, `F8`, `3`, ... with real head-space coordinates) -
+so it can't be co-registered to head/MRI space (`forward_problem.py`'s
+`eeg-trans` is an identity transform, which assumes channel positions are
+already real and aligned) and is excluded from the study on that basis. A
+data-availability issue, not something this preprocessing cell can fix or a
+parameter choice below. See the Quality Assessment section further down for
+the separate, unrelated reason pat01's resection mask is also unresolved.
+
 **Parameter choices:**
 
 - 50 Hz / 100 Hz notch filters applied only to specific subject lists
@@ -392,6 +403,14 @@ graph-spectral prior used by CSET/wCSET in `solve_inverse.py`.
   (individual dMRI vs. population atlas), not drift.
 - `lap_type = "normalized"` (pygsp graph Laplacian): same as the simulation
   study. **FILL**
+- `beltrami`: no free parameters at all - `compute_beltrami_harmonics(src)`
+  takes only the source space itself, same as `processing_simf.qmd`'s
+  `surrogate_connectivity.py` (see that cell's prose for the full
+  construction rationale: per-hemisphere Laplace-Beltrami eigendecomposition
+  of the source space's own mesh, Neumann boundary at the medial wall,
+  mass-orthonormal columns rescaled to Euclidean orthonormality for
+  `wCSET`'s harmonic-prior math). Computed and cached independently of the
+  atlas/geometry connectome above - see the code cell's own note on why.
 
 ```{python filename="connectivity.py"}
 import numpy as np
@@ -431,52 +450,64 @@ def build_connectivity(sub, overwrite):
     # output files
     fcon = dm.get_path(sub, "con", atlas="probcon")
     feig = dm.get_path(sub, "eig", atlas="probcon")
+    feig_beltrami = dm.get_path(sub, "eig", desc="beltrami")
+
+    src = dm.load(sub, "fwd")["src"]
 
     if check_files([fcon, feig]) and not overwrite:
-        return
+        pass
+    else:
+        # Start: Load data
+        parc = dm.load(sub, "dseg", space="fs", segmentation="multiconn2022", scale="4")
+        ras2tkras = dm.load(sub, "ras2tkras")
 
-    # Start: Load data
-    src = dm.load(sub, "fwd")["src"]
-    parc = dm.load(sub, "dseg", space="fs", segmentation="multiconn2022", scale="4")
-    ras2tkras = dm.load(sub, "ras2tkras")
+        # 1. Generate atlas-based connectivity
+        con_atlas = mm.analysis.connectivity.connectome_from_atlas(
+            src, parc, atlas, ras2tkras,
+            sparsity = 0.14,
+            deterministic = True,
+        )
 
-    # 1. Generate atlas-based connectivity
-    con_atlas = mm.analysis.connectivity.connectome_from_atlas(
-        src, parc, atlas, ras2tkras,
-        sparsity = 0.14,
-        deterministic = True,
-    )
+        # 2. Generate geometry-based connectivity
+        con_geom = mm.analysis.connectivity.connectome_from_geometry(
+            src,
+            maximum_dist = 22,
+            maximum_neigh = 35,
+            weights = True,
+        )
 
-    # 2. Generate geometry-based connectivity
-    con_geom = mm.analysis.connectivity.connectome_from_geometry(
-        src,
-        maximum_dist = 22,
-        maximum_neigh = 35,
-        weights = True,
-    )
+        # 3. Fuse connectivities
+        con = con_atlas.copy()
+        fill_idx = np.argwhere((con_geom > 0) & (con_atlas == 0))
+        con[fill_idx[:,0], fill_idx[:,1]] = con_geom[fill_idx[:,0], fill_idx[:,1]]
 
-    # 3. Fuse connectivities
-    con = con_atlas.copy()
-    fill_idx = np.argwhere((con_geom > 0) & (con_atlas == 0))
-    con[fill_idx[:,0], fill_idx[:,1]] = con_geom[fill_idx[:,0], fill_idx[:,1]]
+        # 4. Compute Spectral properties: shared helper (dense eigh,
+        # eigval[0] pinned to exactly 0), matches processing_simf.qmd's
+        # connectivity cells - both now compute the spectrum the same way
+        inv_con = np.divide(1, con, out=np.zeros_like(con), where=con>0)    # weight according to length
+        eigvec, eigval = mm.analysis.connectivity.compute_cst(inv_con)
 
-    # 4. Compute Spectral properties: shared helper (dense eigh,
-    # eigval[0] pinned to exactly 0), matches processing_simf.qmd's
-    # connectivity cells - both now compute the spectrum the same way
-    inv_con = np.divide(1, con, out=np.zeros_like(con), where=con>0)    # weight according to length
-    eigvec, eigval = mm.analysis.connectivity.compute_cst(inv_con)
+        # End: Save
+        np.save(fcon, con)
+        mm.core.write_eig(feig, eigvec, eigval)
 
-    # End: Save
-    np.save(fcon, con)
-    mm.core.write_eig(feig, eigvec, eigval)
+    # 5. Beltrami harmonics: pure cortical-shape eigenbasis, no connectivity
+    # matrix involved at all - same recipe as processing_simf.qmd's
+    # surrogate_connectivity.py. Checked/computed independently of the
+    # atlas/geometry connectome above (this cell runs with overwrite=False,
+    # so subjects already processed before this step existed must not skip
+    # past it via the early exit above).
+    if not (check_files([feig_beltrami]) and not overwrite):
+        eigvec_beltrami, eigval_beltrami = mm.anatomy.source_space.compute_beltrami_harmonics(src)
+        mm.core.write_eig(feig_beltrami, eigvec_beltrami, eigval_beltrami)
 
 build_connectivity(overwrite=False)
 ```
 
 
-Runs all five source reconstruction methods (wCSET, CSET, sLORETA, dSPM,
-wMNE) per subject, regularized per-subject via an SNR estimate from the
-evoked baseline window (same per-subject baseline windows as
+Runs all six source reconstruction methods (wCSET, CSET, sLORETA, dSPM,
+wMNE, beltrami) per subject, regularized per-subject via an SNR estimate
+from the evoked baseline window (same per-subject baseline windows as
 `eeg_preprocessing.py` above).
 
 ⚠ MCE excluded from every study in this project (not solved, saved, or
@@ -539,6 +570,26 @@ value as CSET/wCSET's own `depth`, both of which have since moved to `0.2`
   `harmonic_method = "lowpass"` switch).
 - `fixed = True` (fixed-orientation dipoles, for the `mne.minimum_norm`
   inverse operator): **FILL**
+- **`beltrami`**: wCSET run on the Laplace-Beltrami mesh eigenbasis
+  (`connectivity.py`'s new step 5 above) instead of the structural
+  connectome, using a different harmonic-weighting mechanism from the other
+  five methods: `depth = 0`, `harmonic_method = "logpass"`, `cutoff = 150`,
+  no `harm=`. This is the log-form spectral prior from the GBF paper (Wang
+  et al. 2026, *Nat Biomed Eng*, "A geometry aware framework enhances
+  noninvasive mapping of whole human brain dynamics"), `Σ⁻¹ =
+  diag(-β/log(λ))` over the first `cutoff` eigenmodes, rather than
+  `lowpass`'s exponential decay over the whole spectrum - `depth=0` is
+  paper-faithful (their MAP derivation has no depth term at all), and `harm`
+  is dropped since it's mathematically inert under `"logpass"`. Matches
+  `processing_simf.qmd`'s `surrogate_reconstruction.py`, which now uses this
+  same mechanism for its own Beltrami surrogate - see that cell's prose for
+  the full rationale and the `cutoff` sweep it comes from. `cutoff=150` was
+  tuned on the simulation study's own mesh (`sub-10`, via
+  `beltrami-prior-tuning.ipynb`) and is reused here as-is, not independently
+  re-verified on this cohort. `lambda2` is the same SNR-derived value shared
+  by dSPM/sLORETA/wMNE/wCSET above, not CSET's fixed `0.1` (that fixed value
+  is specific to CSET's own separate tuning history, unrelated to this
+  mechanism).
 
 ```{python filename="solve_inverse.py"}
 # | output: false
@@ -560,8 +611,9 @@ def source_recon(sub, overwrite=True):
     fsloreta = dm.get_path(sub, "stc", task="spike", desc="sloreta")
     fdspm = dm.get_path(sub, "stc", task="spike", desc="dspm")
     fwmne = dm.get_path(sub, "stc", task="spike", desc="wmne")
+    fbeltrami = dm.get_path(sub, "stc", task="spike", desc="beltrami")
 
-    if check_files([fwcset, fcset, fsloreta, fdspm, fwmne]) and not overwrite:
+    if check_files([fwcset, fcset, fsloreta, fdspm, fwmne, fbeltrami]) and not overwrite:
         return
 
     # Start: Load data
@@ -569,6 +621,7 @@ def source_recon(sub, overwrite=True):
     ave = dm.load(sub, "ave", task="spike")        # averaged EEG
     ncov = dm.load(sub, "cov", task="spike")       # EEG noise covariance
     eig = dm.load(sub, "eig", atlas="probcon")     # Connectome eigensystem
+    eig_beltrami = dm.load(sub, "eig", desc="beltrami")  # Laplace-Beltrami mesh eigensystem
 
     # 1. Estimate regularizer parameter
 
@@ -628,14 +681,30 @@ def source_recon(sub, overwrite=True):
     inv_wmne = mne.minimum_norm.make_inverse_operator(ave.info, fwd, ncov, depth=0.8, fixed=True)
     wmne = mne.minimum_norm.apply_inverse(ave, inv_wmne, lambda2, method="MNE")
 
+    # 2.6 beltrami - wCSET on the Laplace-Beltrami mesh eigenbasis, GBF
+    # paper's log-form spectral prior (Wang et al. 2026, Nat Biomed Eng)
+    # rather than the connectome wCSET's exponential lowpass prior above -
+    # see prose above
+    inv = mm.analysis.inverse.wCSET(
+        forward = fwd,
+        noise_cov = ncov,
+        depth = 0,                        # paper-faithful: no depth term
+        eigenvectors = eig_beltrami["vec"],
+        eigenvalues = eig_beltrami["val"],
+        harmonic_method = "logpass",
+        cutoff = 150,
+    )
+    beltrami = inv.solve(ave, lambda2)
+
     # End: Save
     wcset.save(fwcset, overwrite=overwrite, verbose="warning")
     cset.save(fcset, overwrite=overwrite, verbose="warning")
     sloreta.save(fsloreta, overwrite=overwrite, verbose="warning")
     dspm.save(fdspm, overwrite=overwrite, verbose="warning")
     wmne.save(fwmne, overwrite=overwrite, verbose="warning")
+    beltrami.save(fbeltrami, overwrite=overwrite, verbose="warning")
 
-source_recon(overwrite=True)  # must force-regen: CSET now depth=0.2/lambda2=0.1 (was depth=0.8/lambda2=1), wCSET's harm was mistakenly set to 0.5, now fixed to the intended harm=5 (depth=0.2 unaffected, unchanged from the prior run), wMNE renamed from mne with its own depth-weighted operator
+source_recon(overwrite=True)  # must force-regen: CSET now depth=0.2/lambda2=0.1 (was depth=0.8/lambda2=1), wCSET's harm was mistakenly set to 0.5, now fixed to the intended harm=5 (depth=0.2 unaffected, unchanged from the prior run), wMNE renamed from mne with its own depth-weighted operator, and a new 6th method "beltrami" added (wCSET on the Laplace-Beltrami mesh eigenbasis, GBF paper's logpass/cutoff=150 mechanism)
 ```
 
 
@@ -740,13 +809,50 @@ compute_resection_mask(overwrite=False)
 
 Visual QC of the RAMPS output (pre-op T1w, post-op T1w and resection mask
 overlaid in freeview - see `scripts/review_resection.py`). Only subjects
-pat01-pat30 checked so far.
+pat01-pat30 checked so far. RAMPS produced a usable mask for the large
+majority of them; the subjects below are the exceptions, each reviewed
+individually against the pre-existing manual segmentations in
+`derivatives/mindmap/sub-{subject}/resec/` (`man-seg`, `man-recon-seg`,
+`auto-seg` - segmented by us, prior to this project, not produced by RAMPS).
 
-- pat01, pat03: two resections, but RAMPS only generated one mask.
-- pat04, pat08, pat24, pat29: bad masks. For pat29, the pre/post images don't
-  look like the same brain.
-- pat28, pat33: RAMPS pipeline failed (no output).
-- pat14: never ran - has a post-op CT instead of a post-op T1w.
+**Replaced by a manual segmentation** - `SpikeManager.MANUAL_RESECTION_MASKS`
+(`scripts/data_manager.py`) overrides `resec-ramp` to point at the listed
+file instead of the RAMPS output, so every downstream cell that calls
+`dm.get_path(sub, "resec-ramp", ...)`/`dm.load(sub, "resec-ramp", ...)`
+picks it up transparently:
+
+- pat03: `man-seg` - RAMPS' own mask for this subject is a duplicate of an
+  earlier attempt (`S10_attempt2`), not a genuinely different second
+  resection.
+- pat04: `auto-seg` - RAMPS mask was bad on visual review.
+- pat08: `man-recon-seg` - RAMPS mask was bad on visual review.
+- pat14: `man-recon-seg` - RAMPS never ran for this subject (post-op CT, not
+  a post-op T1w).
+- pat24: `man-recon-seg` - RAMPS mask was bad on visual review.
+- pat28: `auto-seg` - RAMPS pipeline failed outright (no output at all).
+
+**Still on the default RAMPS mask, unresolved:**
+
+- pat01: two separate resection cavities, but neither RAMPS nor any of the
+  manual segmentations (`man-seg`/`auto-seg`/RAMPS' own `S10_attempt2`
+  second-mask candidate) capture both - every candidate mask only resects
+  one of the two holes. Left on the RAMPS default since no alternative is
+  clearly better, but excluded from the study regardless (see below).
+- pat29, pat33: bad mask / RAMPS pipeline failure respectively, not
+  reviewed further - both fall outside the seizure-free (ILAE=1) analysis
+  population already, so not otherwise addressed here.
+
+**Excluded from the study:**
+
+- pat18: has no resection zone at all - every method (RAMPS and the manual
+  segmentations alike) ends up attributing mask content essentially at
+  random rather than to any real resected tissue, since there's nothing
+  real to segment. Excluded rather than assigned any of the candidate
+  masks.
+- pat01: excluded for an unrelated reason - its EEG recording is missing
+  channel locations. (Not yet reflected in the EEG Preprocessing section
+  above - worth adding there too if that's the intended documentation
+  location.)
 
 
 # Source Reconstruction Evaluation
@@ -796,7 +902,7 @@ dm = SpikeManager("spike.config.yml")
 fmetrics = Path("./results/spike/resection")
 checkpoint_dir = Path("./results/spike/_checkpoint")
 
-METHODS = ["wcset", "cset", "sloreta", "dspm", "wmne"]
+METHODS = ["wcset", "cset", "sloreta", "dspm", "wmne", "beltrami"]
 
 # surgical outcome (ILAE, 1 year post-op): 1 = seizure-free, 2-6 = increasing
 # recurrence - registered as a coordinate so index.qmd's seizure-free filter
@@ -1000,15 +1106,33 @@ from pathlib import Path
 import pandas as pd
 import mindmap as mm
 
-METHODS = ["wcset", "cset", "sloreta", "dspm", "wmne"]
+METHODS = ["wcset", "cset", "sloreta", "dspm", "wmne", "beltrami"]
 COMPETITORS = [m for m in METHODS if m != "wcset"]
 
 fmetrics = Path("./results/spike/resection")
 resection = mm.metric.MetricSuite.load(fmetrics)
 
-# seizure-free (ILAE=1) subjects, half rising phase (the primary evaluation
-# point) - the suite-native replacement for a manual df[df["ILAE"]==1] filter.
-FILTERS = {"phase": "hrp", "ILAE": 1}
+# Excluded regardless of ILAE outcome - see the Cohort Summary at the end of
+# this file for the full breakdown, and the EEG Preprocessing / Quality
+# Assessment sections above for each subject's specific issue:
+# - pat01: no usable resection mask (two resection cavities, no candidate
+#   mask - RAMPS, man-seg, auto-seg, or RAMPS' own second-attempt mask -
+#   captures both) AND no EEG channel locations (unrelated, separate issue).
+# - pat18: no real resection zone at all - every candidate mask ends up
+#   attributing content essentially at random rather than to real resected
+#   tissue.
+# `MetricSuite.to_df`/`.stat.*`'s `filters=` only supports inclusion
+# (`.isin()`), not exclusion, so the included-subjects list is built as the
+# complement of this set rather than passed as a "not in" filter directly.
+EXCLUDED_SUBJECTS = ["pat01", "pat18"]
+all_subjects = resection.to_df(metrics="peak_distance_mm")["Subject"].unique()
+included_subjects = [s for s in all_subjects if s not in EXCLUDED_SUBJECTS]
+
+# seizure-free (ILAE=1) subjects only, minus the exclusions above, half
+# rising phase (the primary evaluation point) - the suite-native replacement
+# for a manual df[(df["ILAE"]==1) & ~df["Subject"].isin(EXCLUDED_SUBJECTS)]
+# filter.
+FILTERS = {"phase": "hrp", "ILAE": 1, "Subject": included_subjects}
 comparisons = resection.stat.build_comparisons(["wcset"], COMPETITORS)
 
 # Wilcoxon signed-rank vs. wCSET, subject-paired, FDR-corrected.
@@ -1037,3 +1161,28 @@ resection.metadata["derived"] = {
 }
 resection.save(fmetrics, overwrite=True)
 ```
+
+# Cohort Summary
+
+Final subject accounting for `spike_statistics.py`'s statistics above, out
+of all 45 subjects in `participants.tsv`:
+
+- **Not symptom-free (ILAE != 1) - 17 subjects excluded** via
+  `FILTERS = {"ILAE": 1, ...}`: pat29, pat30 (ILAE=2); pat31-pat36 (ILAE=3);
+  pat37-pat44 (ILAE=4); pat45 (ILAE=5). None of these were individually
+  reviewed for resection-mask quality here - they're outside the
+  seizure-free population Study II evaluates in the first place, regardless
+  of their mask.
+- **Symptom-free (ILAE=1) but excluded anyway - pat01, pat18** via
+  `EXCLUDED_SUBJECTS` in `spike_statistics.py`. See the EEG Preprocessing
+  and Quality Assessment sections above for the full detail on each:
+  - pat01: no candidate resection mask (RAMPS, `man-seg`, `auto-seg`, or
+    RAMPS' own second-attempt mask) captures both of its two resection
+    cavities, and separately, its EEG recording has no channel locations at
+    all - two independent, unrelated problems, either one alone sufficient
+    to exclude it.
+  - pat18: has no real resection zone at all - every candidate mask ends up
+    attributing content essentially at random rather than to real resected
+    tissue.
+- **Included in the statistics: 26 of 45 subjects** (28 seizure-free minus
+  pat01 and pat18).

@@ -457,7 +457,10 @@ connectome to actually use for reconstruction, not part of this change.
 `connectivity.py` - `consistency > 65`, `sparsity = 0.14`,
 `deterministic = True`, `maximum_dist = 22`, `maximum_neigh = 35`,
 `lap_type = "normalized"`. **FILL** (see that file's notes - same questions
-apply here)
+apply here). Same for `beltrami`: no free parameters at all
+(`compute_beltrami_harmonics(src)` takes only the source space itself) -
+see `processing_spike.qmd`'s `connectivity.py` prose for the full
+construction rationale.
 
 ```{python filename="connectivity.py"}
 # | output: false
@@ -499,44 +502,57 @@ def build_connectivity(sub, overwrite):
     # output files
     fcon = dm.get_path(sub, "con", atlas="multicon")
     feig = dm.get_path(sub, "eig", atlas="multicon")
+    feig_beltrami = dm.get_path(sub, "eig", desc="beltrami")
+
+    src = dm.load(sub, "fwd")["src"]
 
     if check_files([fcon, feig]) and not overwrite:
-        return
+        pass
+    else:
+        # Start: Load data
+        parc = dm.load(sub, "dseg", segmentation="multiconn2022", scale="4")
+        ras2tkras = dm.load(sub, "ras2tkras")
 
-    # Start: Load data
-    src = dm.load(sub, "fwd")["src"]
-    parc = dm.load(sub, "dseg", segmentation="multiconn2022", scale="4")
-    ras2tkras = dm.load(sub, "ras2tkras")
+        # 1. Generate atlas-based connectivity
+        con_atlas = mm.analysis.connectivity.connectome_from_atlas(
+            src, parc, atlas, ras2tkras,
+            sparsity = 0.14,
+            deterministic = True,
+        )
 
-    # 1. Generate atlas-based connectivity
-    con_atlas = mm.analysis.connectivity.connectome_from_atlas(
-        src, parc, atlas, ras2tkras,
-        sparsity = 0.14,
-        deterministic = True,
-    )
+        # 2. Generate geometry-based connectivity
+        con_geom = mm.analysis.connectivity.connectome_from_geometry(
+            src,
+            maximum_dist = 22,
+            maximum_neigh = 35,
+            weights = True,
+        )
 
-    # 2. Generate geometry-based connectivity
-    con_geom = mm.analysis.connectivity.connectome_from_geometry(
-        src,
-        maximum_dist = 22,
-        maximum_neigh = 35,
-        weights = True,
-    )
+        # 3. Fuse connectivities
+        con = con_atlas.copy()
+        fill_idx = np.argwhere((con_geom > 0) & (con_atlas == 0))
+        con[fill_idx[:,0], fill_idx[:,1]] = con_geom[fill_idx[:,0], fill_idx[:,1]]
 
-    # 3. Fuse connectivities
-    con = con_atlas.copy()
-    fill_idx = np.argwhere((con_geom > 0) & (con_atlas == 0))
-    con[fill_idx[:,0], fill_idx[:,1]] = con_geom[fill_idx[:,0], fill_idx[:,1]]
+        # 4. Compute Spectral properties: shared helper (dense eigh,
+        # eigval[0] pinned to exactly 0), matches processing_simf.qmd's
+        # connectivity cells - both now compute the spectrum the same way
+        inv_con = np.divide(1, con, out=np.zeros_like(con), where=con>0)    # weight according to length
+        eigvec, eigval = mm.analysis.connectivity.compute_cst(inv_con)
 
-    # 4. Compute Spectral properties: shared helper (dense eigh,
-    # eigval[0] pinned to exactly 0), matches processing_simf.qmd's
-    # connectivity cells - both now compute the spectrum the same way
-    inv_con = np.divide(1, con, out=np.zeros_like(con), where=con>0)    # weight according to length
-    eigvec, eigval = mm.analysis.connectivity.compute_cst(inv_con)
+        # End: Save
+        np.save(fcon, con)
+        mm.core.write_eig(feig, eigvec, eigval)
 
-    # End: Save
-    np.save(fcon, con)
-    mm.core.write_eig(feig, eigvec, eigval)
+    # 5. Beltrami harmonics: pure cortical-shape eigenbasis, no connectivity
+    # matrix involved at all - same recipe as processing_simf.qmd's
+    # surrogate_connectivity.py / processing_spike.qmd's connectivity.py.
+    # Checked/computed independently of the atlas/geometry connectome above
+    # (this cell runs with overwrite=False, so subjects already processed
+    # before this step existed must not skip past it via the early exit
+    # above).
+    if not (check_files([feig_beltrami]) and not overwrite):
+        eigvec_beltrami, eigval_beltrami = mm.anatomy.source_space.compute_beltrami_harmonics(src)
+        mm.core.write_eig(feig_beltrami, eigvec_beltrami, eigval_beltrami)
 
 build_connectivity(overwrite=False)
 ```
@@ -546,8 +562,8 @@ build_connectivity(overwrite=False)
 
 ## Solve inverse problem
 
-Runs all five source reconstruction methods (wCSET, CSET, sLORETA, dSPM,
-wMNE), matching `processing_spike.qmd`'s `solve_inverse.py` - CSET was
+Runs all six source reconstruction methods (wCSET, CSET, sLORETA, dSPM,
+wMNE, beltrami), matching `processing_spike.qmd`'s `solve_inverse.py` - CSET was
 previously missing (only a commented-out, already-broken leftover line
 referenced it: `#fcset = sr.get_path(...)`, using an undefined `sr`
 variable from an older version of this code; deleted rather than fixed,
@@ -601,6 +617,15 @@ sharing sLORETA/dSPM's `depth=None` one.
   `processing_spike.qmd`'s equivalent call either; removed for consistency,
   no behavior change.
 - `fixed = True`: same as `processing_spike.qmd`. **FILL**
+- **`beltrami`**: wCSET on the Laplace-Beltrami mesh eigenbasis
+  (`connectivity.py`'s new step 5 above) instead of the structural
+  connectome, using a different harmonic-weighting mechanism from the other
+  five methods: `depth = 0`, `harmonic_method = "logpass"`, `cutoff = 150`,
+  no `harm=` - same as `processing_spike.qmd`'s `solve_inverse.py`, see that
+  file's prose for the full GBF-paper rationale (Wang et al. 2026, *Nat
+  Biomed Eng*) and why `cutoff=150` (tuned on the simulation study's own
+  mesh, reused here as-is). `lambda2` is the same SNR-derived value shared
+  by dSPM/sLORETA/wMNE/wCSET above, not CSET's fixed `0.1`.
 
 ```{python filename="solve_inverse.py"}
 # | output: false
@@ -622,8 +647,9 @@ def source_recon(sub, overwrite=True):
     fsloreta = dm.get_path(sub, "stc", task="spk", desc="sloreta")
     fdspm = dm.get_path(sub, "stc", task="spk", desc="dspm")
     fwmne = dm.get_path(sub, "stc", task="spk", desc="wmne")
+    fbeltrami = dm.get_path(sub, "stc", task="spk", desc="beltrami")
 
-    if check_files([fwcset, fcset, fsloreta, fdspm, fwmne]) and not overwrite:
+    if check_files([fwcset, fcset, fsloreta, fdspm, fwmne, fbeltrami]) and not overwrite:
         return
 
     # 0. Load data
@@ -631,6 +657,7 @@ def source_recon(sub, overwrite=True):
     ave = dm.load(sub, "ave", task="spk")        # averaged EEG
     ncov = dm.load(sub, "cov", task="spk")       # EEG noise covariance
     eig = dm.load(sub, "eig", atlas="multicon")  # Connectome eigensystem
+    eig_beltrami = dm.load(sub, "eig", desc="beltrami")  # Laplace-Beltrami mesh eigensystem
 
     # 1. Estimate regularizer parameter
     snr, _ = mm.analysis.eeg.estimate_evoked_snr(ave, baseline=(0,1.5), noise_cov=ncov)
@@ -681,14 +708,30 @@ def source_recon(sub, overwrite=True):
     inv_wmne = mne.minimum_norm.make_inverse_operator(ave.info, fwd, ncov, depth=0.8, fixed=True)
     wmne = mne.minimum_norm.apply_inverse(ave, inv_wmne, lambda2, method="MNE")
 
+    # 2.6 beltrami - wCSET on the Laplace-Beltrami mesh eigenbasis, GBF
+    # paper's log-form spectral prior (Wang et al. 2026, Nat Biomed Eng)
+    # rather than the connectome wCSET's exponential lowpass prior above -
+    # see prose above
+    inv = mm.analysis.inverse.wCSET(
+        forward = fwd,
+        noise_cov = ncov,
+        depth = 0,                        # paper-faithful: no depth term
+        eigenvectors = eig_beltrami["vec"],
+        eigenvalues = eig_beltrami["val"],
+        harmonic_method = "logpass",
+        cutoff = 150,
+    )
+    beltrami = inv.solve(ave, lambda2)
+
     # 3. Save
     wcset.save(fwcset, overwrite=overwrite, verbose="warning")
     cset.save(fcset, overwrite=overwrite, verbose="warning")
     sloreta.save(fsloreta, overwrite=overwrite, verbose="warning")
     dspm.save(fdspm, overwrite=overwrite, verbose="warning")
     wmne.save(fwmne, overwrite=overwrite, verbose="warning")
+    beltrami.save(fbeltrami, overwrite=overwrite, verbose="warning")
 
-source_recon(overwrite=True)  # must force-regen: CSET now depth=0.2/lambda2=0.1 (was depth=0.8/lambda2=1), wCSET's harm was mistakenly set to 0.5, now fixed to the intended harm=5 (depth=0.2 unaffected, unchanged from the prior run), wMNE renamed from mne with its own depth-weighted operator
+source_recon(overwrite=True)  # must force-regen: CSET now depth=0.2/lambda2=0.1 (was depth=0.8/lambda2=1), wCSET's harm was mistakenly set to 0.5, now fixed to the intended harm=5 (depth=0.2 unaffected, unchanged from the prior run), wMNE renamed from mne with its own depth-weighted operator, and a new 6th method "beltrami" added (wCSET on the Laplace-Beltrami mesh eigenbasis, GBF paper's logpass/cutoff=150 mechanism)
 ```
 
 
@@ -721,7 +764,7 @@ from scripts.data_manager import IntraManager
 
 # data manager
 dm = IntraManager("intra.config.yml")
-methods = ["wcset", "cset", "sloreta", "dspm", "wmne"]
+methods = ["wcset", "cset", "sloreta", "dspm", "wmne", "beltrami"]
 
 @loop(subjects=dm.subjects)
 def compute_vieeg(sub, overwrite):
@@ -802,7 +845,7 @@ from scripts.data_manager import IntraManager
 
 # data manager
 dm = IntraManager("intra.config.yml")
-methods = ["wcset", "sloreta", "cset", "dspm", "wmne"]
+methods = ["wcset", "sloreta", "cset", "dspm", "wmne", "beltrami"]
 
 @loop(subjects=dm.subjects)
 def evaluate_vieeg_fidelity(sub, overwrite):
@@ -907,7 +950,7 @@ from pathlib import Path
 import pandas as pd
 import mindmap as mm
 
-METHODS = ["wcset", "sloreta", "cset", "dspm", "wmne"]
+METHODS = ["wcset", "sloreta", "cset", "dspm", "wmne", "beltrami"]
 COMPETITORS = [m for m in METHODS if m != "wcset"]
 SUBJECTS = ["34", "48", "12", "50"]
 METRIC_BLOCKS = [("correlation_temporal", "channel"), ("correlation_spatial", "times")]

@@ -170,6 +170,22 @@ def load_identity_trans(_):
 
 class SpikeManager(mm.io.DatasetManager):
     """Manages the SIMF dataset."""
+
+    # Subjects whose resection ground truth should come from a manual
+    # segmentation (derivatives/mindmap/sub-{subject}/resec/) instead of the
+    # automated RAMPS output - e.g. because RAMPS failed or produced a bad
+    # mask (see processing_spike.qmd's Quality Assessment section). Keyed by
+    # subject -> the `sub-{subject}_{suffix}.nii.gz` filename suffix to use
+    # from that folder. Add more subjects here as they're reviewed.
+    MANUAL_RESECTION_MASKS = {
+        "pat03": "man-recon-seg",
+        "pat04": "auto-seg",
+        "pat08": "man-recon-seg",
+        "pat14": "man-recon-seg",
+        "pat24": "man-recon-seg",
+        "pat28": "auto-seg",
+    }
+
     def __init__(self, config):
         """SPIKE configuration."""
         super().__init__(config)
@@ -201,10 +217,23 @@ class SpikeManager(mm.io.DatasetManager):
             return Path(".")
 
         if suffix == "resec-ramp":
-            # Non-BIDS-conform RAMPS pipeline output - bypass BIDS entity
-            # resolution and build the path directly.
             if not space or space.lower() not in ("orig", "pre"):
                 raise ValueError("resec-ramp requires a 'space' entity ('orig' or 'pre').")
+
+            manual_suffix = self.MANUAL_RESECTION_MASKS.get(subject)
+            if manual_suffix is not None:
+                # Manual segmentations are drawn directly on the pre-op
+                # image, so there is no "orig"-space counterpart the way
+                # RAMPS output has - only "pre" is meaningful here.
+                if space.lower() != "pre":
+                    raise ValueError(
+                        f"sub-{subject} uses a manual resection mask "
+                        f"(MANUAL_RESECTION_MASKS) - no '{space}'-space variant available."
+                    )
+                return self.roots["mm"] / f"sub-{subject}" / "resec" / f"sub-{subject}_{manual_suffix}.nii.gz"
+
+            # Non-BIDS-conform RAMPS pipeline output - bypass BIDS entity
+            # resolution and build the path directly.
             folder = root / f"sub-{subject}" / "RAMPS_Resection_Mask_Output"
             return folder / f"RAMP_The_resection_mask_in_{space.upper()}.nii.gz"
 
