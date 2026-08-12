@@ -858,7 +858,7 @@ picks it up transparently:
 # Source Reconstruction Evaluation
 
 Evaluate every solver from `solve_inverse.py` against the resection (ground
-truth), at two points of the spike (half-rising-phase and peak). Two
+truth), at two points of the spike (quarter-rising-phase and peak). Two
 complementary metrics per (subject, method, phase):
 
 - `find_peak_resection_distance`: classic ESI baseline - distance from the
@@ -954,9 +954,9 @@ def evaluate_resection_localization(overwrite=False):
         patch_area = mm.anatomy.source_space.build_dipole_patch_area(src)
         resection_vertex_mask = mm.anatomy.source_space.sample_nifti_at_source_space(src, resec, ras2tkras)
 
-        # 2. Spike phases to evaluate: half rising phase (main) and peak (comparison)
+        # 2. Spike phases to evaluate: quarter rising phase (main) and peak (comparison)
         phases = {
-            "hrp": mm.analysis.eeg.get_rising_phase(ave, ratio=0.5, as_idx=True),
+            "qrp": mm.analysis.eeg.get_rising_phase(ave, ratio=0.25, as_idx=True),
             "pp":  mm.analysis.eeg.get_rising_phase(ave, ratio=1.0, as_idx=True),
         }
 
@@ -1002,7 +1002,7 @@ def evaluate_resection_localization(overwrite=False):
     combined.save(fmetrics, overwrite=overwrite)
     shutil.rmtree(checkpoint_dir)
 
-evaluate_resection_localization(overwrite=True)  # must force-regen: results/spike/resection predates this session's solve_inverse.py parameter changes (depth/lambda2/harm, wMNE rename), so overwrite=False would silently skip already-processed subjects and leave them stale
+evaluate_resection_localization(overwrite=True)  # must force-regen: results/spike/resection predates this session's solve_inverse.py parameter changes (depth/lambda2/harm, wMNE rename) and the switch from half- to quarter-rising-phase (ratio=0.25, "qrp" - was "hrp"/ratio=0.5), so overwrite=False would silently skip already-processed subjects and leave them stale
 ```
 
 ## Chance-Level Cluster Threshold
@@ -1128,11 +1128,11 @@ EXCLUDED_SUBJECTS = ["pat01", "pat18"]
 all_subjects = resection.to_df(metrics="peak_distance_mm")["Subject"].unique()
 included_subjects = [s for s in all_subjects if s not in EXCLUDED_SUBJECTS]
 
-# seizure-free (ILAE=1) subjects only, minus the exclusions above, half
+# seizure-free (ILAE=1) subjects only, minus the exclusions above, quarter
 # rising phase (the primary evaluation point) - the suite-native replacement
 # for a manual df[(df["ILAE"]==1) & ~df["Subject"].isin(EXCLUDED_SUBJECTS)]
 # filter.
-FILTERS = {"phase": "hrp", "ILAE": 1, "Subject": included_subjects}
+FILTERS = {"phase": "qrp", "ILAE": 1, "Subject": included_subjects}
 comparisons = resection.stat.build_comparisons(["wcset"], COMPETITORS)
 
 # Wilcoxon signed-rank vs. wCSET, subject-paired, FDR-corrected.
