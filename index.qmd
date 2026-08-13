@@ -122,7 +122,7 @@ Individual diffusion MRI was not available for this cohort, so the structural co
 
 To validate source reconstruction against ground-truth intracranial activity, we used a cohort of patients with simultaneously recorded scalp EEG and intracranial EEG (iEEG).
 
----
+***
 **TODO (to be filled in by the co-author) — subjects used: sub-12, sub-34, sub-48, sub-50.**
 
 - Patient recruitment and diagnosis
@@ -132,7 +132,7 @@ To validate source reconstruction against ground-truth intracranial activity, we
 - Ethics approval
 - etc ...
 
----
+***
 
 Interictal epileptic discharges were identified and epoched in both modalities, time-locked to the same spike events, yielding paired scalp and intracranial recordings of the same underlying activity. Each patient's data further included a pre-operative T1-weighted MRI for anatomical and forward modeling (Section 2.3), processed identically to the resection cohort (Clinical Dataset A).
 
@@ -201,7 +201,7 @@ where $\mathbf{\Lambda}$ contains the eigenvalues (graph frequencies) and $\math
 
 ## Source Reconstruction Framework
 
-For every study, we used MNE-Python's widely used methods wMNE [@dale_improved_1993], dSPM [@dale_dynamic_2000] and sLORETA [@pascual-marqui_standardized_2002] (see Section 2.4.1), and compare these to our connectivity-informed methods CSET, wCSET and GBF (see Section 2.4.2). All methods used data whitening based on an empirically estimated noise covariance matrix — a standard preprocessing step in linear M/EEG source reconstruction that decorrelates and normalizes sensor noise before inversion [@dale_dynamic_2000; @knosche_eegmeg_2022] — with one exception: for the resection cohort (Clinical Dataset A), the data were provided as pre-averaged discharges with no accompanying baseline epochs, so no empirical noise covariance could be computed, and an ad-hoc (identity-like) covariance was used instead, i.e. no whitening.
+For every study, we used MNE-Python's widely used methods wMNE [@dale_improved_1993], dSPM [@dale_dynamic_2000] and sLORETA [@pascual-marqui_standardized_2002] (see Section 2.4.1), and compare these to three connectivity-informed methods CSET, wCSET and GBF (see Section 2.4.2). All methods used data whitening based on an empirically estimated noise covariance matrix — a standard preprocessing step in linear M/EEG source reconstruction that decorrelates and normalizes sensor noise before inversion [@dale_dynamic_2000; @knosche_eegmeg_2022] — with one exception: for the resection cohort (Clinical Dataset A), the data were provided as pre-averaged discharges with no accompanying baseline epochs, so no empirical noise covariance could be computed, and an ad-hoc (identity-like) covariance was used instead, i.e. no whitening.
 
 ### Standard Inverse Solutions
 
@@ -220,7 +220,7 @@ $$
 
 Here, $\lambda$ is the regularization parameter balancing data fit with prior assumptions. The matrix $\mathbf C$ acts as a weighting matrix derived from the prior covariance, such that $\mathbf C^T\mathbf C = \mathbf \Sigma_{\mathbf s}^{-1}$. In practice, the true source covariance $\Sigma_{\mathbf s}$ is unknown and replaced with the identity matrix — the assumption of independent, equal-variance sources that gives wMNE, dSPM and sLORETA their "independent-source" label throughout this work.
 
-wMNE additionaly includes a depth-weighting matrix $\mathbf W_d$ applied to counteract the bias of $l_2$-regularized solutions toward superficial dipoles:
+wMNE additionaly ajusts source variances generating the depth-weighting matrix $\mathbf W_d$ applied to counteract the bias of $l_2$-regularized solutions toward superficial dipoles:
 
 $$
 \mathbf \Sigma_{\mathbf s}^{-1} = \mathbf W_d, \qquad \text{where} \quad W_{d,ii} = \lVert \mathbf L_{:i}\rVert^{-\kappa}
@@ -234,20 +234,20 @@ While it is widely accepted that source activity is heavily interdependent, thes
 
 This section describes the three connectivity-informed inverse solutions compared throughout this work, introduced in order: CSET [@ruequeralt_connectome_2024], the connectome-spectrum $l_1$ sparsity prior our approach builds on; weighted CSET (wCSET), this work's central methodological contribution, which replaces CSET's $l_1$ prior with a smooth, harmonic-weighted $l_2$ prior over the connectome spectrum; and GBF [@wang_geometry_2026], a geometry-based method that shares wCSET's smooth $l_2$ formulation but operates on the eigenbasis of cortical geometry rather than the connectome.
 
-**Connectome Spectrum Electromagnetic Tomography** (J. Rué-Queralt 2024)
+**Connectome Spectrum Electromagnetic Tomography**
 
-Connectome Spectrum Electromagnetic Tomography (CSET) addresses the independence limitation, by operating in a component-based space. Instead of solving for activity in the brain's physical space, CSET projects the activity onto the eigenmodes of the connectome ($U$). This transforms the problem into the "connectome spectrum" space, where the prior can be more effectively described. As with wMNE, CSET and wCSET first counteract the bias toward superficial dipoles with the same depth-weighting matrix $\mathbf W_d$ (defined above), applied directly to the lead field prior to projection onto the eigenbasis; unlike wMNE's literature-standard $\kappa=0.8$, CSET and wCSET use $\kappa=0.2$, tuned against reconstruction accuracy in the simulation study (Section 3.1).
+Connectome Spectrum Electromagnetic Tomography (CSET) [@ruequeralt_connectome_2024] addresses the independence limitation, by operating in a component-based space. Instead of solving for activity in the brain's physical space, CSET projects the activity onto the eigenmodes of the connectome ($\mathbf U$). This transforms the problem into the "connectome spectrum" space, where the prior can be more effectively described. As with wMNE, CSET and wCSET first counteract the bias toward superficial dipoles with the same depth-weighting matrix $\mathbf W_d$ (defined above), applied directly to the lead field prior to projection onto the eigenbasis; unlike wMNE's literature-standard $\kappa=0.8$, CSET and wCSET use $\kappa=0.2$, tuned against reconstruction accuracy in the simulation study (Section 3.1).
 
 Given that the connectome spectrum is known to be compact, CSET enforces sparsity by applying an $l_1$​-norm to the regularizer. Let $\mathbf {\hat s}$ represent the spectrum of $\mathbf s$ (where $\mathbf s = \mathbf W_d\mathbf U \mathbf {\hat s}$). Equation (1) is then modified to: 
 $$
 \mathbf {\hat s}^* = \text{arg }\underset{\mathbf s}{\text{min}}\lVert\mathbf y-\mathbf L\mathbf W_d\mathbf U \mathbf {\hat s}\rVert_2^2 + \lambda\lVert \mathbf {\hat s}\rVert_1 \tag{2}
 $$
 
-The physical brain activity is then recovered via $\mathbf s^* = \mathbf W_d\mathbf U\mathbf{\hat s}^*$
+The physical brain activity is then recovered via $\mathbf s^* = \mathbf W_d\mathbf U\mathbf{\hat s}^*$.
 
 **weighted CSET**
 
-While basic CSET enforces sparsity, it does not necessarily distinguish between signal and noise in a physiologically informed way. We address this with weighted CSET (wCSET), which replaces CSET's $l_1$ sparsity prior with a smooth, weighted $l_2$ prior over the connectome spectrum. Harmonic weights follow an exponential low-pass filter on graph frequency, $W_{h,ii} = \exp(-\beta\lambda_i)$, where $\lambda_i$ is harmonic $i$'s eigenvalue and $\beta$ controls the filter's decay rate, tuned against this connectome's own reconstruction accuracy. This form is motivated by the structure–function coupling literature: functional connectivity's eigenvalues relate to the structural Laplacian's via an approximately exponential mapping, i.e. a small number of low-frequency structural harmonics dominate functional coupling [@abdelnour_functional_2018]. Equation (2) thus becomes:
+While basic CSET enforces sparsity, it does not necessarily distinguish between signal and noise in a physiologically informed way. We address this with weighted CSET (wCSET), which replaces CSET's $l_1$ sparsity prior with a smooth, weighted $l_2$ prior over the connectome spectrum. Harmonic weights follow an exponential low-pass filter on graph frequency, $W_{h,ii} = \exp(-\beta\lambda_i)$, where $\lambda_i$ is harmonic $i$'s eigenvalue and $\beta$ controls the filter's decay rate, tuned against this connectome's own reconstruction accuracy. This form remains compact since the signal is compressed in the low frequencies and is motivated by the structure–function coupling literature: functional connectivity's eigenvalues relate to the structural Laplacian's via an approximately exponential mapping, i.e. a small number of low-frequency structural harmonics dominate functional coupling [@abdelnour_functional_2018]. Equation (2) thus becomes:
 
 $$
 \mathbf {\hat s}^* = \text{arg }\underset{\mathbf s}{\text{min}}\lVert\mathbf y-\mathbf L\mathbf W_d\mathbf U \mathbf {\hat s}\rVert_2^2 + \lambda\lVert \mathbf W_h\mathbf {\hat s}\rVert_2^2 \tag{3}
@@ -259,7 +259,7 @@ Neither CSET nor wCSET is tied to a particular way of building the connectome th
 
 **Geometric Basis Functions**
 
-As a further reference method, we reconfigure wCSET (Eq. 3) to reproduce **Wang et al. (2026)**'s Geometric Basis Functions (GBF) [@wang_geometry_2026] as closely as our framework allows. Three changes distinguish this GBF-like variant from the connectome-based wCSET above: (i) the connectome eigenbasis $\mathbf U$ is replaced by the eigenvectors of the Laplace-Beltrami operator applied to the cortical mesh (Section 2.3.3), so the spectral decomposition reflects cortical geometry rather than white-matter connectivity; (ii) no depth weighting is applied ($\mathbf W_d = \mathbf I$), matching GBF's original formulation, which includes no depth term; and (iii) wCSET's smooth exponential harmonic weights (Eq. 3) are replaced by GBF's log-form weighting, $W_{h,ii} = \sqrt{-\log(\lambda_i/\lambda_S)}$ for the $S$ lowest-frequency Beltrami eigenmodes and $W_{h,ii}=0$ beyond — a hard truncation at $S$ rather than wCSET's smooth roll-off, adopted by Wang et al. on empirical rather than biological grounds, unlike wCSET's structure–function-motivated exponential form. We set $S=150$, tuned against reconstruction accuracy in the simulation study (Section 3.1), rather than the $S=300$ used in the original GBF publication. This geometry-only comparator, in the spirit of GBF and related cortical-geometry approaches [@pang_geometric_2023; @wang_geometry_2026; @siu_structural_2026] (Section 1), is tested as a connectome surrogate in the simulation study (Section 3.1.4), and included as a full fourth reference method in the two clinical studies (Sections 3.2, 3.3).
+As a further reference method, we reconfigure wCSET (Eq. 3) to reproduce **Wang et al. (2026)**'s Geometric Basis Functions (GBF) [@wang_geometry_2026] as closely as our framework allows, rather than reimplementing their exact pipeline — mesh resolution and regularization differ. Three changes distinguish this GBF-like variant from the connectome-based wCSET above: (i) the connectome eigenbasis $\mathbf U$ is replaced by the eigenvectors of the Laplace-Beltrami operator applied to the cortical mesh (Section 2.3.3), so the spectral decomposition reflects cortical geometry rather than white-matter connectivity; (ii) no depth weighting is applied ($\mathbf W_d = \mathbf I$), matching GBF's original formulation, which includes no depth term; and (iii) wCSET's smooth exponential harmonic weights (Eq. 3) are replaced by GBF's log-form weighting, $W_{h,ii} = \sqrt{-\log(\mu_i/\mu_S)}$ for the $S$ lowest-frequency Beltrami eigenmodes and $W_{h,ii}=0$ beyond, where $\mu_i$ denotes the Laplace-Beltrami operator's eigenvalues (as opposed to the connectome graph Laplacian's $\lambda_i$ used in Eq. 3). This weighting differs from wCSET's in two independent ways: the truncation is hard rather than smoothly decaying, and its log-form shape was selected by Wang et al. on empirical grounds, unlike wCSET's exponential form, which follows directly from the structure–function coupling rationale of Eq. 3 [@abdelnour_functional_2018]. We set $S=150$, tuned against reconstruction accuracy in the simulation study (Section 3.1), rather than the $S=300$ used in the original GBF publication: Wang et al. tune a scale parameter $\beta$ for their log-form weighting, but our pipeline trace-renormalizes the inverse kernel before the ridge solve (standard practice), which renders $\beta$ a pure rescale with no effect on the reconstruction. Rather than leave this comparator's one nominally free parameter untuned, we instead tuned the parameter that actually shapes the weighting under our normalization, the cutoff $S$: a sweep against simulated ground truth showed $S=150$ roughly halving peak-localization error relative to $S=300$ (6.1 vs. 14.7 mm) while matching or exceeding it on average precision. This geometry-only comparator, in the spirit of GBF and related cortical-geometry approaches [@pang_geometric_2023; @wang_geometry_2026; @siu_structural_2026] (Section 1), is tested as a connectome surrogate in the simulation study (Section 3.1.4), and included as a full fourth reference method in the two clinical studies (Sections 3.2, 3.3).
 
 ## Clinical Ground Truth Definition
 
@@ -295,18 +295,17 @@ where $\mathbf s^t_{x}(i)$ is the activity at dipole $i$ and time $t$, and $\sig
 
 ### Localization Accuracy
 
-To evaluate localization accuracy, the source onset of the interictal spikes was defined relative to the rising phase of the discharge: this time point is a pragmatic compromise between a low probability that the source has already started propagating (favoring the discharge's onset) and an adequate signal-to-noise ratio (favoring the discharge's peak, by which point the source has typically already spread). For both the resection cohort and the simulation dataset, we used 25% of the rising phase (quarter rising phase, qrp), earlier than the 50% (half rising phase) convention of @vorderwulbecke_high-density_2020<!-- Nino: add rationale/citation for using qrp rather than the literature-standard hrp for the resection cohort too -->. The Euclidean distance was then calculated between the estimated source location and the target mask — the true seed region for the simulation dataset, or the resection volume for the resection cohort. Rather than working around voxel-grid discretization by averaging distances to several nearest voxels, we follow @carboni_linear_2022 and @wang_geometry_2026 and report the minimum Euclidean distance from the location of maximal source activity to the mask boundary, taken as 0 mm whenever that location already lies inside the mask.
+To evaluate localization accuracy, the source onset of the interictal spikes was defined relative to the rising phase of the discharge: this time point is a pragmatic compromise between a low probability that the source has already started propagating (favoring the discharge's onset) and an adequate signal-to-noise ratio (favoring the discharge's peak, by which point the source has typically already spread). For both the resection cohort and the simulation dataset, we used 25% of the rising phase (quarter rising phase, qrp), earlier than the 50% (half rising phase) convention of @vorderwulbecke_high-density_2020. The Euclidean distance was then calculated between the estimated source location and the target mask — the true seed region for the simulation dataset, or the resection volume for the resection cohort. Rather than working around voxel-grid discretization by averaging distances to several nearest voxels, we follow @carboni_linear_2022 and @wang_geometry_2026 and report the minimum Euclidean distance from the location of maximal source activity to the mask boundary, taken as 0 mm whenever that location already lies inside the mask.
 
+### Network Concentration Index
+
+Peak-vertex localization accuracy (above) only tests whether the single most active location falls near the resection. Epilepsy is increasingly understood as a network disorder, in which interictal discharges may arise from a distributed set of regions only partially captured by the resected tissue; testing whether reconstructed activity concentrates on the resected zone as a whole, not just at its single peak, offers a complementary view of localization. We define the Network Concentration Index (NCI): cortical vertices are ranked by absolute source activity magnitude and progressively marked active from the highest-ranked down, until a spatially contiguous cluster of area ≥ 600 mm² — the literature-established minimum synchronously active cortex needed to produce a scalp-visible interictal discharge [@grova_evaluation_2006] — first overlaps the resection. NCI is the fraction of total cortical surface area that had to be marked active for this to occur, expressed as a percentage; lower values indicate that the reconstructed network's most active regions converge more tightly onto the resected zone. As with Localization Accuracy, NCI is computed at the quarter and full rising phase for the resection cohort, using the resected volume as ground truth (Section 2.5.1). We additionally calibrate NCI against a chance level: the cortical area fraction a purely random, spatially unstructured activity map needs before any cluster — regardless of whether it overlaps the resection — reaches the 600 mm² floor, isolating the contribution of the size threshold itself from genuine localization performance.
 
 ### Channel comparison
 
-To evaluate the accuracy of the spatial reconstruction, the projected virtual iEEG activity (Section 2.5.2) was compared against the recorded ground-truth iEEG using a battery of complementary similarity metrics, computed in two modes: spatial (across channels, per time point) and temporal (across time, per channel). A spatio-temporal variant (a single scalar over the full window) is also computed and saved for every subject/method but not featured in the results below. All metrics are polarity-invariant, since an overall sign flip is an arbitrary consequence of the virtual-electrode reference convention rather than a meaningful failure mode:
+To evaluate the accuracy of the spatial reconstruction, the projected virtual iEEG activity (Section 2.5.2) was compared against the recorded ground-truth iEEG using the (polarity-invariant) Pearson correlation between estimated and ground-truth channel activity, computed in two modes: spatially (across channels, at each timepoint) and temporally (across time, for each channel). Polarity invariance is obtained by taking the absolute value of the raw correlation ($|r|$) rather than the signed value, since an overall sign flip is an arbitrary consequence of the virtual-electrode reference convention rather than a meaningful failure mode.
 
-- Pearson correlation and cosine similarity between estimated and ground-truth channel activity, in each of the two modes above, made polarity-invariant by taking the absolute value of the raw statistic ($|r|$, $|\cos|$) rather than the signed value — a plain correlation or cosine similarity is not itself polarity-invariant, so this absolute-value step is what removes the sign-flip ambiguity.
-<!-- Explained variance of the ground-truth activity by the estimated activity is still computed and saved for every subject/method (polarity-invariant by taking the better of the score on the signal and on its negation, since R² isn't sign-symmetric the way correlation/cosine are), but not yet featured in the main results below -- kept here as a note pending further investigation, mirroring how processing_simf.qmd still computes but doesn't plot precision/AP (see plot_configuration.py above). -->
-- Correlation between estimated and ground-truth relative energy maps (REM), computed spatially and temporally; polarity-invariant by construction, since it is built from squared energy rather than raw amplitude.
-
-For each competing method, we additionally compute a win-rate against wCSET — the fraction of channels (or time points) on which wCSET's estimate is closer to ground truth than the competitor's — summarizing pairwise performance across this metric set relative to our proposed method, rather than a full all-against-all comparison across every method pair.
+For each competing method, we additionally compute a win-rate against wCSET — the fraction of channels (or time points) on which wCSET's estimate is closer to ground truth than the competitor's — summarizing pairwise performance relative to our proposed method, rather than a full all-against-all comparison across every method pair.
 
 # Results
 
@@ -439,19 +438,12 @@ def _loc1(method):
 
 loc1_sloreta_p = fmt_p(_loc1("sloreta")["p_corrected"], thresh=0.0001)
 loc1_sloreta_r = fmt_stat(_loc1("sloreta")["effect_size"])
-loc1_dspm_p = fmt_p(_loc1("dspm")["p_corrected"], thresh=0.0001)
+loc1_dspm_p = fmt_p(_loc1("dspm")["p_corrected"])
 loc1_dspm_r = fmt_stat(_loc1("dspm")["effect_size"])
 loc1_wmne_p = fmt_p(_loc1("wmne")["p_corrected"], thresh=0.0001)
 loc1_wmne_r = fmt_stat(_loc1("wmne")["effect_size"])
 loc1_cset_p = fmt_p(_loc1("cset")["p_corrected"])
 loc1_cset_r = fmt_stat(_loc1("cset")["effect_size"])
-
-loc1_medians = simf_metrics.metadata["derived"]["loc_median"]
-loc1_median_wcset = fmt_num(loc1_medians["wcset"])
-loc1_median_cset = fmt_num(loc1_medians["cset"])
-loc1_median_sloreta = fmt_num(loc1_medians["sloreta"])
-loc1_median_dspm = fmt_num(loc1_medians["dspm"])
-loc1_median_wmne = fmt_num(loc1_medians["wmne"])
 
 # region-as-subject cluster-permutation summary vs. wCSET, over time - same
 # design as the noise-sweep figures below (see
@@ -491,13 +483,26 @@ corr1_cset_end = fmt_num(corr1_cset["times_end"] * 1000, digits=0)
 
 corr1_window_start = fmt_num(min(corr1_sloreta["times_start"], corr1_dspm["times_start"], corr1_wmne["times_start"]) * 1000, digits=0)
 corr1_window_end = fmt_num(max(corr1_sloreta["times_end"], corr1_dspm["times_end"], corr1_wmne["times_end"]) * 1000, digits=0)
+
+# Where the median-correlation gap between the two connectivity-informed
+# methods (wCSET, CSET) and the three standard methods (sLORETA, dSPM, wMNE)
+# is largest - same region-collapsed median curve `plot.cluster_permutation()`
+# itself draws (mean over reps within region, then median across regions),
+# used only to locate (not test) the widest separation, quoted in the prose
+# above.
+corr_collapsed = simf_metrics.to_df(metrics="correlation").groupby(
+    ["Method", "region", "times"], as_index=False,
+)["Value"].mean()
+corr_median_curve = corr_collapsed.groupby(["Method", "times"], as_index=False)["Value"].median()
+corr_pivot = corr_median_curve.pivot(index="times", columns="Method", values="Value").sort_index()
+corr_gap = corr_pivot[["wcset", "cset"]].mean(axis=1) - corr_pivot[["sloreta", "dspm", "wmne"]].mean(axis=1)
+corr1_gap_peak_time = fmt_num(corr_gap.idxmax() * 1000, digits=0)
 ```
 
-To test the impact of neglecting source dependences we created a simulation that is constrained by the structural connectivity. This allows us to have simulated EEG recordings with complex ground truth activity. Figure 3.1.a shows an example of an EEG recording with the key events happening. We have the peak phase, where the EEG signal is highest. At that phase, similar to what is suggested in the literature, the source has already started to propagate. Generally, it is advised to reconstruct around 50% of the rising phase (or even before if the signal to noise permits it) to properly locate the source [@vorderwulbecke_high-density_2020; @carboni_linear_2022]; here, the simulation's controlled SNR permits reconstructing earlier, at 25% of the rising phase (quarter rising phase, qrp). We consider as the source propagation phase everything happening after the quarter rising phase until the signal is back to noise level. We then applied source reconstruction using the five methods described in Section 2.4 (wMNE, sLORETA, dSPM, and the connectivity-informed CSET and wCSET). We did source localization to compare the accuracy of source localization. At single-trial SNR = 5, wCSET achieved significantly lower localization error than sLORETA, dSPM, and wMNE (Wilcoxon signed-rank vs. wCSET, paired by region, FDR-corrected: sLORETA p `{python} loc1_sloreta_p`, effect size r = `{python} loc1_sloreta_r`; dSPM p `{python} loc1_dspm_p`, r = `{python} loc1_dspm_r`; wMNE p `{python} loc1_wmne_p`, r = `{python} loc1_wmne_r`, i.e. wCSET's error was lower in every single paired region), while the difference against CSET did not reach significance (p `{python} loc1_cset_p`, r = `{python} loc1_cset_r`). Median localization error was `{python} loc1_median_wcset` mm for wCSET, `{python} loc1_median_cset` mm for CSET, `{python} loc1_median_sloreta` mm for sLORETA, and `{python} loc1_median_dspm` mm for dSPM — all comparable in absolute terms, well within the size of a typical resection volume — whereas wMNE was a clear outlier at `{python} loc1_median_wmne` mm, consistent with its lack of noise normalization. Effect sizes therefore support a picture in which the four noise-normalized or connectivity-informed methods localize the source similarly well at this phase, with wMNE as the sole exception.
-
-We also computed the spatial correlation time point by time point between the simulated ground truth and the reconstructions for all our source reconstruction methods. This allows us to estimate which method is best for reconstructing the source propagation. For statistical validation, we repeated the simulation 8 times for each of 100 spatially-uniform sample regions (Section 2.1.1). We then computed the median spatial correlation, together with its interquartile range across simulated runs, and plotted it over time in Figure 3. The figure shows that the spatial correlation starts at 0 (signal-to-noise ratio is null), gradually increases as the source spreads (increasing signal-to-noise ratio), then decreases again. We highlighted on the time axis the peak phase of the EEG signal and the quarter rising phase. Cluster-based permutation testing (region-paired, FDR-corrected across competitors) confirmed this pattern: wCSET's spatial correlation with the ground truth was significantly higher than sLORETA's, dSPM's, and wMNE's across nearly the entire displayed window spanning both the quarter rising phase and the peak (approximately `{python} corr1_window_start` to `{python} corr1_window_end` ms; all p_corrected `{python} corr1_sloreta_p`, with very large effect sizes — Cohen's dz = `{python} corr1_sloreta_dz`, `{python} corr1_dspm_dz`, and `{python} corr1_wmne_dz` respectively). Against CSET, wCSET and CSET both correlate much more closely with the ground truth than the other methods do, but wCSET is significantly better than CSET only in an earlier window from `{python} corr1_cset_start` to `{python} corr1_cset_end` ms (p_corrected `{python} corr1_cset_p`, dz = `{python} corr1_cset_dz`, spanning the quarter rising phase and the very start of propagation); beyond that window the two methods were statistically indistinguishable, confirming that wCSET's advantage over CSET is concentrated near spike onset rather than sustained throughout the propagation phase.
+To test the impact of neglecting source dependences we created a simulation that is constrained by the structural connectivity. This allows us to have simulated EEG recordings with complex ground truth activity. Figure 3.1.a shows an example of an EEG recording with the key events happening. We have the peak phase, where the EEG signal is highest. At that phase, similar to what is suggested in the literature, the source has already started to propagate. Generally, it is advised to reconstruct around 50% of the rising phase (or even before if the signal to noise permits it) to properly locate the source [@vorderwulbecke_high-density_2020; @carboni_linear_2022]; here, the simulation's controlled SNR permits reconstructing earlier, at 25% of the rising phase (quarter rising phase, qrp). We consider as the source propagation phase everything happening after the quarter rising phase until the signal is back to noise level. We then applied source reconstruction using the five methods described in Section 2.4 (wMNE, sLORETA, dSPM, and the connectivity-informed CSET and wCSET). We did source localization to compare the accuracy of source localization. At single-trial SNR = 5, wCSET's localization error was significantly higher than CSET's and dSPM's, and significantly lower than sLORETA's and wMNE's (Wilcoxon signed-rank vs. wCSET, paired by region, FDR-corrected: CSET p `{python} loc1_cset_p`, r = `{python} loc1_cset_r`; dSPM p `{python} loc1_dspm_p`, r = `{python} loc1_dspm_r`; sLORETA p `{python} loc1_sloreta_p`, r = `{python} loc1_sloreta_r`; wMNE p `{python} loc1_wmne_p`, r = `{python} loc1_wmne_r`).
 
 ```{python filename="simf_flagship_example.py"}
+#| fig-cap: "Example simulated interictal spike. (a) Simulated sensor-level EEG traces and global field power, with dashed vertical lines marking the quarter rising phase and peak phase evaluated throughout Study I. (b, c) Corresponding ground-truth cortical activity at those two timepoints."
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
@@ -555,13 +560,12 @@ for grid_pos, img_path, label in brain_specs:
         spine.set_visible(False)
     ax.set_title(label, fontsize=9)
 
-fig.suptitle("Figure 3.1: example simulated spike — sensor EEG and ground-truth activity",
-              fontsize=12, fontweight="bold")
 plt.show()
 ```
 
 ```{python filename="simf_localization_error_plot.py"}
 #| echo: false
+#| fig-cap: "Localization error (mm) at the quarter rising phase, single-trial SNR = 5 (box = IQR, line = median, outliers hidden). Stars mark significance vs. wCSET (Wilcoxon signed-rank, region-paired, FDR-corrected: *p<0.05, **p<0.01, ***p<0.001)."
 import matplotlib.pyplot as plt
 
 loc1_fig, loc1_ax = plt.subplots(figsize=(6, 5))
@@ -574,16 +578,18 @@ loc1_ax.set_xticklabels(METHODS, rotation=45, ha="right")
 loc1_ax.set_xlabel("")
 loc1_ax.set_ylabel("Localization error (mm)")
 loc1_ax.spines[["top", "right"]].set_visible(False)
-loc1_fig.suptitle(
-    "Simulation study: localization error at quarter rising phase (sub-10)\n"
-    "Wilcoxon signed-rank vs. wCSET, FDR-corrected (*p<0.05, **p<0.01, ***p<0.001)",
-    fontsize=13, fontweight="bold",
-)
 plt.tight_layout()
 ```
 
+We also computed the spatial correlation time point by time point between the simulated ground truth and the reconstructions for all our source reconstruction methods, letting us evaluate not only which method best captures the source's extent at the quarter rising phase, but also which best reconstructs its propagation at the peak phase. For each region, we averaged spatial correlation across its repeated simulations, then plotted the median of these per-region averages — together with their interquartile range across regions — over time in Figure 3. Cluster-based permutation testing (region-paired, FDR-corrected across competitors) confirmed this pattern: wCSET's spatial correlation with the ground truth was significantly higher than every competitor's across nearly the entire displayed window, spanning both the quarter rising phase and the peak (approximately `{python} corr1_window_start` to `{python} corr1_window_end` ms for sLORETA, dSPM, and wMNE, and `{python} corr1_cset_start` to `{python} corr1_cset_end` ms for CSET; all p_corrected `{python} corr1_sloreta_p`). Effect sizes were markedly larger against the three standard methods (Cohen's dz = `{python} corr1_sloreta_dz` sLORETA, `{python} corr1_dspm_dz` dSPM, `{python} corr1_wmne_dz` wMNE) than against CSET (dz = `{python} corr1_cset_dz`), and the correlation gap between the two connectivity-informed methods (wCSET, CSET) and the three standard methods was itself widest around the peak phase (t ≈ `{python} corr1_gap_peak_time` ms).
+
+
+
+
+
 ```{python filename="simf_correlation_plot.py"}
 #| echo: false
+#| fig-cap: "Spatial correlation between reconstructed and ground-truth activity over time (single-trial SNR = 5): starts at 0 as no signal is yet above the noise floor, rises as the source spreads, then declines again. Median curve with thin IQR whiskers across the 100 simulated regions; dashed and dotted vertical lines mark the median quarter rising phase and peak phase. Markers are filled/solid where wCSET's correlation is significantly higher than the competitor's (region-paired cluster-permutation)."
 import matplotlib.pyplot as plt
 
 # median quarter-rising-phase / peak time of the simulated sensor EEG, pooled
@@ -615,10 +621,6 @@ corr1_ax.text(pp_median, ymax, f" pp (median, t={round(pp_median*1000):.0f} ms)"
 
 corr1_ax.set_xlabel("Time (s)")
 corr1_ax.set_ylabel("Spatial correlation (ground truth vs. reconstruction)")
-corr1_ax.set_title(
-    "Simulation study: spatial correlation over time (sub-10)\n"
-    "median curve, thin IQR whisker; solid/filled = wCSET significantly better (region-paired cluster-permutation)"
-)
 corr1_ax.spines[["top", "right"]].set_visible(False)
 plt.tight_layout()
 ```
@@ -672,6 +674,7 @@ noise_loc_wmne_snr_start = fmt_num(noise_loc_wmne["snr_start"], 0)
 noise_loc_sloreta_p = fmt_p(noise_loc_sloreta["p_corrected"])
 noise_loc_sloreta_dz = fmt_stat(noise_loc_sloreta["effect_size"])
 noise_loc_sloreta_snr = fmt_num(noise_loc_sloreta["snr_start"], 0)
+noise_loc_sloreta_snr_end = fmt_num(noise_loc_sloreta["snr_end"], 0)
 
 noise_loc_cset_p = fmt_p(noise_loc_cset["p_corrected"])
 noise_loc_cset_dz = fmt_stat(noise_loc_cset["effect_size"])
@@ -735,12 +738,11 @@ noise_corr_wcset_pp1 = fmt_num(_corr_medians_pp["wcset"][str(float(1))], 2)
 
 To assess whether the improvements shown above survive noisier measurement conditions, we swept the simulated target SNR from 20 down to 1 and repeated source reconstruction with each method (Section 2.1.1), re-evaluating localization error and spatial correlation with the ground truth as before.
 
-Localization error increased for every method as SNR decreased, but the onset and severity of this degradation differed sharply across methods (Figure below, left). wMNE was affected soonest and most severely: already comparable to dSPM at the highest SNR tested (median `{python} noise_loc_wmne_median20` mm at SNR=20), it became significantly worse than wCSET from SNR=`{python} noise_loc_wmne_snr_start` down to the lowest SNR tested (region-paired cluster-permutation, p_corrected `{python} noise_loc_wmne_p`, Cohen's dz = `{python} noise_loc_wmne_dz`), with median error climbing to `{python} noise_loc_wmne_median1` mm by SNR=1. sLORETA and CSET both showed a milder version of the same pattern — sLORETA staying in the 9–12 mm range from SNR=20 down to SNR=3 before climbing sharply at SNR≤2, and CSET rising more steadily from ~7 to ~17 mm over the same range before the same sharp climb — but neither reached significance against wCSET anywhere in the range tested, once corrected for the four simultaneous competitors (sLORETA's largest cluster, at SNR=`{python} noise_loc_sloreta_snr`: p_corrected `{python} noise_loc_sloreta_p`, dz = `{python} noise_loc_sloreta_dz`; CSET's, at SNR=`{python} noise_loc_cset_snr`: p_corrected `{python} noise_loc_cset_p`, dz = `{python} noise_loc_cset_dz`). dSPM stood out as the most noise-robust standard method, remaining essentially flat (12–14 mm) from SNR=20 down to SNR=3 before rising sharply at SNR≤2; wCSET nonetheless significantly outperformed it from SNR=`{python} noise_loc_dspm_snr_start` down to SNR=`{python} noise_loc_dspm_snr_end` (p_corrected `{python} noise_loc_dspm_p`, dz = `{python} noise_loc_dspm_dz`). This advantage did not extend to the lowest SNR tested: at SNR=1, dSPM's median error (`{python} noise_loc_dspm_median1` mm) was nominally lower than wCSET's (`{python} noise_loc_wcset_median1` mm), though the difference did not itself form a significant cluster — suggesting that dSPM's noise robustness can match or exceed wCSET's own under sufficiently severe noise, even where this falls short of statistical significance.
-
-Spatial correlation with the ground truth showed a more consistent picture (Figure below, right): wCSET significantly outperformed all four competitors at both the quarter rising phase and the peak, across the entire SNR range (region-paired cluster-permutation, all p_corrected `{python} noise_corr_p_all`; effect sizes ranging from dz = `{python} noise_corr_dz_min` vs. `{python} noise_corr_dz_min_label` to dz = `{python} noise_corr_dz_max` vs. `{python} noise_corr_dz_max_label`). Unlike localization error, this ranking held almost everywhere at low SNR too: spatial correlation declined monotonically for every method as SNR decreased (e.g. wCSET: `{python} noise_corr_wcset_qrp20`→`{python} noise_corr_wcset_qrp1` at quarter rising phase and `{python} noise_corr_wcset_pp20`→`{python} noise_corr_wcset_pp1` at peak, from SNR=20 to SNR=1), and wCSET remained the top performer across nearly the entire range — including relative to dSPM, whose noise robustness in localization error did not carry over to spatial correlation. The sole exception was the quarter rising phase at SNR=1, where correlations for every method had collapsed toward zero and wCSET's median dipped marginally (and non-significantly) below the rest; at the peak phase, wCSET stayed on top even at SNR=1.
+Localization error increased for every method as SNR decreased, but the onset and severity of this degradation differed sharply across methods (Figure below, left). wMNE was affected soonest and most severely: already several times wCSET's error at the highest SNR tested (median `{python} noise_loc_wmne_median20` mm at SNR=20), it was significantly worse than wCSET across the entire SNR range tested (region-paired cluster-permutation, p_corrected `{python} noise_loc_wmne_p`, Cohen's dz = `{python} noise_loc_wmne_dz`), with median error climbing to `{python} noise_loc_wmne_median1` mm by SNR=1. sLORETA and CSET both showed a milder version of the same pattern, roughly flat from SNR=20 down to SNR=5 before climbing sharply from SNR=3 onward, but only sLORETA's high-SNR plateau reached significance against wCSET: from SNR=`{python} noise_loc_sloreta_snr` down to SNR=`{python} noise_loc_sloreta_snr_end` (p_corrected `{python} noise_loc_sloreta_p`, dz = `{python} noise_loc_sloreta_dz`), not extending to the lower SNRs where its own sharp climb began. CSET never reached significance against wCSET anywhere in the range tested, once corrected for the four simultaneous competitors (its largest cluster, at SNR=`{python} noise_loc_cset_snr`: p_corrected `{python} noise_loc_cset_p`, dz = `{python} noise_loc_cset_dz`). dSPM stood out as the most noise-robust standard method at high SNR, remaining roughly flat (9–12 mm) from SNR=20 down to SNR=10; wCSET nonetheless significantly outperformed it over that stretch (SNR=`{python} noise_loc_dspm_snr_start` down to SNR=`{python} noise_loc_dspm_snr_end`, p_corrected `{python} noise_loc_dspm_p`, dz = `{python} noise_loc_dspm_dz`). This advantage did not extend to lower SNR: from SNR=7 down to the lowest level tested, the difference between wCSET and dSPM no longer formed a significant cluster.
 
 ```{python filename="simf_localization_noise_plot.py"}
 #| echo: false
+#| fig-cap: "Localization error (mm) versus single-trial SNR (subject sub-10, quarter rising phase), median curve with thin IQR whiskers across the 100 simulated regions. Markers are filled/solid where wCSET's error is significantly lower than the competitor's (region-paired cluster-permutation)."
 import matplotlib.pyplot as plt
 
 noise_loc_fig, noise_loc_ax = plt.subplots(figsize=(7, 5))
@@ -750,16 +752,15 @@ noise_loc_fig, noise_loc_ax = noise_metrics.plot.cluster_permutation(
 noise_loc_ax.set_xscale("log")
 noise_loc_ax.set_xlabel("Target SNR")
 noise_loc_ax.set_ylabel("Localization error (mm)")
-noise_loc_ax.set_title(
-    "Simulation study: localization error vs. SNR (sub-10)\n"
-    "median curve, thin IQR whisker; solid/filled = wCSET significantly better (region-paired cluster-permutation)"
-)
 noise_loc_ax.spines[["top", "right"]].set_visible(False)
 plt.tight_layout()
 ```
 
+Spatial correlation with the ground truth showed a more consistent picture (Figure below, right): wCSET significantly outperformed all four competitors at both the quarter rising phase and the peak, across nearly the entire SNR range (region-paired cluster-permutation, all p_corrected `{python} noise_corr_p_all`; effect sizes ranging from dz = `{python} noise_corr_dz_min` vs. `{python} noise_corr_dz_min_label` to dz = `{python} noise_corr_dz_max` vs. `{python} noise_corr_dz_max_label`). Unlike localization error, this ranking held almost everywhere at low SNR too: spatial correlation declined monotonically for every method as SNR decreased (e.g. wCSET: `{python} noise_corr_wcset_qrp20`→`{python} noise_corr_wcset_qrp1` at quarter rising phase and `{python} noise_corr_wcset_pp20`→`{python} noise_corr_wcset_pp1` at peak, from SNR=20 to SNR=1), and wCSET remained the top performer across nearly the entire range — including relative to dSPM, whose noise robustness in localization error did not carry over to spatial correlation. The sole exception was the quarter rising phase at SNR=1, where correlations for every method had collapsed toward zero and wCSET's median dipped marginally (and non-significantly) below the rest; at the peak phase, wCSET stayed on top even at SNR=1.
+
 ```{python filename="simf_correlation_noise_plot.py"}
 #| echo: false
+#| fig-cap: "Spatial correlation versus single-trial SNR (subject sub-10) at the quarter rising phase (left) and peak phase (right), median curve with thin IQR whiskers across the 100 simulated regions. Markers are filled/solid where wCSET's correlation is significantly higher than the competitor's (region-paired cluster-permutation)."
 import matplotlib.pyplot as plt
 
 noise_corr_fig, noise_corr_axes = plt.subplots(1, 2, figsize=(13, 5))
@@ -787,11 +788,6 @@ noise_corr_axes[0].set_ylabel("Spatial correlation (ground truth vs. reconstruct
 # axes[1]'s legend (built internally by plot.cluster_permutation() above)
 # stays as the figure's only legend.
 
-noise_corr_fig.suptitle(
-    "Simulation study: spatial correlation vs. SNR at quarter rising phase and peak phase (sub-10)\n"
-    "median curve, thin IQR whisker; solid/filled = wCSET significantly better (region-paired cluster-permutation)",
-    fontsize=13, fontweight="bold",
-)
 plt.tight_layout()
 ```
 
@@ -914,6 +910,7 @@ Spatial correlation with the ground truth showed a similar but more pronounced p
 
 ```{python filename="simf_localization_degradation_plot.py"}
 #| echo: false
+#| fig-cap: "Localization error (mm) versus percentage of connectome edges randomly permuted (subject sub-10, quarter rising phase), for CSET and wCSET; median curve with thin IQR whiskers across the 100 simulated regions. Markers are filled/solid where significantly different from sLORETA, tested at each degradation level (region-paired cluster-permutation). Dashed line: dSPM's flagship (undegraded-connectome) reference level."
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
@@ -944,16 +941,12 @@ legend_handles = [
 ]
 deg_loc_fig.legend(handles=legend_handles, loc="lower center", ncol=1, bbox_to_anchor=(0.5, -0.04))
 
-deg_loc_fig.suptitle(
-    "Simulation study: localization error vs. connectome degradation, permutation (sub-10)\n"
-    "median curve, thin IQR whisker; solid/filled = significantly different from sLORETA (region-paired cluster-permutation); dashed = dSPM flagship (undegraded) reference",
-    fontsize=13, fontweight="bold",
-)
 deg_loc_fig.tight_layout()
 ```
 
 ```{python filename="simf_correlation_degradation_plot.py"}
 #| echo: false
+#| fig-cap: "Spatial correlation versus percentage of connectome edges randomly permuted (subject sub-10, quarter rising phase only), for CSET and wCSET; median curve with thin IQR whiskers across the 100 simulated regions. Markers are filled/solid where significantly different from sLORETA, tested at each degradation level (region-paired cluster-permutation). Dashed line: dSPM's flagship (undegraded-connectome) reference level."
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
@@ -977,11 +970,6 @@ legend_handles = [
 ]
 deg_corr_fig.legend(handles=legend_handles, loc="lower center", ncol=1, bbox_to_anchor=(0.5, -0.04))
 
-deg_corr_fig.suptitle(
-    "Simulation study: spatial correlation vs. connectome degradation, permutation, quarter rising phase (sub-10)\n"
-    "median curve, thin IQR whisker; solid/filled = significantly different from sLORETA (region-paired cluster-permutation); dashed = dSPM flagship (undegraded) reference",
-    fontsize=13, fontweight="bold",
-)
 deg_corr_fig.tight_layout()
 ```
 
@@ -1077,6 +1065,7 @@ For spatial correlation, differences from the original connectome were statistic
 
 ```{python filename="simf_localization_surrogate_plot.py"}
 #| echo: false
+#| fig-cap: "wCSET localization error (mm) at the quarter rising phase using the true structural connectome versus five dMRI-free connectome surrogates (subject sub-10; box = IQR, line = median). Dashed lines mark dSPM's and sLORETA's flagship (true-connectome) medians as reference. Stars mark significance vs. the true connectome (Wilcoxon signed-rank, region-paired, FDR-corrected). CSET's equivalent comparison is reported in the supplementary material."
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
@@ -1119,16 +1108,12 @@ surr_loc_legend_handles = [
 ]
 surr_loc_fig.legend(handles=surr_loc_legend_handles, loc="lower center", ncol=2, bbox_to_anchor=(0.5, -0.04))
 
-surr_loc_fig.suptitle(
-    "Simulation study: localization error, wCSET surrogate vs. original connectome (sub-10)\n"
-    "quarter rising phase; Wilcoxon signed-rank vs. original connectome, region-paired (*p<0.05, **p<0.01, ***p<0.001); dashed = flagship (original connectome) dSPM/sLORETA reference",
-    fontsize=13, fontweight="bold",
-)
 plt.tight_layout()
 ```
 
 ```{python filename="simf_correlation_surrogate_plot.py"}
 #| echo: false
+#| fig-cap: "wCSET spatial correlation with ground truth using the true structural connectome versus five dMRI-free connectome surrogates, at the quarter rising phase (top) and peak phase (bottom) (subject sub-10; box = IQR, line = median). Dashed lines mark dSPM's and sLORETA's flagship (true-connectome) medians as reference. Stars mark significance vs. the true connectome (Wilcoxon signed-rank, region-paired, FDR-corrected). CSET's equivalent comparison is reported in the supplementary material."
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
@@ -1159,11 +1144,6 @@ surr_corr_legend_handles = [
 ]
 surr_corr_fig.legend(handles=surr_corr_legend_handles, loc="lower center", ncol=2, bbox_to_anchor=(0.5, -0.04))
 
-surr_corr_fig.suptitle(
-    "Simulation study: spatial correlation, wCSET surrogate vs. original connectome (sub-10)\n"
-    "quarter rising phase and peak phase; Wilcoxon signed-rank vs. original connectome, region-paired (*p<0.05, **p<0.01, ***p<0.001); dashed = flagship (original connectome) reference",
-    fontsize=13, fontweight="bold",
-)
 plt.tight_layout()
 ```
 
@@ -1283,15 +1263,16 @@ Alongside wMNE, sLORETA, and dSPM, we also compared against a Beltrami-eigenbasi
 
 Peak-to-resection distance behaved similarly across most methods: wCSET's median distance (`{python} resection_peak_median_wcset` mm) was descriptively the lowest, with Beltrami's the closest runner-up (`{python} resection_peak_median_beltrami` mm), ahead of sLORETA (`{python} resection_peak_median_sloreta` mm), CSET (`{python} resection_peak_median_cset` mm), and dSPM (`{python} resection_peak_median_dspm` mm), with wMNE a clear outlier (`{python} resection_peak_median_wmne` mm). Of the five paired comparisons against wCSET, only wMNE reached significance after FDR correction (Wilcoxon signed-rank, subject-paired: p_corrected `{python} resection_peak_p_wmne`, r = `{python} resection_peak_r_wmne`); CSET (p_corrected `{python} resection_peak_p_cset`, r = `{python} resection_peak_r_cset`), sLORETA (p_corrected `{python} resection_peak_p_sloreta`, r = `{python} resection_peak_r_sloreta`), dSPM (p_corrected `{python} resection_peak_p_dspm`, r = `{python} resection_peak_r_dspm`), and Beltrami (p_corrected `{python} resection_peak_p_beltrami`, r = `{python} resection_peak_r_beltrami`) were not significantly different from wCSET.
 
-The earliest resection-touching cluster metric told a different story: wCSET required markedly less of the cortex to be marked active before a cluster first touched the resection (median `{python} resection_frac_median_wcset`% vs. `{python} resection_frac_median_other_min`–`{python} resection_frac_median_other_max`% for the other methods) — and, contrary to our initial impression of a small effect, this difference was significant for every comparison (Wilcoxon signed-rank, subject-paired, FDR-corrected: CSET p_corrected `{python} resection_frac_p_cset`, r = `{python} resection_frac_r_cset`; dSPM p_corrected `{python} resection_frac_p_dspm`, r = `{python} resection_frac_r_dspm`; sLORETA p_corrected `{python} resection_frac_p_sloreta`, r = `{python} resection_frac_r_sloreta`; wMNE p_corrected `{python} resection_frac_p_wmne`, r = `{python} resection_frac_r_wmne`; Beltrami p_corrected `{python} resection_frac_p_beltrami`, r = `{python} resection_frac_r_beltrami`), all well below the `{python} resection_chance_pct_fmt`% chance level. The effect was large for CSET, sLORETA, dSPM, and wMNE (|r| = `{python} resection_frac_r_large_lo`–`{python} resection_frac_r_large_hi`) but visibly smaller for Beltrami (r = `{python} resection_frac_r_beltrami`), whose median (`{python} resection_frac_median_beltrami`%) came closest to wCSET's on this metric too. This indicates that the top-ranked source activity is substantially more concentrated on the true epileptogenic zone for wCSET than for any comparator method — most consistently so against CSET, sLORETA, dSPM, and wMNE, and to a lesser degree against the geometry-only Beltrami variant — even though overall peak localization accuracy remains statistically comparable across methods (wMNE excepted).
+The Network Concentration Index (NCI) told a different story: wCSET required markedly less of the cortex to be marked active before a cluster first touched the resection (median `{python} resection_frac_median_wcset`% vs. `{python} resection_frac_median_other_min`–`{python} resection_frac_median_other_max`% for the other methods) — and, contrary to our initial impression of a small effect, this difference was significant for every comparison (Wilcoxon signed-rank, subject-paired, FDR-corrected: CSET p_corrected `{python} resection_frac_p_cset`, r = `{python} resection_frac_r_cset`; dSPM p_corrected `{python} resection_frac_p_dspm`, r = `{python} resection_frac_r_dspm`; sLORETA p_corrected `{python} resection_frac_p_sloreta`, r = `{python} resection_frac_r_sloreta`; wMNE p_corrected `{python} resection_frac_p_wmne`, r = `{python} resection_frac_r_wmne`; Beltrami p_corrected `{python} resection_frac_p_beltrami`, r = `{python} resection_frac_r_beltrami`), all well below the `{python} resection_chance_pct_fmt`% chance level. The effect was large for CSET, sLORETA, dSPM, and wMNE (|r| = `{python} resection_frac_r_large_lo`–`{python} resection_frac_r_large_hi`) but visibly smaller for Beltrami (r = `{python} resection_frac_r_beltrami`), whose median (`{python} resection_frac_median_beltrami`%) came closest to wCSET's on this metric too. This indicates that the top-ranked source activity is substantially more concentrated on the true epileptogenic zone for wCSET than for any comparator method — most consistently so against CSET, sLORETA, dSPM, and wMNE, and to a lesser degree against the geometry-only Beltrami variant — even though overall peak localization accuracy remains statistically comparable across methods (wMNE excepted).
 
 ```{python filename="results_resection_localization_plot.py"}
 #| echo: false
+#| fig-cap: "Peak-to-resection distance (mm, left) and Network Concentration Index (% of cortex needed for a cluster to first touch the resection, lower is better, right) across the seizure-free resection cohort, quarter rising phase (box = IQR, line = median). Dashed line (right panel): chance level for the Network Concentration Index. Stars mark significance vs. wCSET (Wilcoxon signed-rank, subject-paired, FDR-corrected)."
 import matplotlib.pyplot as plt
 
 panels = [
     ("peak_distance_mm", "Peak-to-resection\ndistance (mm)", None),
-    ("cluster_fraction_pct", "Earliest resection-touching cluster\n(% of cortex, lower is better)", resection_chance_pct),
+    ("cluster_fraction_pct", "Network Concentration Index\n(% of cortex, lower is better)", resection_chance_pct),
 ]
 
 resection_fig, resection_axes = plt.subplots(1, len(panels), figsize=(4.5 * len(panels), 5))
@@ -1312,11 +1293,6 @@ for ax, (metric, ylabel, ref_line) in zip(resection_axes, panels):
     ax.set_ylabel(ylabel)
     ax.spines[["top", "right"]].set_visible(False)
 
-resection_fig.suptitle(
-    f"Resection localization, seizure-free patients only (n={resection_n}, quarter rising phase)\n"
-    "Wilcoxon signed-rank vs. wCSET, paired by subject, FDR-corrected (*p<0.05, **p<0.01, ***p<0.001)",
-    fontsize=13, fontweight="bold",
-)
 plt.tight_layout()
 ```
 
@@ -1465,6 +1441,7 @@ The two subjects without a visible scalp EEG spike (sub-12, sub-50) are reported
 
 ```{python filename="results_intra_vieeg_significance_plot.py"}
 #| echo: false
+#| fig-cap: "Per-channel temporal-correlation differences (top row) and per-timepoint spatial-correlation differences (bottom row), wCSET minus each competitor, for the two subjects with a visible scalp EEG spike (sub-12/sub-50 are reported in the supplementary material). Win rate relative to the 50% chance line and effective sample size (n_eff) are annotated above each box. Stars mark significance from an autocorrelation-corrected paired t-test (ttest_ess)."
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -1532,11 +1509,6 @@ for row_i, (metric, coord, ylabel) in enumerate(METRIC_BLOCKS):
         if col_i == 0:
             ax.set_ylabel(ylabel, fontsize=8)
 
-vieeg_fig.suptitle(
-    "Study III: wCSET − competitor paired differences, per channel/timepoint\n"
-    "win% relative to the 50% chance line; stars/n_eff from an autocorrelation-corrected paired t-test (ttest_ess)",
-    fontsize=12, fontweight="bold", y=1.03,
-)
 plt.tight_layout()
 ```
 
