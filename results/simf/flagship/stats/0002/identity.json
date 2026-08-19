@@ -1,0 +1,18 @@
+{
+  "kind": "pairwise",
+  "metric": "localization_error",
+  "group_by": "Method",
+  "test": "wilcoxon",
+  "unit_col": null,
+  "pairing_col": "region",
+  "subject_order": null,
+  "filters": [
+    [
+      "phase",
+      [
+        "qrp"
+      ]
+    ]
+  ],
+  "computed_at": "2026-08-11T11:47:39.109152"
+}

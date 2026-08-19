@@ -1,0 +1,16 @@
+[
+  {
+    "group_a": "original",
+    "group_b": "geom-atlas-bin",
+    "n_pairs": 99,
+    "n_a": 99,
+    "n_b": 99,
+    "statistic": 696.0,
+    "p_value": 5.32463652950227e-10,
+    "effect_size": 0.5353535353535354,
+    "effect_size_type": "rank_biserial",
+    "n_eff": NaN,
+    "p_corrected": NaN,
+    "significant": null
+  }
+]

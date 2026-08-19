@@ -1,0 +1,16 @@
+[
+  {
+    "group_a": "original",
+    "group_b": "fused-bin",
+    "n_pairs": 100,
+    "n_a": 100,
+    "n_b": 100,
+    "statistic": 1553.0,
+    "p_value": 0.0008316155520464255,
+    "effect_size": 0.28,
+    "effect_size_type": "rank_biserial",
+    "n_eff": NaN,
+    "p_corrected": NaN,
+    "significant": null
+  }
+]

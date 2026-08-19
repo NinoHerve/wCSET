@@ -1,0 +1,16 @@
+[
+  {
+    "group_a": "wcset",
+    "group_b": "dspm",
+    "n_pairs": 146,
+    "n_a": 146,
+    "n_b": 146,
+    "statistic": 1.8109364044689222,
+    "p_value": 0.07509744338750186,
+    "effect_size": 0.23049301595053864,
+    "effect_size_type": "cohens_dz",
+    "n_eff": 61.72922966364212,
+    "p_corrected": NaN,
+    "significant": null
+  }
+]

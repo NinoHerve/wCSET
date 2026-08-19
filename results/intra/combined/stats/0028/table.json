@@ -1,0 +1,16 @@
+[
+  {
+    "group_a": "wcset",
+    "group_b": "wmne",
+    "n_pairs": 124,
+    "n_a": 124,
+    "n_b": 124,
+    "statistic": 0.5964362084827138,
+    "p_value": 0.5577236509440995,
+    "effect_size": 0.13153217037846146,
+    "effect_size_type": "cohens_dz",
+    "n_eff": 20.56193721895734,
+    "p_corrected": NaN,
+    "significant": null
+  }
+]

@@ -1,0 +1,16 @@
+[
+  {
+    "group_a": "original",
+    "group_b": "beltrami",
+    "n_pairs": 97,
+    "n_a": 97,
+    "n_b": 97,
+    "statistic": 1058.0,
+    "p_value": 2.0925792396786647e-06,
+    "effect_size": 0.36082474226804123,
+    "effect_size_type": "rank_biserial",
+    "n_eff": NaN,
+    "p_corrected": NaN,
+    "significant": null
+  }
+]

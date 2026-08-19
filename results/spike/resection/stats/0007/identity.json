@@ -1,0 +1,71 @@
+{
+  "kind": "pairwise",
+  "metric": "cluster_fraction_pct",
+  "group_by": "Method",
+  "test": "wilcoxon",
+  "unit_col": null,
+  "pairing_col": "Subject",
+  "subject_order": null,
+  "filters": [
+    [
+      "ILAE",
+      [
+        1
+      ]
+    ],
+    [
+      "Subject",
+      [
+        "pat02",
+        "pat03",
+        "pat04",
+        "pat05",
+        "pat06",
+        "pat07",
+        "pat08",
+        "pat09",
+        "pat10",
+        "pat11",
+        "pat12",
+        "pat13",
+        "pat14",
+        "pat15",
+        "pat16",
+        "pat17",
+        "pat19",
+        "pat20",
+        "pat21",
+        "pat22",
+        "pat23",
+        "pat24",
+        "pat25",
+        "pat26",
+        "pat27",
+        "pat28",
+        "pat29",
+        "pat30",
+        "pat31",
+        "pat32",
+        "pat34",
+        "pat35",
+        "pat36",
+        "pat37",
+        "pat38",
+        "pat39",
+        "pat40",
+        "pat41",
+        "pat42",
+        "pat43",
+        "pat44",
+        "pat45"
+      ]
+    ],
+    [
+      "phase",
+      [
+        "qrp"
+      ]
+    ]
+  ],
+  "computed_at": "2026-08-10T18:15:40.819158"
+}

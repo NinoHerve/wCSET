@@ -1,0 +1,5094 @@
+{
+  "name": "sub-10 simulation validation",
+  "metadata": {
+    "units": {
+      "correlation": "r",
+      "localization_error": "mm",
+      "qrp_time": "s",
+      "pp_time": "s"
+    },
+    "derived": {
+      "loc_median": {
+        "cset": 9.299061246682543,
+        "dspm": 11.231609507155992,
+        "sloreta": 14.005507641007341,
+        "wcset": 5.6583490440379265,
+        "wmne": 61.781698118853626
+      },
+      "qrp_time_median": 0.003999986171722425,
+      "pp_time_median": 0.01999998617172244
+    }
+  },
+  "saved_at": "2026-08-11T11:47:40.751287",
+  "entries": [
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-bankssts_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-caudalanteriorcingulate_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-caudalmiddlefrontal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-caudalmiddlefrontal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-entorhinal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-frontalpole_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-fusiform_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-inferiorparietal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-inferiorparietal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-inferiorparietal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-inferiortemporal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-inferiortemporal_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-insula_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-insula_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-insula_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-lateraloccipital_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-lateraloccipital_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-lateraloccipital_8"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-lateralorbitofrontal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-middletemporal_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-paracentral_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-parahippocampal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-parahippocampal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-parsopercularis_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-parsopercularis_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-parstriangularis_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-pericalcarine_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-postcentral_12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-postcentral_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-postcentral_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-precentral_14"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-precuneus_10"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-precuneus_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-precuneus_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-rostralanteriorcingulate_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-rostralmiddlefrontal_12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-rostralmiddlefrontal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-superiorfrontal_10"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-superiorfrontal_15"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-superiorfrontal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-superiorfrontal_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-superiorparietal_12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-superiorparietal_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-superiorparietal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-superiorparietal_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-superiortemporal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-superiortemporal_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-supramarginal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-supramarginal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-supramarginal_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-lh-temporalpole_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-caudalanteriorcingulate_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-cuneus_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-cuneus_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-frontalpole_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-fusiform_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-fusiform_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-inferiorparietal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-inferiorparietal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-inferiorparietal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-inferiortemporal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-insula_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-insula_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-insula_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-isthmuscingulate_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-lateraloccipital_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-lateraloccipital_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-lateraloccipital_8"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-lateralorbitofrontal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-lingual_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-medialorbitofrontal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-middletemporal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-middletemporal_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-paracentral_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-parahippocampal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-parstriangularis_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-postcentral_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-postcentral_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-postcentral_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-posteriorcingulate_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-posteriorcingulate_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-precentral_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-precentral_16"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-precentral_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-precuneus_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-rostralanteriorcingulate_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-rostralmiddlefrontal_12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-rostralmiddlefrontal_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-rostralmiddlefrontal_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-superiorfrontal_14"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-superiorfrontal_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-superiorparietal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-superiorparietal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-superiorparietal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-superiorparietal_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-superiortemporal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-superiortemporal_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-superiortemporal_8"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-supramarginal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wcset",
+        "region": "ctx-rh-supramarginal_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "localization_error",
+      "scalar_coords": {
+        "Method": "wcset",
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "run",
+        "region"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-bankssts_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-caudalanteriorcingulate_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-caudalmiddlefrontal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-caudalmiddlefrontal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-entorhinal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-frontalpole_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-fusiform_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-inferiorparietal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-inferiorparietal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-inferiorparietal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-inferiortemporal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-inferiortemporal_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-insula_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-insula_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-insula_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-lateraloccipital_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-lateraloccipital_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-lateraloccipital_8"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-lateralorbitofrontal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-middletemporal_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-paracentral_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-parahippocampal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-parahippocampal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-parsopercularis_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-parsopercularis_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-parstriangularis_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-pericalcarine_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-postcentral_12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-postcentral_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-postcentral_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-precentral_14"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-precuneus_10"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-precuneus_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-precuneus_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-rostralanteriorcingulate_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-rostralmiddlefrontal_12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-rostralmiddlefrontal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-superiorfrontal_10"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-superiorfrontal_15"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-superiorfrontal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-superiorfrontal_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-superiorparietal_12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-superiorparietal_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-superiorparietal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-superiorparietal_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-superiortemporal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-superiortemporal_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-supramarginal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-supramarginal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-supramarginal_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-lh-temporalpole_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-caudalanteriorcingulate_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-cuneus_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-cuneus_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-frontalpole_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-fusiform_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-fusiform_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-inferiorparietal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-inferiorparietal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-inferiorparietal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-inferiortemporal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-insula_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-insula_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-insula_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-isthmuscingulate_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-lateraloccipital_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-lateraloccipital_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-lateraloccipital_8"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-lateralorbitofrontal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-lingual_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-medialorbitofrontal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-middletemporal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-middletemporal_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-paracentral_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-parahippocampal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-parstriangularis_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-postcentral_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-postcentral_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-postcentral_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-posteriorcingulate_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-posteriorcingulate_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-precentral_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-precentral_16"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-precentral_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-precuneus_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-rostralanteriorcingulate_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-rostralmiddlefrontal_12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-rostralmiddlefrontal_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-rostralmiddlefrontal_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-superiorfrontal_14"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-superiorfrontal_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-superiorparietal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-superiorparietal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-superiorparietal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-superiorparietal_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-superiortemporal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-superiortemporal_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-superiortemporal_8"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-supramarginal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "cset",
+        "region": "ctx-rh-supramarginal_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "localization_error",
+      "scalar_coords": {
+        "Method": "cset",
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "run",
+        "region"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-bankssts_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-caudalanteriorcingulate_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-caudalmiddlefrontal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-caudalmiddlefrontal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-entorhinal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-frontalpole_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-fusiform_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-inferiorparietal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-inferiorparietal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-inferiorparietal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-inferiortemporal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-inferiortemporal_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-insula_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-insula_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-insula_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-lateraloccipital_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-lateraloccipital_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-lateraloccipital_8"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-lateralorbitofrontal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-middletemporal_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-paracentral_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-parahippocampal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-parahippocampal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-parsopercularis_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-parsopercularis_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-parstriangularis_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-pericalcarine_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-postcentral_12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-postcentral_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-postcentral_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-precentral_14"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-precuneus_10"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-precuneus_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-precuneus_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-rostralanteriorcingulate_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-rostralmiddlefrontal_12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-rostralmiddlefrontal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-superiorfrontal_10"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-superiorfrontal_15"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-superiorfrontal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-superiorfrontal_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-superiorparietal_12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-superiorparietal_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-superiorparietal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-superiorparietal_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-superiortemporal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-superiortemporal_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-supramarginal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-supramarginal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-supramarginal_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-lh-temporalpole_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-caudalanteriorcingulate_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-cuneus_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-cuneus_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-frontalpole_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-fusiform_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-fusiform_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-inferiorparietal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-inferiorparietal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-inferiorparietal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-inferiortemporal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-insula_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-insula_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-insula_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-isthmuscingulate_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-lateraloccipital_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-lateraloccipital_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-lateraloccipital_8"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-lateralorbitofrontal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-lingual_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-medialorbitofrontal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-middletemporal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-middletemporal_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-paracentral_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-parahippocampal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-parstriangularis_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-postcentral_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-postcentral_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-postcentral_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-posteriorcingulate_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-posteriorcingulate_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-precentral_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-precentral_16"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-precentral_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-precuneus_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-rostralanteriorcingulate_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-rostralmiddlefrontal_12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-rostralmiddlefrontal_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-rostralmiddlefrontal_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-superiorfrontal_14"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-superiorfrontal_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-superiorparietal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-superiorparietal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-superiorparietal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-superiorparietal_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-superiortemporal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-superiortemporal_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-superiortemporal_8"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-supramarginal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "region": "ctx-rh-supramarginal_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "localization_error",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "run",
+        "region"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-bankssts_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-caudalanteriorcingulate_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-caudalmiddlefrontal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-caudalmiddlefrontal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-entorhinal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-frontalpole_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-fusiform_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-inferiorparietal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-inferiorparietal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-inferiorparietal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-inferiortemporal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-inferiortemporal_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-insula_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-insula_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-insula_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-lateraloccipital_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-lateraloccipital_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-lateraloccipital_8"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-lateralorbitofrontal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-middletemporal_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-paracentral_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-parahippocampal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-parahippocampal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-parsopercularis_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-parsopercularis_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-parstriangularis_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-pericalcarine_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-postcentral_12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-postcentral_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-postcentral_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-precentral_14"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-precuneus_10"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-precuneus_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-precuneus_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-rostralanteriorcingulate_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-rostralmiddlefrontal_12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-rostralmiddlefrontal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-superiorfrontal_10"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-superiorfrontal_15"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-superiorfrontal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-superiorfrontal_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-superiorparietal_12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-superiorparietal_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-superiorparietal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-superiorparietal_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-superiortemporal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-superiortemporal_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-supramarginal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-supramarginal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-supramarginal_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-lh-temporalpole_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-caudalanteriorcingulate_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-cuneus_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-cuneus_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-frontalpole_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-fusiform_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-fusiform_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-inferiorparietal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-inferiorparietal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-inferiorparietal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-inferiortemporal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-insula_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-insula_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-insula_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-isthmuscingulate_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-lateraloccipital_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-lateraloccipital_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-lateraloccipital_8"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-lateralorbitofrontal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-lingual_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-medialorbitofrontal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-middletemporal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-middletemporal_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-paracentral_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-parahippocampal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-parstriangularis_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-postcentral_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-postcentral_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-postcentral_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-posteriorcingulate_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-posteriorcingulate_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-precentral_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-precentral_16"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-precentral_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-precuneus_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-rostralanteriorcingulate_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-rostralmiddlefrontal_12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-rostralmiddlefrontal_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-rostralmiddlefrontal_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-superiorfrontal_14"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-superiorfrontal_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-superiorparietal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-superiorparietal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-superiorparietal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-superiorparietal_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-superiortemporal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-superiortemporal_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-superiortemporal_8"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-supramarginal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "region": "ctx-rh-supramarginal_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "localization_error",
+      "scalar_coords": {
+        "Method": "dspm",
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "run",
+        "region"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-bankssts_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-caudalanteriorcingulate_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-caudalmiddlefrontal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-caudalmiddlefrontal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-entorhinal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-frontalpole_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-fusiform_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-inferiorparietal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-inferiorparietal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-inferiorparietal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-inferiortemporal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-inferiortemporal_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-insula_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-insula_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-insula_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-lateraloccipital_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-lateraloccipital_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-lateraloccipital_8"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-lateralorbitofrontal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-middletemporal_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-paracentral_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-parahippocampal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-parahippocampal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-parsopercularis_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-parsopercularis_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-parstriangularis_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-pericalcarine_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-postcentral_12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-postcentral_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-postcentral_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-precentral_14"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-precuneus_10"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-precuneus_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-precuneus_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-rostralanteriorcingulate_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-rostralmiddlefrontal_12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-rostralmiddlefrontal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-superiorfrontal_10"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-superiorfrontal_15"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-superiorfrontal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-superiorfrontal_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-superiorparietal_12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-superiorparietal_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-superiorparietal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-superiorparietal_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-superiortemporal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-superiortemporal_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-supramarginal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-supramarginal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-supramarginal_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-lh-temporalpole_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-caudalanteriorcingulate_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-cuneus_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-cuneus_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-frontalpole_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-fusiform_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-fusiform_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-inferiorparietal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-inferiorparietal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-inferiorparietal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-inferiortemporal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-insula_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-insula_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-insula_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-isthmuscingulate_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-lateraloccipital_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-lateraloccipital_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-lateraloccipital_8"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-lateralorbitofrontal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-lingual_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-medialorbitofrontal_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-middletemporal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-middletemporal_6"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-paracentral_4"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-parahippocampal_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-parstriangularis_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-postcentral_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-postcentral_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-postcentral_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-posteriorcingulate_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-posteriorcingulate_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-precentral_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-precentral_16"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-precentral_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-precuneus_7"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-rostralanteriorcingulate_1"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-rostralmiddlefrontal_12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-rostralmiddlefrontal_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-rostralmiddlefrontal_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-superiorfrontal_14"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-superiorfrontal_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-superiorparietal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-superiorparietal_3"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-superiorparietal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-superiorparietal_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-superiortemporal_11"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-superiortemporal_2"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-superiortemporal_8"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-supramarginal_5"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "wmne",
+        "region": "ctx-rh-supramarginal_9"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "localization_error",
+      "scalar_coords": {
+        "Method": "wmne",
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "run",
+        "region"
+      ]
+    },
+    {
+      "metric": "qrp_time",
+      "scalar_coords": {},
+      "array_coord_names": [
+        "run"
+      ]
+    },
+    {
+      "metric": "pp_time",
+      "scalar_coords": {},
+      "array_coord_names": [
+        "run"
+      ]
+    }
+  ]
+}
