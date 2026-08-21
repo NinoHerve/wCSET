@@ -2102,11 +2102,11 @@ methods = ["wcset", "cset", "sloreta", "dspm", "wmne"]
 n_jobs = 25   # compute resource setting, not a modeling choice - see prose above
 
 def preprocess_qrp_pp(ctx):
-  """Picks qrp/pp from this run's own noise-free gold (immune to noise/SNR by
-  construction), projected to sensor space with the simulation forward."""
-  ave, gold, simulator = ctx["ave"], ctx["gold"], ctx["simulator"]
+  """Picks qrp/pp from this run's own noise-free EEG (immune to noise/SNR by
+  construction) - saved directly by _run_one as ave-clean, no longer
+  re-derived here via mne.apply_forward(simulator.hm.fwd, gold, ave.info)."""
+  ave, clean_ave = ctx["ave"], ctx["ave-clean"]
 
-  clean_ave = mne.apply_forward(simulator.hm.fwd, gold, ave.info)
   qrp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=0.25, as_idx=True)[0]
   pp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=1, as_idx=True)[0]
 
@@ -2206,6 +2206,7 @@ def run_noise_sweep_reconstruction(overwrite=False):
       fgold=dm.get_path(noisesweep_subject, "gold", task="spk", run=run),
       fsource=sources_dir/f"run-{run:03d}_source.json",
       foutputs=needed,
+      faveclean=dm.get_path(noisesweep_subject, "ave-clean", task="spk", run=run),
     ))
 
   print(f"{len(df_sweep) - len(tasks)}/{len(df_sweep)} runs already fully done, {len(tasks)} left.")
@@ -2290,14 +2291,14 @@ suffix = "_test" if QUICK_TEST else ""   # keeps quick-test output from collidin
 n_jobs = 25
 
 def make_preprocess(sources_dir):
-  """Re-derives qrp/pp from this run's own noise-free gold (same recipe as
-  noise_sweep_reconstruction.py's preprocess_qrp_pp - the saved STCs' two
-  columns don't carry a usable time axis, see prose above), and loads this
-  run's `src` manually since MeasureTask doesn't."""
+  """Re-derives qrp/pp from this run's own noise-free EEG (same recipe as
+  noise_sweep_reconstruction.py's preprocess_qrp_pp, now reading the ave-clean
+  saved directly by _run_one instead of re-deriving it via mne.apply_forward
+  - the saved STCs' two columns don't carry a usable time axis, see prose
+  above), and loads this run's `src` manually since MeasureTask doesn't."""
   def preprocess(ctx):
-    ave, gold, simulator = ctx["ave"], ctx["gold"], ctx["simulator"]
+    clean_ave = ctx["ave-clean"]
 
-    clean_ave = mne.apply_forward(simulator.hm.fwd, gold, ave.info)
     qrp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=0.25, as_idx=True)[0]
     pp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=1, as_idx=True)[0]
 
@@ -2390,6 +2391,7 @@ def run_noise_sweep_comparison(overwrite=QUICK_TEST):
       fsolutions=fsolutions,
       fave=dm.get_path(noisesweep_subject, "ave", task="spk", run=run),
       simulator_dir=simulator_dir,
+      faveclean=dm.get_path(noisesweep_subject, "ave-clean", task="spk", run=run),
     ))
 
   print(f"{len(tasks)}/{len(df_sweep)} runs fully reconstructed - scoring those now"
@@ -2653,6 +2655,7 @@ def run_degradation_reconstruction(overwrite=False):
       fcov=dm.get_path(sub, "cov", task="spk", run=int(r)),
       fgold=dm.get_path(sub, "gold", task="spk", run=int(r)),
       fsource=sources_dir/f"run-{int(r):03d}_source.json",
+      faveclean=dm.get_path(sub, "ave-clean", task="spk", run=int(r)),
     )
     for r in probe_runs
   ]
@@ -2665,8 +2668,7 @@ def run_degradation_reconstruction(overwrite=False):
   # only now (pp dropped along with correlation_pp/ap_qrp/ap_pp above) - one
   # timepoint solved per connectome/run instead of two.
   def preprocess_qrp(ctx):
-    ave, gold, simulator = ctx["ave"], ctx["gold"], ctx["simulator"]
-    clean_ave = mne.apply_forward(simulator.hm.fwd, gold, ave.info)
+    ave, clean_ave = ctx["ave"], ctx["ave-clean"]
     qrp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=0.25, as_idx=True)[0]
     phase_data = mne.EvokedArray(
       ave.data[:, [qrp_idx]], ave.info, tmin=0, nave=ave.nave, kind=ave.kind
@@ -2916,6 +2918,7 @@ def run_surrogate_reconstruction(overwrite=False):
       fcov=dm.get_path(sub, "cov", task="spk", run=int(r)),
       fgold=dm.get_path(sub, "gold", task="spk", run=int(r)),
       fsource=sources_dir/f"run-{int(r):03d}_source.json",
+      faveclean=dm.get_path(sub, "ave-clean", task="spk", run=int(r)),
     )
     for r in probe_runs
   ]
@@ -2926,8 +2929,7 @@ def run_surrogate_reconstruction(overwrite=False):
   # degradation_reconstruction.py use, needed here too so qrp/pp indices stay
   # identical across every surrogate for a given run
   def preprocess_qrp_pp(ctx):
-    ave, gold, simulator = ctx["ave"], ctx["gold"], ctx["simulator"]
-    clean_ave = mne.apply_forward(simulator.hm.fwd, gold, ave.info)
+    ave, clean_ave = ctx["ave"], ctx["ave-clean"]
     qrp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=0.25, as_idx=True)[0]
     pp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=1, as_idx=True)[0]
     phase_data = mne.EvokedArray(
