@@ -1801,7 +1801,10 @@ def make_preprocess(sources_dir):
     # every method's STC shares the same crop window (set by solve_inverse.py's
     # `crop`), so any one of them can be used to read it off
     stc0 = next(iter(ctx["solutions"].values()))
-    ground = ctx["gold"].copy().crop(tmin=stc0.times[0], tmax=stc0.times[-1])
+    # correlated against the noisy ground truth, not the clean one: the
+    # reconstruction is solved from noisy sensor data, so scoring it against
+    # a noise-free source sets an unreachable target.
+    ground = ctx["gold-noisy"].copy().crop(tmin=stc0.times[0], tmax=stc0.times[-1])
     data = ctx["ave"].copy().crop(tmin=stc0.times[0], tmax=stc0.times[-1])
 
     fsource = sources_dir/f"run-{ctx['task'].run:03d}_source.json"
@@ -1904,6 +1907,7 @@ def run_comparison(overwrite=False):
       fsolutions=fsolutions,
       fave=dm.get_path(sub, "ave", task="spk", run=int(run)),
       simulator_dir=simulator_dir,
+      fgoldnoisy=dm.get_path(sub, "gold-noisy", task="spk", run=int(run)),
     ))
 
   print(f"{len(tasks)}/{len(index)} runs fully reconstructed - scoring those now"
@@ -2307,12 +2311,15 @@ def make_preprocess(sources_dir):
   return preprocess
 
 def make_score(dipole_positions):
-  """Scores each of the six saved solutions against this run's own gold,
-  returns 3 scalars/method. sol.data[:, 0]/[:, 1] are qrp/pp by construction
-  order (see noise_sweep_reconstruction.py), so qrp_idx/pp_idx re-derived
-  above are only used to index into `gold`, never into `sol`/`stc.times`."""
+  """Scores each of the six saved solutions against this run's own noisy
+  gold (the reconstruction is solved from noisy sensor data, so the clean
+  ground truth is an unreachable target - only qrp/pp timing itself, not
+  scoring, needs the clean signal), returns 3 scalars/method. sol.data[:, 0]/
+  [:, 1] are qrp/pp by construction order (see noise_sweep_reconstruction.py),
+  so qrp_idx/pp_idx re-derived above are only used to index into `gold`,
+  never into `sol`/`stc.times`."""
   def score(ctx):
-    gold, qrp_idx, pp_idx = ctx["gold"], ctx["qrp_idx"], ctx["pp_idx"]
+    gold, qrp_idx, pp_idx = ctx["gold-noisy"], ctx["qrp_idx"], ctx["pp_idx"]
     src, simulator = ctx["src"], ctx["simulator"]
 
     true_source_mask = src.select_targets(simulator.hm.src, simulator.hm.parc, simulator.hm.ras2tkras)
@@ -2392,6 +2399,7 @@ def run_noise_sweep_comparison(overwrite=QUICK_TEST):
       fave=dm.get_path(noisesweep_subject, "ave", task="spk", run=run),
       simulator_dir=simulator_dir,
       faveclean=dm.get_path(noisesweep_subject, "ave-clean", task="spk", run=run),
+      fgoldnoisy=dm.get_path(noisesweep_subject, "gold-noisy", task="spk", run=run),
     ))
 
   print(f"{len(tasks)}/{len(df_sweep)} runs fully reconstructed - scoring those now"
@@ -2655,21 +2663,25 @@ def run_degradation_reconstruction(overwrite=False):
       fcov=dm.get_path(sub, "cov", task="spk", run=int(r)),
       fgold=dm.get_path(sub, "gold", task="spk", run=int(r)),
       fsource=sources_dir/f"run-{int(r):03d}_source.json",
-      faveclean=dm.get_path(sub, "ave-clean", task="spk", run=int(r)),
+      fgoldnoisy=dm.get_path(sub, "gold-noisy", task="spk", run=int(r)),
     )
     for r in probe_runs
   ]
   print(f"{len(inverse_tasks)} probe-set runs ({len(probe_set)} regions x {n_reps_per_region} reps).")
 
   # 4. Stage 2 setup: preprocess/reconstruct/postprocess - qrp picked from
-  # each run's own clean gold, same fix noise_sweep_reconstruction.py uses,
-  # needed here too since the qrp index must be identical across every
-  # connectome variant for a given run to stay comparable. Quarter-rising-phase
-  # only now (pp dropped along with correlation_pp/ap_qrp/ap_pp above) - one
-  # timepoint solved per connectome/run instead of two.
+  # each run's own noisy ave (unlike the noise sweep, SNR is fixed here, so
+  # there's no risk of confounding "can we find the right time point" with
+  # "how accurate is the reconstruction" - and this is how qrp would actually
+  # be picked in practice). The qrp index must still be identical across
+  # every connectome variant for a given run to stay comparable, which it is:
+  # `ave` doesn't depend on which connectome the run is later reconstructed
+  # with. Quarter-rising-phase only now (pp dropped along with
+  # correlation_pp/ap_qrp/ap_pp above) - one timepoint solved per
+  # connectome/run instead of two.
   def preprocess_qrp(ctx):
-    ave, clean_ave = ctx["ave"], ctx["ave-clean"]
-    qrp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=0.25, as_idx=True)[0]
+    ave = ctx["ave"]
+    qrp_idx = mm.analysis.eeg.get_rising_phase(ave, ratio=0.25, as_idx=True)[0]
     phase_data = mne.EvokedArray(
       ave.data[:, [qrp_idx]], ave.info, tmin=0, nave=ave.nave, kind=ave.kind
     )
@@ -2691,7 +2703,10 @@ def run_degradation_reconstruction(overwrite=False):
     return reconstruct
 
   def postprocess_score(ctx):
-    gold, qrp_idx = ctx["gold"], ctx["qrp_idx"]
+    # correlated against the noisy ground truth: the reconstruction is
+    # solved from noisy sensor data, so the clean source is an unreachable
+    # target.
+    gold, qrp_idx = ctx["gold-noisy"], ctx["qrp_idx"]
     src, simulator = ctx["src"], ctx["simulator"]
     true_source_mask = src.select_targets(simulator.hm.src, simulator.hm.parc, simulator.hm.ras2tkras)
     gold_qrp = gold.data[:, qrp_idx]
@@ -2918,20 +2933,22 @@ def run_surrogate_reconstruction(overwrite=False):
       fcov=dm.get_path(sub, "cov", task="spk", run=int(r)),
       fgold=dm.get_path(sub, "gold", task="spk", run=int(r)),
       fsource=sources_dir/f"run-{int(r):03d}_source.json",
-      faveclean=dm.get_path(sub, "ave-clean", task="spk", run=int(r)),
+      fgoldnoisy=dm.get_path(sub, "gold-noisy", task="spk", run=int(r)),
     )
     for r in probe_runs
   ]
   print(f"{len(inverse_tasks)} probe-set runs ({len(probe_set)} regions x {n_reps_per_region} reps).")
 
   # 2. Preprocess/reconstruct/postprocess - qrp/pp picked from each run's own
-  # clean gold, same fix noise_sweep_reconstruction.py/
-  # degradation_reconstruction.py use, needed here too so qrp/pp indices stay
-  # identical across every surrogate for a given run
+  # noisy ave (unlike the noise sweep, SNR is fixed here, so there's no risk
+  # of confounding timing detection with reconstruction accuracy - and this
+  # is how qrp/pp would actually be picked in practice). The index still
+  # stays identical across every surrogate for a given run, since `ave`
+  # doesn't depend on which connectome the run is later reconstructed with.
   def preprocess_qrp_pp(ctx):
-    ave, clean_ave = ctx["ave"], ctx["ave-clean"]
-    qrp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=0.25, as_idx=True)[0]
-    pp_idx = mm.analysis.eeg.get_rising_phase(clean_ave, ratio=1, as_idx=True)[0]
+    ave = ctx["ave"]
+    qrp_idx = mm.analysis.eeg.get_rising_phase(ave, ratio=0.25, as_idx=True)[0]
+    pp_idx = mm.analysis.eeg.get_rising_phase(ave, ratio=1, as_idx=True)[0]
     phase_data = mne.EvokedArray(
       ave.data[:, [qrp_idx, pp_idx]], ave.info, tmin=0, nave=ave.nave, kind=ave.kind
     )
@@ -2963,7 +2980,10 @@ def run_surrogate_reconstruction(overwrite=False):
     return reconstruct
 
   def postprocess_score(ctx):
-    gold, qrp_idx, pp_idx = ctx["gold"], ctx["qrp_idx"], ctx["pp_idx"]
+    # correlated against the noisy ground truth: the reconstruction is
+    # solved from noisy sensor data, so the clean source is an unreachable
+    # target.
+    gold, qrp_idx, pp_idx = ctx["gold-noisy"], ctx["qrp_idx"], ctx["pp_idx"]
     src, simulator = ctx["src"], ctx["simulator"]
     true_source_mask = src.select_targets(simulator.hm.src, simulator.hm.parc, simulator.hm.ras2tkras)
     gold_qrp, gold_pp = gold.data[:, qrp_idx], gold.data[:, pp_idx]
