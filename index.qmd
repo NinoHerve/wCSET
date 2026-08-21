@@ -88,7 +88,7 @@ Together, these studies establish wCSET as a principled, viable tool for reconst
 
 Simulations used anatomical data from a single representative VEPCON subject [@pascucci_source_2022] (T1-weighted MRI and DTI tractogram), with EEG simulated on the 204-channel montage used throughout (Section 2.1.2). The cortical source space (Section 2.3.1) was parcellated into ~400 regions via the MultiConn atlas [@aleman-gomez_multi-scale_2022], from which 100 were selected by farthest-point sampling as a spatially uniform probe set — reused throughout except for the noise-robustness analysis (Section 3.1.2), which instead uses a separate, independently-sampled 50-region subset (rationale in Annex).
 
-In each trial, a source region drawn from the probe set was assigned a 50 ms double-Hanning-window spike waveform (mimicking a clinical interictal spike) on all its dipoles, following approaches modelling epileptiform activity as a patch of simultaneously active dipoles rather than a point source [@afnan_eegmeg_2024] (waveform definition in Annex). The spike repeated every 1 s across a 20 s recording; after propagation and sensor projection (below and Section 2.2), the 20 resulting events were epoched and averaged into a single evoked response per run.
+In each trial, a source region drawn from the probe set was assigned a 50 ms double-Hanning-window spike waveform [@dewouters_source-reconstructed_2026] (mimicking a clinical interictal spike) on all its dipoles, following approaches modelling epileptiform activity as a patch of simultaneously active dipoles rather than a point source [@afnan_eegmeg_2024] (waveform definition in Annex). The spike repeated every 1 s across a 20 s recording; after propagation and sensor projection (below and Section 2.2), the 20 resulting events were epoched and averaged into a single evoked response per run.
 
 **Propagation model.** Activity was propagated across the connectome in a feedforward manner, with each dipole's activity a delayed and spatially-decayed copy of the source waveform:
 
@@ -1291,13 +1291,13 @@ This section provides implementation-level detail for the synthetic data describ
 
 **Propagation model rationale.** A neural mass model [@jansen_electroencephalogram_1995] would capture propagation more physiologically, but such models become unstable at high mass counts, since network size and coupling strength jointly determine dynamical stability [@sanz-leon_mathematical_2015] — which is why other source-reconstruction studies typically cap the number of masses around 1,000, with dipoles spaced roughly 1 cm apart [@siu_structural_2026], a spacing at which the forward model's own point-dipole assumption starts to break down [@nunez_multi-scale_2019]. Our patch-seeded, connectome-driven propagation model avoids this trade-off, keeping the dipole model at high resolution (~7,600 dipoles, ~3.3 mm spacing) while remaining simple enough to generate realistic EEG spikes; we do not claim it is more faithful to reality than neural mass or field models, only that it offers insight a simple patch simulation cannot while staying tractable at high dipole counts.
 
-**Spike waveform.** The spike waveform is a double Hanning window defined as:
+**Spike waveform.** The spike waveform is a double Hanning window, following the same construction as @dewouters_source-reconstructed_2026:
 
 $$
 s_0(t) = \begin{cases} h\!\left(t,\, \tfrac{2}{3}W\right) & 0 \leq t \leq \tfrac{2}{3}W \\[4pt] -\tfrac{1}{2}\,h\!\left(t - \tfrac{2}{3}W,\; \tfrac{1}{3}W\right) & \tfrac{2}{3}W < t \leq W \end{cases}
 $$
 
-where $h(t, T) = \frac{1}{2}\!\left[1 - \cos\!\left(\tfrac{2\pi t}{T}\right)\right]$ is a Hanning window of duration $T$, and $W = 0.05$ s (50 ms) is the total spike duration, chosen to fall centrally within the consensus clinical EEG duration convention for interictal spikes specifically (20–70 ms) [@kane_revised_2017]. The waveform consists of a dominant positive lobe spanning two-thirds of the spike duration, followed by a half-amplitude negative rebound over the remaining third.
+where $h(t, T) = \frac{1}{2}\!\left[1 - \cos\!\left(\tfrac{2\pi t}{T}\right)\right]$ is a Hanning window of duration $T$, and $W = 0.05$ s (50 ms) is the total spike duration, chosen to fall centrally within the consensus clinical EEG duration convention for interictal spikes specifically (20–70 ms) [@kane_revised_2017].
 
 **Propagation delay model.** The total propagation delay $\tau_j$ to dipole $j$ was computed as the sum of per-edge delays along the shortest path from the source:
 
