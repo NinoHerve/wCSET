@@ -126,9 +126,9 @@ We used the dataset of @vorderwulbecke_high-density_2025 to validate EEG source 
 
 ### Clinical Dataset B — Simultaneous EEG/iEEG Cohort
 
-To validate source reconstruction against ground-truth intracranial activity, we used a cohort of 4 patients (sub-12, sub-34, sub-48, sub-50) with simultaneously recorded scalp EEG and intracranial EEG (iEEG) (recruitment, implantation, and ethics details in Annex — **TODO: to be filled in by the co-author**).
+To validate source reconstruction against ground-truth intracranial activity, we used a cohort of 4 patients (sub-12, sub-34, sub-48, sub-50) with simultaneously recorded scalp EEG and intracranial EEG (iEEG) (recruitment, implantation, and ethics details in Annex).
 
-Interictal discharges were identified and epoched in both modalities, time-locked to the same events, yielding paired scalp/intracranial recordings of the same underlying activity. Each patient's pre-operative T1-weighted MRI was processed identically to the resection cohort (Clinical Dataset A) for anatomical/forward modeling (Section 2.3), and the structural connectome was derived the same way (individual diffusion MRI was likewise unavailable). Results are reported in the main text for the two subjects with a visible scalp EEG spike; the other two had deep sources with no visible spike, making their EEG-derived reconstruction — and the virtual iEEG projected from it (Section 2.5.2) — inherently unreliable, so their results appear in the supplementary material instead.
+Interictal discharges were identified and epoched in both modalities, time-locked to the same events, yielding paired scalp/intracranial recordings of the same underlying activity. Discharges were visually identified and marked on iEEG by a board-certified epileptologist, cross-validated using Delphos, an automated interictal-discharge detector [@roehri_time-frequency_2016; @roehri_assets_2017], following the same acquisition and marking protocol used for this cohort by @roehri_scalp-negative_2025. Each patient's pre-operative T1-weighted MRI was processed identically to the resection cohort (Clinical Dataset A) for anatomical/forward modeling (Section 2.3), and the structural connectome was derived the same way (individual diffusion MRI was likewise unavailable). Results are reported in the main text for the two subjects with a visible scalp EEG spike; the other two had deep sources with no visible spike, making their EEG-derived reconstruction — and the virtual iEEG projected from it (Section 2.5.2) — inherently unreliable, so their results appear in the supplementary material instead.
 
 ## Signal Preprocessing
 
@@ -1313,16 +1313,13 @@ where $l_{uv}$ is the fiber length of edge $(u,v)$ in mm, and $v(l_{uv})$ is a c
 
 ## Clinical Dataset B — Additional Details
 
-This section will provide additional recruitment, implantation, and ethics detail for the simultaneous EEG/iEEG cohort described in Section 2.1.3.
+This section provides additional recruitment, implantation, and ethics detail for the simultaneous EEG/iEEG cohort described in Section 2.1.3, drawn from @roehri_scalp-negative_2025, the source study for this cohort.
 
-**TODO (to be filled in by the co-author):**
+**Recruitment and implantation.** Patients were recruited at the EEG and Epilepsy Unit, Geneva University Hospital, among consecutive patients who underwent simultaneous iEEG–hdEEG recording between 2014 and 2019 during presurgical evaluation for pharmacoresistant focal epilepsy. Intracranial recordings used stereo-EEG (SEEG) intracerebral macroelectrodes implanted per standard clinical presurgical planning; the simultaneous recording session was performed on the last day before iEEG electrode removal, pairing the SEEG with a 257-channel geodesic scalp EEG net (Electrical Geodesic Inc.).
 
-- Patient recruitment and diagnosis
-- Indication for intracranial implantation (e.g. presurgical evaluation for pharmacoresistant epilepsy)
-- Electrode type (stereo-EEG vs. subdural grid/strip) and implantation rationale
-- MRI sequencing parameters for the pre-operative T1-weighted scan
-- Ethics approval
-- etc ...
+**Ethics approval.** The study was approved by the Geneva Regional Research Ethics Committee (protocol 13-004).
+
+**MRI sequencing parameters.** **TODO (to be filled in by the co-author):** the pre-operative T1-weighted scan was acquired on a 3-T scanner (Siemens Prisma); @roehri_scalp-negative_2025 does not report further sequence parameters (TR/TE/voxel size).
 
 ## Connectivity Matrices — Additional Implementation Details
 

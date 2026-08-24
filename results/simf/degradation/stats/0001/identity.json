@@ -31,7 +31,7 @@
       ]
     ]
   ],
-  "computed_at": "2026-08-11T11:48:18.716126",
+  "computed_at": "2026-08-21T21:45:33.862011",
   "pairs": [
     [
       "sloreta",
@@ -43,11 +43,11 @@
       {
         "percentage_start": 0,
         "percentage_end": 70,
-        "mass": -65.66876287153706,
+        "mass": -59.83698969738202,
         "sign": -1,
         "p_value": 0.0003333333333333333,
         "significant": true,
-        "effect_size": -0.8908923190060306,
+        "effect_size": -0.8000187300051947,
         "effect_size_type": "cohens_dz"
       }
     ]

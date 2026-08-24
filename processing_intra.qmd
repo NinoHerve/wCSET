@@ -532,6 +532,7 @@ def build_connectivity(sub, overwrite):
         con = con_atlas.copy()
         fill_idx = np.argwhere((con_geom > 0) & (con_atlas == 0))
         con[fill_idx[:,0], fill_idx[:,1]] = con_geom[fill_idx[:,0], fill_idx[:,1]]
+        con = (con > 0).astype(float)
 
         # 4. Compute Spectral properties: shared helper (dense eigh,
         # eigval[0] pinned to exactly 0), matches processing_simf.qmd's
@@ -554,7 +555,7 @@ def build_connectivity(sub, overwrite):
         eigvec_beltrami, eigval_beltrami = mm.anatomy.source_space.compute_beltrami_harmonics(src)
         mm.core.write_eig(feig_beltrami, eigvec_beltrami, eigval_beltrami)
 
-build_connectivity(overwrite=False)
+build_connectivity(overwrite=True)
 ```
 
 

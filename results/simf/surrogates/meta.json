@@ -8,23 +8,23 @@
       },
       "ref_corr": {
         "qrp": {
-          "dspm": 0.11107483531882933,
-          "sloreta": 0.1094695787262017
+          "dspm": 0.09303622385329915,
+          "sloreta": 0.09716612974491835
         },
         "pp": {
-          "dspm": 0.15774227903909704,
-          "sloreta": 0.1646253915699859
+          "dspm": 0.12730266164286272,
+          "sloreta": 0.1369664702050421
         }
       },
-      "wcset_beltrami_qrp_median": 0.46401219458579834,
-      "wcset_beltrami_pp_median": 0.6552072118312198
+      "wcset_beltrami_qrp_median": 0.2782566484461588,
+      "wcset_beltrami_pp_median": 0.48816675747768534
     },
     "units": {
       "correlation": "r",
       "localization_error": "mm"
     }
   },
-  "saved_at": "2026-08-11T11:48:53.213443",
+  "saved_at": "2026-08-21T21:46:09.261108",
   "entries": [
     {
       "metric": "localization_error",

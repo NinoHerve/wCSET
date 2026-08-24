@@ -29,7 +29,7 @@
       ]
     ]
   ],
-  "computed_at": "2026-08-11T11:47:55.899407",
+  "computed_at": "2026-08-21T21:45:10.915462",
   "pairs": [
     [
       "wcset",
@@ -40,12 +40,22 @@
     "pair0": [
       {
         "snr_start": 20.0,
-        "snr_end": 1.5,
-        "mass": 216.16883155634113,
+        "snr_end": 3.0,
+        "mass": 179.25682159511035,
         "sign": 1,
         "p_value": 0.0003333333333333333,
         "significant": true,
-        "effect_size": 4.719513663186468,
+        "effect_size": 4.539243717631567,
+        "effect_size_type": "cohens_dz"
+      },
+      {
+        "snr_start": 2.0,
+        "snr_end": 1.0,
+        "mass": -85.97362672420644,
+        "sign": -1,
+        "p_value": 0.0003333333333333333,
+        "significant": true,
+        "effect_size": -4.792996926370134,
         "effect_size_type": "cohens_dz"
       }
     ]

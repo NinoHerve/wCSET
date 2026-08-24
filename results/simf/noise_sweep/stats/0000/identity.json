@@ -29,7 +29,7 @@
       ]
     ]
   ],
-  "computed_at": "2026-08-11T11:47:46.610844",
+  "computed_at": "2026-08-21T21:45:01.631953",
   "pairs": [
     [
       "wcset",
@@ -37,18 +37,7 @@
     ]
   ],
   "clusters_by_pair": {
-    "pair0": [
-      {
-        "snr_start": 5.0,
-        "snr_end": 5.0,
-        "mass": -2.3414836456771724,
-        "sign": -1,
-        "p_value": 0.17233333333333334,
-        "significant": false,
-        "effect_size": -0.33113579277914557,
-        "effect_size_type": "cohens_dz"
-      }
-    ]
+    "pair0": []
   },
   "diff_index_by_pair": {
     "pair0": [

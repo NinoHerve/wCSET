@@ -57,7 +57,7 @@
   "seed": 0,
   "effect_size_summary": "cluster_mean",
   "filters": null,
-  "computed_at": "2026-08-11T11:47:39.902874",
+  "computed_at": "2026-08-21T21:44:55.116584",
   "pairs": [
     [
       "wcset",
@@ -67,13 +67,33 @@
   "clusters_by_pair": {
     "pair0": [
       {
-        "times_start": -0.01200001382827759,
-        "times_end": 0.11599998617172236,
-        "mass": 747.7190160276314,
+        "times_start": -1.3828277578564752e-08,
+        "times_end": 0.07999998617172244,
+        "mass": 417.9517415726014,
         "sign": 1,
         "p_value": 0.0003333333333333333,
         "significant": true,
-        "effect_size": 4.260567578713039,
+        "effect_size": 2.7332299815790204,
+        "effect_size_type": "cohens_dz"
+      },
+      {
+        "times_start": -0.020000013828277596,
+        "times_end": -0.008000013828277586,
+        "mass": -195.12110010697114,
+        "sign": -1,
+        "p_value": 0.0003333333333333333,
+        "significant": true,
+        "effect_size": -6.74410305646505,
+        "effect_size_type": "cohens_dz"
+      },
+      {
+        "times_start": 0.09199998617172245,
+        "times_end": 0.1519999861717224,
+        "mass": -718.852513076071,
+        "sign": -1,
+        "p_value": 0.0003333333333333333,
+        "significant": true,
+        "effect_size": -6.578095168703876,
         "effect_size_type": "cohens_dz"
       }
     ]
