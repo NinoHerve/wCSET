@@ -641,7 +641,7 @@ def source_recon(sub, overwrite=True):
     print(f"Estimated lambda2: {lambda2:.3f}")
 
     # cap SNR to 0.01
-    lambda2 = max(0.11, lambda2)
+    lambda2 = max(0.01, lambda2)
 
     # ---------------------------------
     # 2. Run source reconstructions <3
@@ -955,7 +955,8 @@ def evaluate_resection_localization(overwrite=False):
         patch_area = mm.anatomy.source_space.build_dipole_patch_area(src)
         resection_vertex_mask = mm.anatomy.source_space.sample_nifti_at_source_space(src, resec, ras2tkras)
 
-        # 2. Spike phases to evaluate: quarter rising phase (main) and peak (comparison)
+        # 2. Spike phases to evaluate: quarter rising phase (main) and peak
+        # (comparison) - 25%, matching Study I's simulation cohort convention.
         phases = {
             "qrp": mm.analysis.eeg.get_rising_phase(ave, ratio=0.25, as_idx=True),
             "pp":  mm.analysis.eeg.get_rising_phase(ave, ratio=1.0, as_idx=True),
@@ -1003,7 +1004,7 @@ def evaluate_resection_localization(overwrite=False):
     combined.save(fmetrics, overwrite=overwrite)
     shutil.rmtree(checkpoint_dir)
 
-evaluate_resection_localization(overwrite=True)  # must force-regen: results/spike/resection predates this session's solve_inverse.py parameter changes (depth/lambda2/harm, wMNE rename) and the switch from half- to quarter-rising-phase (ratio=0.25, "qrp" - was "hrp"/ratio=0.5), so overwrite=False would silently skip already-processed subjects and leave them stale
+evaluate_resection_localization(overwrite=True)  # must force-regen: results/spike/resection predates this session's solve_inverse.py parameter changes (depth/lambda2/harm, wMNE rename) and the switch back from half- to quarter-rising-phase (ratio=0.25, "qrp" - was "hrp"/ratio=0.5), so overwrite=False would silently skip already-processed subjects and leave them stale
 ```
 
 ## Chance-Level Cluster Threshold
