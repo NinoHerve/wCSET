@@ -40,11 +40,9 @@ class SimfManager(mm.io.DatasetManager):
         self.add_datatype("eeg-trans", "sim", self.build_simf_path, load_identity_trans)
         self.add_datatype("eeg", "sim", self.build_simf_path, lambda f: mne.io.read_raw_brainvision(f, verbose="warning"))
         self.add_datatype("gold", "sim", self.build_simf_path, mne.read_source_estimate)
-        self.add_datatype("gold-noisy", "sim", self.build_simf_path, mne.read_source_estimate)
         self.add_datatype("stc", "sim", self.build_simf_path, mne.read_source_estimate)
         self.add_datatype("cov", "sim", self.build_simf_path, self._load_cov)
         self.add_datatype("ave", "sim", self.build_simf_path, lambda f: mne.read_evokeds(f, verbose="warning")[0])
-        self.add_datatype("ave-clean", "sim", self.build_simf_path, lambda f: mne.read_evokeds(f, verbose="warning")[0])
         self.add_datatype("tractogram", "cmp", self.build_simf_path, nib.streamlines.load)
         self.add_datatype("t12diff", "cmp", self.build_simf_path, self._load_t12diff)
 
@@ -58,28 +56,29 @@ class SimfManager(mm.io.DatasetManager):
         elif suffix == "eeg-trans":
             path = Path(".")
 
-        elif suffix in ["eeg", "gold", "gold-noisy", "cov", "ave", "ave-clean", "stc"]:
+        elif suffix in ["eeg", "gold", "cov", "ave", "stc"]:
             task = kwargs.get("task")
             run = kwargs.get("run")
             if task is None or run is None:
                 raise ValueError(f"{suffix} data requires task and run entities.")
 
             folder = root/f"sub-{subject}"/suffix
+            desc = kwargs.get("desc")
+            # "gold"/"ave" carry an optional desc (e.g. desc="noisy" for gold,
+            # desc="clean" for ave) to distinguish the noise variant saved
+            # alongside the default file, rather than living under their own
+            # datatype - see mindmap's generate_simulation_dataset/_run_one.
+            desc_part = f"_desc-{desc}" if desc else ""
 
             if suffix == "eeg":
                 path = folder/f"sub-{subject}_task-{task}_run-{run}_eeg.vhdr"
             elif suffix == "gold":
-                path = folder/f"sub-{subject}_task-{task}_run-{run}_stc"
-            elif suffix == "gold-noisy":
-                path = folder/f"sub-{subject}_task-{task}_run-{run}_stc"
+                path = folder/f"sub-{subject}_task-{task}_run-{run}{desc_part}_stc"
             elif suffix == "cov":
                 path = folder/f"sub-{subject}_task-{task}_run-{run}_cov.fif"
             elif suffix == "ave":
-                path = folder/f"sub-{subject}_task-{task}_run-{run}_ave.fif"
-            elif suffix == "ave-clean":
-                path = folder/f"sub-{subject}_task-{task}_run-{run}_ave.fif"
+                path = folder/f"sub-{subject}_task-{task}_run-{run}{desc_part}_ave.fif"
             elif suffix == "stc":
-                desc = kwargs.get("desc")
                 if desc is None:
                     raise ValueError(f"{suffix} data requires desc entity.")
                 path = folder/f"sub-{subject}_task-{task}_run-{run}_desc-{desc}_stc"

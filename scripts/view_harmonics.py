@@ -10,8 +10,8 @@ harmonics. Must be run with `-m` (not as a plain script path) so that
 
 Pass several `--desc` values to compare conditions side by side, each in its
 own linked panel, scrolled through together with one shared slider/keyboard
-(`mm.viz.plot_eigvec_multi`). A single `--desc` falls back to the plain
-single-panel viewer (`mm.viz.plot_eigvec`).
+(several `mm.viz.BrainPlot.from_source_space` joined with `|`). A single
+`--desc` falls back to a plain single-panel `BrainPlot`.
 """
 
 import argparse
@@ -50,14 +50,16 @@ def main():
 
     if len(args.desc) == 1:
         eig = load_eig(dm, args.subject, args.desc[0])
-        mm.viz.plot_eigvec(src, eig["vec"], eig["val"]).show()
+        mm.viz.BrainPlot.from_source_space(src, values=eig["vec"], states=eig["val"]).show()
     else:
-        eigs, eigvals = {}, {}
+        panel = None
         for desc in args.desc:
             eig = load_eig(dm, args.subject, desc)
-            eigs[desc] = eig["vec"]
-            eigvals[desc] = eig["val"]
-        mm.viz.plot_eigvec_multi(src, eigs, eigvals).show()
+            brain = mm.viz.BrainPlot.from_source_space(
+                src, values=eig["vec"], states=eig["val"], title=desc,
+            )
+            panel = brain if panel is None else panel | brain
+        panel.show()
 
 
 if __name__ == "__main__":
