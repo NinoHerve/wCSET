@@ -131,7 +131,9 @@ def process_eeg(sub, overwrite):
     ncov.save(fcov, overwrite=overwrite)
 
     # 3. Make a report
-    mm.viz.create_pipeline_report(ave, ncov, sub, report_dir/f"sub-{sub}_desc-intra_ave.html")
+    mm.viz.build_preprocessing_report(
+        ave, ncov, subject_id=sub, fname=report_dir/f"sub-{sub}_desc-intra_ave.html",
+    )
 
 process_eeg(overwrite=False)
 ```
@@ -670,6 +672,11 @@ def source_recon(sub, overwrite=True):
 
     lambda2 = max(0.01, lambda2)
 
+    # TEMP HACK (revert later): force lambda2=0.01 for wCSET/beltrami only,
+    # test requested out-of-band - doesn't touch the SNR-derived `lambda2`
+    # above, still shared by CSET's fixed 0.1 / sLORETA / dSPM / wMNE.
+    lambda2_hack = 0.01
+
     # ---------------------------------
     # 2. Run source reconstructions <3
     # ---------------------------------
@@ -684,7 +691,7 @@ def source_recon(sub, overwrite=True):
         harm = 5,                   # harmonic weighting
         harmonic_method = "lowpass",
     )
-    wcset = inv.solve(ave, lambda2)
+    wcset = inv.solve(ave, lambda2_hack)
 
     # 2.2 CSET
     inv = mm.analysis.inverse.CSET(
@@ -722,7 +729,7 @@ def source_recon(sub, overwrite=True):
         harmonic_method = "logpass",
         cutoff = 150,
     )
-    beltrami = inv.solve(ave, lambda2)
+    beltrami = inv.solve(ave, lambda2_hack)
 
     # 3. Save
     wcset.save(fwcset, overwrite=overwrite, verbose="warning")
@@ -917,6 +924,212 @@ def evaluate_vieeg_fidelity(sub, overwrite):
 
 evaluate_vieeg_fidelity(overwrite=True)  # must force-regen: predates this session's solve_inverse.py/compute_vieeg.py changes, so overwrite=False would silently skip already-processed subjects and leave them stale
 ```
+
+## Reconstruction Renders
+
+Two illustrative figures for `index.qmd`'s Study III Results, both for the
+two main-text subjects (34/48 - the ones with a visible scalp EEG spike; see
+`index.qmd`'s note on why 12/50 are Annex-only).
+
+**Spatial panel:** wCSET vs. sLORETA cortical reconstruction, one view per
+subject (the hemisphere dominated by wCSET's own reconstruction, lateral
+view - these are lateralized clinical sources, not bilateral like Study I's
+simulations, so the full 4-view grid used there would mostly show empty
+cortex). Timepoint is the one that maximizes wCSET's own `correlation_spatial`
+(from the already-computed `results/intra/combined` suite) - sLORETA is
+rendered at that *same* timepoint (not its own best) for a fair comparison.
+
+**Channel-trace panel:** true intracranial recording vs. wCSET's and
+sLORETA's virtual iEEG, for the channel that maximizes wCSET's
+`correlation_temporal` subject to a non-spurious check - the channel's own
+peak amplitude in the evaluation window must exceed 3x its pre-spike
+baseline RMS, i.e. it has to contain a real burst, not just happen to
+correlate well by chance on a flat/noisy trace. Both subjects' top-ranked
+channel already clears this by a wide margin (>7x for sub-34, >19x for
+sub-48), so no fallback further down the ranking is needed here.
+
+```{python filename="intra_reconstruction_renders.py"}
+# | output: false
+
+from pathlib import Path
+
+import numpy as np
+import matplotlib.pyplot as plt
+import pyvista as pv
+
+import mindmap as mm
+from scripts.data_manager import IntraManager
+
+pv.OFF_SCREEN = True
+
+dm = IntraManager("intra.config.yml")
+MAIN_SUBJECTS = ["48", "34"]  # display order matches index.qmd's own MAIN_SUBJECTS ("Subject 1" = 48)
+
+fpng_brains = Path("./results/intra/reconstruction_spatial.png")
+fpng_channels = Path("./results/intra/reconstruction_channels.png")
+
+def best_correlation_time(suite_df, sub):
+    df = suite_df[
+        (suite_df["Metric"] == "correlation_spatial")
+        & (suite_df["Method"] == "wcset") & (suite_df["Subject"] == sub)
+    ]
+    return df.loc[df["Value"].idxmax(), "times"]
+
+def best_nonspurious_channel(suite_df, sub, iave, min_burst_ratio=3.0):
+    df = suite_df[
+        (suite_df["Metric"] == "correlation_temporal")
+        & (suite_df["Method"] == "wcset") & (suite_df["Subject"] == sub)
+    ].sort_values("Value", ascending=False)
+
+    iave_norm = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0, 1.0))
+    tmin, tmax = mm.analysis.eeg.find_spike_window(iave, baseline=(0, 1.0))
+    baseline_rms = {
+        ch: np.sqrt(np.mean(iave_norm.copy().crop(0, 1.0).get_data(picks=[ch]) ** 2))
+        for ch in df["channel"]
+    }
+    window = iave_norm.copy().crop(tmin, tmax)
+
+    for _, row in df.iterrows():
+        ch = row["channel"]
+        peak = np.max(np.abs(window.get_data(picks=[ch])))
+        if peak / baseline_rms[ch] >= min_burst_ratio:
+            return ch, row["Value"]
+
+    raise RuntimeError(f"No non-spurious channel found for sub-{sub} - lower min_burst_ratio.")
+
+def render_spatial_panel(overwrite=False):
+    if fpng_brains.exists() and not overwrite:
+        print("Already exists, skipping.")
+        return
+
+    suite_df = mm.metric.MetricSuite.load("./results/intra/combined").to_df()
+
+    row = None
+    for sub in MAIN_SUBJECTS:
+        src = dm.load(sub, "fwd")["src"]
+        t = best_correlation_time(suite_df, sub)
+        split = src[0]["nuse"]
+
+        panel = None
+        for method in ["wcset", "sloreta"]:
+            stc = dm.load(sub, "stc", task="spk", desc=method)
+            idx = stc.time_as_index(t)[0]
+            values = np.abs(stc.data[:, idx])
+            values = values / values.max()
+
+            if method == "wcset":
+                hemi = "lh" if values[:split].max() > values[split:].max() else "rh"
+
+            p = mm.viz.BrainPlot.from_source_space(
+                src, values=values, states=[0], hemi=hemi, view="lateral",
+                title=f"sub-{sub} {method}", scalar_name=f"{sub}_{method}",
+                mesh_params={"clim": (0.0, 1.0), "cmap": "Reds"},
+            )
+            panel = p if panel is None else panel | p
+        row = panel if row is None else row & panel
+
+    row.screenshot(fpng_brains, window_size=(800, 800))
+
+def render_channel_panel(overwrite=False):
+    if fpng_channels.exists() and not overwrite:
+        print("Already exists, skipping.")
+        return
+
+    suite_df = mm.metric.MetricSuite.load("./results/intra/combined").to_df()
+
+    fig, axes = plt.subplots(1, len(MAIN_SUBJECTS), figsize=(11, 3.5))
+    for ax, sub in zip(axes, MAIN_SUBJECTS):
+        iave = dm.load(sub, "i-ave", task="spk")
+        ch, corr = best_nonspurious_channel(suite_df, sub, iave)
+
+        iave_norm = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0, 1.0))
+        vave = {
+            m: mm.analysis.eeg.normalize_evoked_by_baseline(
+                dm.load(sub, "v-ave", task="spk", desc=m), baseline=(0, 1.0),
+            )
+            for m in ["wcset", "sloreta"]
+        }
+
+        ax.plot(iave_norm.times, iave_norm.get_data(picks=[ch]).squeeze(),
+                color="black", linewidth=1.5, label="True iEEG")
+        for m, color in [("wcset", "#d62728"), ("sloreta", "#1f77b4")]:
+            ax.plot(vave[m].times, vave[m].get_data(picks=[ch]).squeeze(),
+                    color=color, linewidth=1.2, alpha=0.85, label=m)
+        ax.set_title(f"sub-{sub}, channel {ch} (r={corr:.2f})", fontsize=9)
+        ax.set_xlabel("Time (s)")
+        ax.spines[["top", "right"]].set_visible(False)
+
+    axes[0].set_ylabel("Normalized amplitude")
+    axes[0].legend(loc="upper right", fontsize=7, frameon=False)
+    fig.tight_layout()
+    fig.savefig(fpng_channels, dpi=150)
+    plt.close(fig)
+
+render_spatial_panel(overwrite=True)
+render_channel_panel(overwrite=True)
+```
+
+**All-channels panel (exploratory):** every channel of sub-48's true
+intracranial recording vs. wCSET's, sLORETA's, and the Beltrami operator's
+virtual iEEG, so a channel can be picked by hand rather than only seeing the
+automatically-selected one above. Each channel is normalized by its own
+baseline standard deviation over `(0.0, 0.5)` s (pre-spike segment,
+narrower than the `(0, 1.0)` s convention used for the metrics above).
+
+```{python filename="intra_reconstruction_all_channels.py"}
+# | output: true
+
+fpng_channels_all_sub48 = Path("./results/intra/reconstruction_channels_all_sub-48.png")
+
+def render_all_channels_panel(sub="48", overwrite=False):
+    if fpng_channels_all_sub48.exists() and not overwrite:
+        print("Already exists, skipping.")
+        return
+
+    iave = dm.load(sub, "i-ave", task="spk")
+    vave = {m: dm.load(sub, "v-ave", task="spk", desc=m) for m in ["wcset", "sloreta", "beltrami"]}
+
+    baseline = (0.0, 0.5)
+    iave_norm = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=baseline)
+    vave_norm = {m: mm.analysis.eeg.normalize_evoked_by_baseline(v, baseline=baseline) for m, v in vave.items()}
+
+    ch_names = iave_norm.ch_names
+    n_cols = 10
+    n_rows = int(np.ceil(len(ch_names) / n_cols))
+
+    # shared y-range across every channel, so amplitudes stay comparable panel to panel
+    ymax = max(
+        np.abs(iave_norm.get_data()).max(),
+        *(np.abs(v.get_data()).max() for v in vave_norm.values()),
+    )
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(2.2 * n_cols, 1.6 * n_rows), sharex=True, sharey=True)
+    axes = axes.ravel()
+
+    for ax, ch in zip(axes, ch_names):
+        ax.plot(iave_norm.times, iave_norm.get_data(picks=[ch]).squeeze(),
+                color="black", linewidth=1.0, label="True iEEG")
+        for m, color in [("wcset", "#d62728"), ("sloreta", "#1f77b4"), ("beltrami", "#2ca02c")]:
+            ax.plot(vave_norm[m].times, vave_norm[m].get_data(picks=[ch]).squeeze(),
+                    color=color, linewidth=0.8, alpha=0.85, label=m)
+        ax.set_title(ch, fontsize=7)
+        ax.set_ylim(-ymax, ymax)
+        ax.tick_params(labelsize=5)
+        ax.spines[["top", "right"]].set_visible(False)
+
+    for ax in axes[len(ch_names):]:
+        ax.axis("off")
+
+    axes[0].legend(loc="upper right", fontsize=6, frameon=False)
+    fig.suptitle(f"sub-{sub}: all channels, normalized to baseline {baseline} s", fontsize=10)
+    fig.tight_layout(rect=[0, 0, 1, 0.98])
+    fig.savefig(fpng_channels_all_sub48, dpi=150)
+    plt.close(fig)
+
+render_all_channels_panel(overwrite=True)
+```
+
+![All channels, sub-48](results/intra/reconstruction_channels_all_sub-48.png)
 
 # Statistics
 

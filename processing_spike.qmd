@@ -108,7 +108,9 @@ def process_eeg(sub, overwrite):
     ncov.save(fcov, overwrite=overwrite)
 
     # 7. make report
-    mm.viz.create_pipeline_report(ave, ncov, sub, report_dir/f"sub-{sub}_desc-spike_ave.html")
+    mm.viz.build_preprocessing_report(
+        ave, ncov, subject_id=sub, fname=report_dir/f"sub-{sub}_desc-spike_ave.html",
+    )
 
 process_eeg(overwrite=False)
 ```
@@ -1083,6 +1085,166 @@ def compute_chance_cluster_threshold(sub, overwrite=False):
     mm.core.write_csv_row(fchance, row, index_cols=["subject"], write_new=True)
 
 compute_chance_cluster_threshold(overwrite=False)
+```
+
+## Reconstruction Render (Resection Example)
+
+Illustrative cortical-surface figure for `index.qmd`'s Study II Results:
+wCSET vs. sLORETA reconstruction at the quarter rising phase, across the
+four canonical single-hemisphere views, with the resection zone outlined
+(via a boundary contour on the same mesh, not a translucent fill - a
+solid-fill overlay coincident with the activity mesh produces GPU z-fighting
+and, worse, silently aliases the two meshes' scalar arrays if they share
+the same `pv.PolyData` object, so the boundary-contour approach is the
+correct one here, not a stylistic preference), plus each method's own
+peak-activity vertex marked directly (a single lime sphere) - the same
+global-|activity|-maximum dipole `find_peak_resection_distance` above uses
+as the "estimated location" behind `peak_distance_mm`/
+`peak_inside_resection`, so the marker is exactly what those metrics score,
+not a separate visual approximation. It's only drawn on whichever
+hemisphere it falls in for that method/row.
+
+**Which subject:** picked automatically from the already-computed
+`results/spike/resection` suite (qrp phase, seizure-free/ILAE==1, excluding
+the same subjects excluded from the Statistics section below) rather than
+hand-picked, since the study's own claim is that wCSET's peak lands inside
+the resection while standard methods' doesn't - the subject chosen is
+whichever one shows that contrast most clearly: wCSET's peak vertex falls
+inside the resection AND sLORETA's doesn't, breaking ties by the largest
+gap in `peak_distance_mm` between the two.
+
+```{python filename="resection_reconstruction_grid.py"}
+# | output: false
+
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import pyvista as pv
+
+import mindmap as mm
+from mindmap.geometry.io import surf_to_polydata
+from mindmap.anatomy.source_space.process import build_dense_vertex_map
+from mindmap.core.process import paint_on_dense_mesh
+from scripts.data_manager import SpikeManager
+
+pv.OFF_SCREEN = True
+
+dm = SpikeManager("spike.config.yml")
+
+fpng = Path("./results/spike/resection_reconstruction_grid.png")
+
+def select_example_subject():
+    """wCSET peak inside the resection, sLORETA's not, largest distance gap."""
+    # same exclusion list as spike_statistics.py's EXCLUDED_SUBJECTS below
+    # (pat01: no usable resection mask; pat18: no real resection zone) -
+    # duplicated here rather than referenced since that cell runs later in
+    # this file.
+    excluded_subjects = ["pat01", "pat18"]
+
+    suite = mm.metric.MetricSuite.load("./results/spike/resection")
+    df = suite.to_df()
+    df = df[(df["ILAE"] == 1) & (~df["Subject"].isin(excluded_subjects)) & (df["phase"] == "qrp")]
+
+    wide = df[df["Metric"].isin(["peak_distance_mm", "peak_inside_resection"])].pivot_table(
+        index=["Subject", "Method"], columns="Metric", values="Value", aggfunc="first",
+    ).reset_index()
+
+    w = wide[wide["Method"] == "wcset"].set_index("Subject")
+    s = wide[wide["Method"] == "sloreta"].set_index("Subject")
+    common = w.index.intersection(s.index)
+
+    candidates = pd.DataFrame({
+        "wcset_inside": w.loc[common, "peak_inside_resection"],
+        "sloreta_inside": s.loc[common, "peak_inside_resection"],
+        "gap": s.loc[common, "peak_distance_mm"] - w.loc[common, "peak_distance_mm"],
+    })
+    candidates = candidates[candidates["wcset_inside"] & ~candidates["sloreta_inside"]]
+    return candidates["gap"].idxmax()
+
+def render_resection_reconstruction_grid(overwrite=False):
+    if fpng.exists() and not overwrite:
+        print("Already exists, skipping.")
+        return
+
+    sub = select_example_subject()
+
+    fwd = dm.load(sub, "fwd")
+    src = fwd["src"]
+    ave = dm.load(sub, "ave", task="spike")
+    resec = dm.load(sub, "resec-ramp", space="pre")
+    ras2tkras = dm.load(sub, "ras2tkras")
+    resection_mask = mm.anatomy.source_space.sample_nifti_at_source_space(src, resec, ras2tkras).astype(float)
+
+    qrp_time = mm.analysis.eeg.get_rising_phase(ave, ratio=0.25, as_idx=False)
+
+    hemis = ["lh", "rh"]
+    split = src[0]["nuse"]
+    slices = {"lh": slice(0, split), "rh": slice(split, None)}
+    surfaces = {h: surf_to_polydata(src[i]["rr"] * 1000, src[i]["tris"]) for i, h in enumerate(hemis)}
+    vmaps = {h: build_dense_vertex_map(src[i]) for i, h in enumerate(hemis)}
+
+    # boundary contour of the resection zone, once per hemisphere - reused
+    # across both methods' rows since it doesn't depend on the method
+    outlines = {}
+    for h in hemis:
+        resection_dense = paint_on_dense_mesh(resection_mask[slices[h]], vmaps[h])
+        if resection_dense.max() == 0:
+            continue
+        contour_mesh = surfaces[h].copy()
+        contour_mesh["resection"] = resection_dense
+        outlines[h] = contour_mesh.contour(isosurfaces=[0.5], scalars="resection")
+
+    views = [("lh", "lateral"), ("lh", "medial"), ("rh", "lateral"), ("rh", "medial")]
+
+    def render_row(method, show_titles):
+        stc = dm.load(sub, "stc", task="spike", desc=method)
+        idx = stc.time_as_index(qrp_time)[0]
+        values = np.abs(stc.data[:, idx])
+
+        # single global-activity-maximum dipole - same definition as
+        # `find_peak_resection_distance` above (the "estimated location"
+        # behind peak_distance_mm/peak_inside_resection), so the marker
+        # matches the metric that picked this example subject.
+        peak_vertex = int(np.argmax(values))
+        peak_hemi = "lh" if peak_vertex < split else "rh"
+        peak_pos = mm.anatomy.source_space.get_dipole_positions(src)[peak_vertex] * 1000
+        peak_mesh = pv.PolyData(peak_pos[None, :])
+
+        values = values / values.max()
+
+        row = None
+        for hemi, view in views:
+            activity_dense = paint_on_dense_mesh(values[slices[hemi]], vmaps[hemi])
+            activity_panel = mm.viz.BrainPlot(
+                surfaces=surfaces[hemi].copy(), values=activity_dense, hemi=hemi, view=view,
+                title=f"{hemi.upper()} {view}" if show_titles else "",
+                scalar_name=method, mesh_params={"clim": (0.0, 1.0), "cmap": "Reds"},
+            )
+            panel = activity_panel
+            if hemi in outlines:
+                # `outlines[hemi]` is a line-only mesh (no faces), so `Layer`
+                # auto-detects style="points" and draws it as sphere glyphs,
+                # not a continuous line - shrink them so they're precise
+                # anchor points to trace over rather than fat blobs.
+                outline_panel = mm.viz.SurfacePlot(
+                    mesh=outlines[hemi], scalar_name="resection_outline",
+                    mesh_params={"color": "white", "point_size": 2, "render_points_as_spheres": True},
+                )
+                panel = panel + outline_panel
+            if hemi == peak_hemi:
+                peak_panel = mm.viz.SurfacePlot(
+                    mesh=peak_mesh, scalar_name=f"{method}_peak",
+                    mesh_params={"color": "lime", "point_size": 16, "render_points_as_spheres": True},
+                )
+                panel = panel + peak_panel
+            row = panel if row is None else row | panel
+        return row
+
+    grid = render_row("wcset", show_titles=True) & render_row("sloreta", show_titles=False)
+    grid.screenshot(fpng, window_size=(1600, 800))
+
+render_resection_reconstruction_grid(overwrite=True)
 ```
 
 # Statistics

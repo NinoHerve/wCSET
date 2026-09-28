@@ -1907,7 +1907,7 @@ def run_comparison(overwrite=False):
       fsolutions=fsolutions,
       fave=dm.get_path(sub, "ave", task="spk", run=int(run)),
       simulator_dir=simulator_dir,
-      fgoldnoisy=dm.get_path(sub, "gold-noisy", task="spk", run=int(run)),
+      fgoldnoisy=dm.get_path(sub, "gold", task="spk", run=int(run), desc="noisy"),
     ))
 
   print(f"{len(tasks)}/{len(index)} runs fully reconstructed - scoring those now"
@@ -1980,6 +1980,104 @@ Plots of these results (spatial correlation over time, sensor qrp/pp timing)
 live in `index.qmd`'s Results section (`simf_localization_stats.py`/
 `simf_correlation_plot.py`), not here - this file only produces the data
 (`results/simf/flagship`) they read.
+
+### Reconstruction Renders
+
+Ground truth vs. reconstruction cortical-surface figure for `index.qmd`'s
+Study I Results: the same flagship run/region already used by
+`fig-flagship-example` (sub-10, run 273, `ctx-lh-caudalmiddlefrontal_3`),
+rendered at both landmark timepoints (quarter rising phase and peak phase,
+Section 2.6.2) for three conditions (gold, wCSET, sLORETA) across the four
+canonical single-hemisphere views (LH/RH x lateral/medial), via the
+`mm.viz.BrainPlot` framework (see `processing_intra.qmd`/Annex for the same
+framework used elsewhere).
+
+Each row (one condition) is independently normalized (`abs` then divided by
+its own max) and given a fixed `clim=(0, 1)` - gold/wCSET/sLORETA are on
+different units, so a single shared scale across all three would be
+meaningless; within a row, all 4 views share that row's scale so the view
+panels stay comparable to each other. `src`/`ave`/the three conditions'
+STCs are loaded once and reused for both timepoints, since these loads (and
+the render itself) are the expensive part - only the time index into each
+STC changes between the two output PNGs. The wCSET/sLORETA row labels carry
+their signed Pearson spatial correlation with gold at that timepoint (same
+definition as `fig-correlation-time`), so the two reconstruction rows are
+readable without a separate lookup. Saved as static PNGs (off-screen
+PyVista render), embedded by `index.qmd` rather than computed inline there.
+
+```{python filename="flagship_reconstruction_grid.py"}
+# | output: false
+
+from pathlib import Path
+
+import numpy as np
+import pyvista as pv
+
+import mindmap as mm
+from scripts.data_manager import SimfManager
+
+pv.OFF_SCREEN = True
+
+dm = SimfManager("simf.config.yml")
+sub, run = "10", 273
+
+PHASES = [
+  ("qrp", 0.25, Path("./results/simf/flagship_reconstruction_grid_qrp.png")),
+  ("pp", 1.0, Path("./results/simf/flagship_reconstruction_grid_pp.png")),
+]
+
+def render_flagship_reconstruction_grid(overwrite=False):
+  if all(fpng.exists() for _, _, fpng in PHASES) and not overwrite:
+    print("Already exists, skipping.")
+    return
+
+  src = dm.load(sub, "fwd", desc="sim")["src"]
+  ave = dm.load(sub, "ave", task="spk", run=run)
+
+  gold_stc = dm.load(sub, "gold", task="spk", run=run)
+  conditions = [
+    ("gold", gold_stc),
+    ("wcset", dm.load(sub, "stc", task="spk", run=run, desc="wcset")),
+    ("sloreta", dm.load(sub, "stc", task="spk", run=run, desc="sloreta")),
+  ]
+  views = [("lh", "lateral"), ("lh", "medial"), ("rh", "lateral"), ("rh", "medial")]
+
+  def spatial_corr(stc, phase_time):
+    """Signed Pearson spatial correlation vs. gold at `phase_time` - same
+    definition as the qrp/peak correlation curve in `fig-correlation-time`."""
+    idx_gold = gold_stc.time_as_index(phase_time)[0]
+    idx = stc.time_as_index(phase_time)[0]
+    return np.corrcoef(gold_stc.data[:, idx_gold], stc.data[:, idx])[0, 1]
+
+  def render_row(stc, name, phase_time, show_titles):
+    idx = stc.time_as_index(phase_time)[0]
+    values = np.abs(stc.data[:, idx])
+    values = values / values.max()
+
+    label = name if stc is gold_stc else f"{name} (r={spatial_corr(stc, phase_time):.2f})"
+
+    row = None
+    for hemi, view in views:
+      panel = mm.viz.BrainPlot.from_source_space(
+        src, values=values, states=[0], hemi=hemi, view=view,
+        title=f"{hemi.upper()} {view}" if show_titles else "",
+        scalar_name=label, mesh_params={"clim": (0.0, 1.0), "cmap": "Reds"},
+      )
+      row = panel if row is None else row | panel
+    return row
+
+  for _, ratio, fpng in PHASES:
+    phase_time = mm.analysis.eeg.get_rising_phase(ave, ratio=ratio, as_idx=False)
+
+    grid = None
+    for i, (name, stc) in enumerate(conditions):
+      row = render_row(stc, name, phase_time, show_titles=(i == 0))
+      grid = row if grid is None else grid & row
+
+    grid.screenshot(fpng, window_size=(1600, 1200))
+
+render_flagship_reconstruction_grid(overwrite=True)
+```
 
 ## Experiment 1: Noise/SNR Sweep Reconstruction & Validation
 
@@ -2210,7 +2308,7 @@ def run_noise_sweep_reconstruction(overwrite=False):
       fgold=dm.get_path(noisesweep_subject, "gold", task="spk", run=run),
       fsource=sources_dir/f"run-{run:03d}_source.json",
       foutputs=needed,
-      faveclean=dm.get_path(noisesweep_subject, "ave-clean", task="spk", run=run),
+      faveclean=dm.get_path(noisesweep_subject, "ave", task="spk", run=run, desc="clean"),
     ))
 
   print(f"{len(df_sweep) - len(tasks)}/{len(df_sweep)} runs already fully done, {len(tasks)} left.")
@@ -2398,8 +2496,8 @@ def run_noise_sweep_comparison(overwrite=QUICK_TEST):
       fsolutions=fsolutions,
       fave=dm.get_path(noisesweep_subject, "ave", task="spk", run=run),
       simulator_dir=simulator_dir,
-      faveclean=dm.get_path(noisesweep_subject, "ave-clean", task="spk", run=run),
-      fgoldnoisy=dm.get_path(noisesweep_subject, "gold-noisy", task="spk", run=run),
+      faveclean=dm.get_path(noisesweep_subject, "ave", task="spk", run=run, desc="clean"),
+      fgoldnoisy=dm.get_path(noisesweep_subject, "gold", task="spk", run=run, desc="noisy"),
     ))
 
   print(f"{len(tasks)}/{len(df_sweep)} runs fully reconstructed - scoring those now"
@@ -2663,7 +2761,7 @@ def run_degradation_reconstruction(overwrite=False):
       fcov=dm.get_path(sub, "cov", task="spk", run=int(r)),
       fgold=dm.get_path(sub, "gold", task="spk", run=int(r)),
       fsource=sources_dir/f"run-{int(r):03d}_source.json",
-      fgoldnoisy=dm.get_path(sub, "gold-noisy", task="spk", run=int(r)),
+      fgoldnoisy=dm.get_path(sub, "gold", task="spk", run=int(r), desc="noisy"),
     )
     for r in probe_runs
   ]
@@ -2933,7 +3031,7 @@ def run_surrogate_reconstruction(overwrite=False):
       fcov=dm.get_path(sub, "cov", task="spk", run=int(r)),
       fgold=dm.get_path(sub, "gold", task="spk", run=int(r)),
       fsource=sources_dir/f"run-{int(r):03d}_source.json",
-      fgoldnoisy=dm.get_path(sub, "gold-noisy", task="spk", run=int(r)),
+      fgoldnoisy=dm.get_path(sub, "gold", task="spk", run=int(r), desc="noisy"),
     )
     for r in probe_runs
   ]
