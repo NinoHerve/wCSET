@@ -258,133 +258,10 @@ Method comparisons are paired and tested against a reference method, typically w
 # Results
 ```{python filename=plot_configuration.py}
 import numpy as np
-import matplotlib.colors
 
-COLORS = {
-    "wcset":    "#2a78d6",  # blue
-    "cset":     "#1baf7a",  # aqua
-    "sloreta":  "#008300",  # green
-    "dspm":     "#4a3aa7",  # violet
-    "wmne":     "#e34948",  # red
-    "beltrami": "#eda100",  # ochre - Studies II/III only
-}
-LINE_COLOR = "#898781"  # neutral gray for reference lines
-
-# Study I methods; Beltrami (Studies II/III only) is appended locally.
-METHODS = ["wcset", "cset", "sloreta", "dspm", "wmne"]
-METHOD_LABELS = {
-    "wcset": "wCSET", "cset": "CSET", "sloreta": "sLORETA", "dspm": "dSPM", "wmne": "wMNE",
-    "beltrami": "Beltrami",
-}
-
-# Formatting helpers for statistics quoted in the prose.
-def fmt_p(p, thresh=0.001):
-    """p-value for prose, e.g. '< 0.001' or '= 0.023'."""
-    return f"< {thresh}" if p < thresh else f"= {p:.3f}"
-
-# Label helpers marking the reference method.
-def mark_reference(ax, reference, suffix=" (ref.)"):
-    """Appends `suffix` to `reference`'s entry in `ax`'s already-built legend, in place."""
-    for text in ax.get_legend().get_texts():
-        if text.get_text() == reference:
-            text.set_text(text.get_text() + suffix)
-            break
-
-def ref_labels(names, reference, suffix=" (ref.)"):
-    """Tick-label list with `suffix` appended to `reference`'s entry."""
-    return [f"{n}{suffix}" if n == reference else n for n in names]
-
-def fmt_stat(value, digits=2):
-    """Effect size (rank-biserial, Cohen's dz, etc.) for prose, e.g. '-0.48'."""
-    return f"{value:.{digits}f}"
-
-def fmt_num(value, digits=1):
-    """Plain descriptive number (medians, mm, %, correlation units) for prose."""
-    return f"{value:.{digits}f}"
-
-def main_cluster(cluster_df):
-    """Largest-mass cluster of one competitor's cluster table."""
-    return cluster_df.loc[cluster_df["mass"].abs().idxmax()]
-
-def competitor_row(result, competitor, reference="wcset"):
-    """Result row comparing `reference` with `competitor`, in either stored order."""
-    t = result.table
-    row = t[(t["group_a"] == reference) & (t["group_b"] == competitor)]
-    if row.empty:
-        row = t[(t["group_a"] == competitor) & (t["group_b"] == reference)]
-    return row.iloc[0]
-
-# Paired-difference panels: one difference per pairing unit, positive = reference better.
-# Points below VIOLIN_MIN_N units, violins above.
-VIOLIN_MIN_N = 30
-FILL_ALPHA = 0.45  # shared fill opacity for boxes and violins
-LINE_MATTE = 0.75  # line strength: lines stay opaque but softened toward white
-
-def matte(color, strength=LINE_MATTE):
-    """Opaque color blended toward white, matching the softened fills."""
-    r, g, b = matplotlib.colors.to_rgb(color)
-    return (1 - strength + strength * r, 1 - strength + strength * g, 1 - strength + strength * b)
-
-def soften_boxes(ax):
-    """Apply FILL_ALPHA to box fills already drawn on `ax`, keeping edges opaque."""
-    for patch in ax.patches:
-        r, g, b, _ = patch.get_facecolor()
-        patch.set_facecolor((r, g, b, FILL_ALPHA))
-
-def ref_effect(result, competitor, reference="wcset", higher_is_better=True):
-    """Effect size signed so positive = `reference` better."""
-    row = competitor_row(result, competitor, reference)
-    es = row["effect_size"] if row["group_a"] == reference else -row["effect_size"]
-    return es if higher_is_better else -es
-
-def stars_for(p):
-    return "***" if p < 0.001 else "**" if p < 0.01 else "*" if p < 0.05 else "ns"
-
-def paired_diff_panel(ax, diffs, order, colors, annotations=None, seed=0):
-    """Draw per-unit paired differences, one column per entry of `order`.
-
-    diffs: {name: 1-D array}, already oriented so positive = reference better.
-    annotations: {name: [line, ...]} drawn above each column, top line first.
-    """
-    ax.axhline(0, color=LINE_COLOR, linewidth=1, zorder=0)
-    rng = np.random.default_rng(seed)
-    for i, c in enumerate(order):
-        y = np.asarray(diffs[c], dtype=float)
-        if len(y) >= VIOLIN_MIN_N:
-            vp = ax.violinplot([y], positions=[i], widths=0.7, showextrema=False)
-            for body in vp["bodies"]:
-                body.set_facecolor(colors[c])
-                body.set_edgecolor(colors[c])
-                body.set_alpha(FILL_ALPHA)
-                body.set_zorder(1)
-            q1, q3 = np.percentile(y, [25, 75])
-            ax.plot([i, i], [q1, q3], color="#0b0b0b", linewidth=1.5, zorder=3)
-        else:
-            x = i + rng.uniform(-0.12, 0.12, size=len(y))
-            ax.scatter(x, y, s=18, color=colors[c], alpha=0.8,
-                       edgecolors="white", linewidths=0.6, zorder=2)
-        med = np.median(y)
-        ax.plot([i - 0.22, i + 0.22], [med, med], color="#0b0b0b", linewidth=2, zorder=4)
-
-    ymax = max(np.max(diffs[c]) for c in order)
-    ymin = min(np.min(diffs[c]) for c in order)
-    span = (ymax - ymin) or 1.0
-    n_lines = max((len(v) for v in (annotations or {}).values()), default=0)
-    step = 0.075 * span
-    for i, c in enumerate(order):
-        for k, line in enumerate((annotations or {}).get(c, [])):
-            ax.text(i, ymax + 0.02 * span + (n_lines - 1 - k) * step, line, ha="center", va="bottom",
-                    fontsize=8 if k == 0 else 7, color="#222222" if k == 0 else "#555555")
-    ax.set_ylim(ymin - 0.05 * span, ymax + (0.06 + n_lines * 0.075) * span)
-    ax.set_xticks(range(len(order)))
-    ax.spines[["top", "right"]].set_visible(False)
-
-def mark_direction(ax, better="wCSET better", worse="other method better"):
-    """Label which sign of the difference favors which side."""
-    for text, dy, va in [(f"{better} ↑", 4, "bottom"), (f"{worse} ↓", -4, "top")]:
-        ax.annotate(text, xy=(1.0, 0.0), xycoords=("axes fraction", "data"),
-                    xytext=(4, dy), textcoords="offset points", fontsize=7,
-                    color="#666666", ha="left", va=va)
+# Shared colors, labels, prose formatters and plot helpers (scripts/figures.py),
+# also used by the Annex and the processing notebooks.
+from scripts.figures import *
 ```
 
 ## Study I: Simulation-Based Validation {#sec-study1}
@@ -466,9 +343,6 @@ We hypothesized that connectivity-informed methods would match standard methods 
 import json
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
-from matplotlib.cm import ScalarMappable
-from matplotlib.colors import Normalize
 from scripts.data_manager import SimfManager
 
 # Example run (sub-10, run 273); brain panels and correlations from processing_simf.qmd
@@ -477,12 +351,6 @@ ave = dm.load("10", "ave", task="spk", run=273)
 EX_DIR = "./results/simf/flagship_example"
 ex_corr = json.load(open(f"{EX_DIR}/correlations.json"))
 t1, t2 = ex_corr["qrp"]["time"], ex_corr["pp"]["time"]
-
-def crop_white(img, pad=4):
-    """Trim the white margin around a rendered brain."""
-    mask = img[..., :3].min(axis=2) < 0.98
-    rows, cols = np.where(mask)
-    return img[max(rows.min() - pad, 0):rows.max() + pad, max(cols.min() - pad, 0):cols.max() + pad]
 
 fig = plt.figure(figsize=(10, 8.6))
 outer = fig.add_gridspec(2, 1, height_ratios=[1, 2.6], hspace=0.35)
@@ -514,11 +382,7 @@ for b, (phase, block_title) in enumerate(BLOCKS):
     for r, (cond, row_label) in enumerate(ROWS):
         for v, (view, view_label) in enumerate(VIEWS):
             ax = fig.add_subplot(brains[r, 3 * b + v])
-            ax.imshow(crop_white(mpimg.imread(f"{EX_DIR}/{phase}_{cond}_lh-{view}.png")))
-            ax.set_xticks([])
-            ax.set_yticks([])
-            for spine in ax.spines.values():
-                spine.set_visible(False)
+            image_panel(ax, f"{EX_DIR}/{phase}_{cond}_lh-{view}.png")
             if r == 0:
                 ax.set_title(view_label, fontsize=8, color="#444444")
                 if v == 0:
@@ -530,10 +394,7 @@ for b, (phase, block_title) in enumerate(BLOCKS):
                         fontsize=8, ha="left", va="bottom")
 
 # Shared colorbar
-cax = fig.add_axes([0.35, 0.045, 0.3, 0.012])
-fig.colorbar(ScalarMappable(norm=Normalize(0, 1), cmap="Reds"), cax=cax, orientation="horizontal")
-cax.set_xlabel("Normalized absolute activity", fontsize=8)
-cax.tick_params(labelsize=7)
+colorbar(fig, [0.35, 0.045, 0.3, 0.012], (0, 1), "Reds", "Normalized absolute activity")
 plt.show()
 ```
 
@@ -666,10 +527,8 @@ corr1_dax.set_title("b2. Spatial correlation: paired difference vs. wCSET (media
 corr1_dax.spines[["top", "right"]].set_visible(False)
 
 # Column headers: each column is one metric, absolute values on top, paired differences below
-for _ax, _hdr in [(loc1_ax, "LOCALIZATION ERROR (quarter rising phase)"),
-                  (corr1_ax, "SPATIAL CORRELATION (over time)")]:
-    _x0 = _ax.get_position().x0
-    s1_fig.text(_x0, 0.955, _hdr, fontsize=11, fontweight="bold", ha="left", va="bottom")
+column_headers(s1_fig, [(loc1_ax, "LOCALIZATION ERROR (quarter rising phase)"),
+                        (corr1_ax, "SPATIAL CORRELATION (over time)")], y=0.955)
 ```
 
 As the source propagated beyond onset, wCSET's advantage emerged: spatial correlation with the ground truth, tracked from the quarter rising phase through the peak (@fig-s1-localization b), was significantly higher for wCSET than every other method's across nearly the entire displayed window (cluster-based permutation testing, region-paired, FDR-corrected), with much larger effect sizes against the three standard methods (Cohen's dz = `{python} corr1_sloreta_dz` for sLORETA) than against CSET (dz = `{python} corr1_cset_dz`), and the gap between connectivity-informed and standard methods widening toward the peak.
@@ -919,11 +778,9 @@ plt.tight_layout()
 
 # Column headers: each column is one metric/phase, per-condition values on top, paired differences below
 surr_fig.subplots_adjust(top=0.88)
-for _ax, _hdr in zip(surr_axes, ["LOCALIZATION ERROR\n(quarter rising phase)",
-                                 "SPATIAL CORRELATION\n(quarter rising phase)",
-                                 "SPATIAL CORRELATION\n(peak phase)"]):
-    _pos = _ax.get_position()
-    surr_fig.text(_pos.x0, 0.94, _hdr, fontsize=11, fontweight="bold", ha="left", va="bottom")
+column_headers(surr_fig, zip(surr_axes, ["LOCALIZATION ERROR\n(quarter rising phase)",
+                                        "SPATIAL CORRELATION\n(quarter rising phase)",
+                                        "SPATIAL CORRELATION\n(peak phase)"]), y=0.94)
 ```
 
 
@@ -1001,9 +858,6 @@ wCSET thus matched every other method's localization accuracy in real, noisier c
 #| fig-cap: "Localization against the resection in the seizure-free cohort, half rising phase. (a1) Peak-to-resection distance (mm) per method (box = IQR, line = median, one point per subject). (a2) Paired peak-to-resection distance difference, each method minus wCSET, one point per subject (thick line = median); positive = wCSET closer to the resection. Above each column: significance vs. wCSET (Wilcoxon signed-rank, subject-paired, FDR-corrected), rank-biserial r (positive = wCSET better), and the number of subjects where wCSET is better/tied/worse. (b) wCSET and sLORETA reconstructions for one subject (columns), all four cortical views (rows). Each map shows absolute activity normalized to its own maximum; the black line outlines the resection and the green marker shows each method's peak, the location scored in (a1, a2). The subject was selected automatically as the one where wCSET's peak falls inside the resection and sLORETA's does not, with the largest distance gap between the two."
 import json
 import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
-from matplotlib.cm import ScalarMappable
-from matplotlib.colors import Normalize
 from matplotlib.lines import Line2D
 
 # Left column: localization statistics; right column: example subject
@@ -1049,22 +903,13 @@ res_ex = json.load(open(f"{RES_DIR}/example.json"))
 RES_VIEWS = [("lh", "lateral"), ("lh", "medial"), ("rh", "lateral"), ("rh", "medial")]
 _res_right = _res_cols[1].subgridspec(4, 2, wspace=0.03, hspace=0.04)
 
-def _crop_white(img, pad=4):
-    mask = img[..., :3].min(axis=2) < 0.98
-    rows, cols = np.where(mask)
-    return img[max(rows.min() - pad, 0):rows.max() + pad, max(cols.min() - pad, 0):cols.max() + pad]
-
 _res_brain_axes = []
 for c, method in enumerate(["wcset", "sloreta"]):
     dist = res_ex["peak_distance_mm"][method]
     for v, (hemi, view) in enumerate(RES_VIEWS):
         ax = resection_fig.add_subplot(_res_right[v, c])
         _res_brain_axes.append(ax)
-        ax.imshow(_crop_white(mpimg.imread(f"{RES_DIR}/{method}_{hemi}-{view}.png")))
-        ax.set_xticks([])
-        ax.set_yticks([])
-        for spine in ax.spines.values():
-            spine.set_visible(False)
+        image_panel(ax, f"{RES_DIR}/{method}_{hemi}-{view}.png")
         if v == 0:
             where = "inside resection" if dist == 0 else f"{dist:.0f} mm from resection"
             ax.set_title(f"{METHOD_LABELS[method]}\npeak {where}", fontsize=9)
@@ -1083,10 +928,8 @@ resection_fig.legend(
                     markersize=8, label="Peak activity")],
     loc="upper center", bbox_to_anchor=((_res_x0 + _res_x1) / 2, _res_y0 - 0.005), fontsize=8, frameon=False, ncol=2,
 )
-_res_cax = resection_fig.add_axes([_res_x0 + 0.25 * (_res_x1 - _res_x0), _res_y0 - 0.075, 0.5 * (_res_x1 - _res_x0), 0.014])
-resection_fig.colorbar(ScalarMappable(norm=Normalize(0, 1), cmap="Reds"), cax=_res_cax, orientation="horizontal")
-_res_cax.set_xlabel("Normalized absolute activity", fontsize=8)
-_res_cax.tick_params(labelsize=7)
+colorbar(resection_fig, [_res_x0 + 0.25 * (_res_x1 - _res_x0), _res_y0 - 0.075, 0.5 * (_res_x1 - _res_x0), 0.014],
+         (0, 1), "Reds", "Normalized absolute activity")
 ```
 
 An individual example illustrates what this distance means spatially (@fig-resection-localization b): a seizure-free subject where wCSET's peak activity at the half rising phase falls inside the resected zone while sLORETA's does not, selected automatically as the clearest such case in the cohort (largest peak-to-resection distance gap between the two methods, among subjects where this in/out contrast holds).
@@ -1196,45 +1039,26 @@ import matplotlib.pyplot as plt
 
 VIEEG_ORDER = ["wcset"] + COMPETITORS
 
-def vieeg_annotations(subject, metric):
-    results = vieeg_results[(subject, metric)]
-    return {c: [stars_for(competitor_row(results, c)["p_corrected"]), f"dz={ref_effect(results, c):+.2f}",
-                f"{_winrate(subject, metric, c) - 0.5:+.0%}"] for c in COMPETITORS}
-
 # Main-text subjects only; 12 and 50 are in the Annex.
 vieeg_fig, vieeg_axes = plt.subplots(
     3, len(MAIN_SUBJECTS), figsize=(4.6 * len(MAIN_SUBJECTS), 12),
     gridspec_kw={"hspace": 0.6, "wspace": 0.3}, squeeze=False,
 )
-_abs_axes = vieeg_axes[0]
 for col_i, subject in enumerate(MAIN_SUBJECTS):
     letter = "ab"[col_i]
 
-    # (1) Signed spatial correlation per method, chance range shaded
-    wide = vieeg_wide[(subject, _r)]
+    # (1) Spatial correlation per method, chance range shaded
     ax = vieeg_axes[0, col_i]
-    ax.axhspan(*vieeg_chance(subject, _r), color="#c3c2b7", alpha=0.35, linewidth=0, zorder=0)
-    ax.axhline(0, color=LINE_COLOR, linestyle=":", linewidth=1, zorder=0)
-    bp = ax.boxplot([wide[m].to_numpy(dtype=float) for m in VIEEG_ORDER], positions=range(len(VIEEG_ORDER)),
-                    widths=0.55, patch_artist=True, showfliers=False)
-    for patch, m in zip(bp["boxes"], VIEEG_ORDER):
-        patch.set_facecolor(COLORS[m])
-        patch.set_edgecolor("#222222")
-    soften_boxes(ax)
-    for element in ["whiskers", "caps", "medians"]:
-        for line in bp[element]:
-            line.set_color("#222222")
-    ax.set_xticks(range(len(VIEEG_ORDER)))
-    ax.set_xticklabels(ref_labels([METHOD_LABELS[m] for m in VIEEG_ORDER], "wCSET"), rotation=45, ha="right", fontsize=8)
+    method_boxes(ax, vieeg_wide[(subject, _r)], VIEEG_ORDER, chance=vieeg_chance(subject, _r), chance_value=0)
     ax.set_title(f"{letter}1. {SUBJECT_TITLES[subject]}: spatial correlation per method", loc="left", fontsize=9)
-    ax.spines[["top", "right"]].set_visible(False)
     if col_i == 0:
         ax.set_ylabel("Spatial correlation (signed r)\nvirtual vs. recorded iEEG", fontsize=8)
 
     # (2, 3) Paired differences per timepoint, positive = wCSET better
     for row_i, metric in enumerate(VIEEG_METRICS, start=1):
         dax = vieeg_axes[row_i, col_i]
-        paired_diff_panel(dax, vieeg_diffs[(subject, metric)], COMPETITORS, COLORS, vieeg_annotations(subject, metric))
+        diffs = vieeg_diffs[(subject, metric)]
+        paired_diff_panel(dax, diffs, COMPETITORS, COLORS, vs_annotations(vieeg_results[(subject, metric)], diffs, COMPETITORS))
         dax.set_xticklabels([METHOD_LABELS[c] for c in COMPETITORS], rotation=45, ha="right", fontsize=8)
         dax.set_title(f"{letter}{row_i + 1}. {SUBJECT_TITLES[subject]}: {VIEEG_METRICS[metric]},\n"
                       "paired difference vs. wCSET", loc="left", fontsize=9)
@@ -1242,12 +1066,7 @@ for col_i, subject in enumerate(MAIN_SUBJECTS):
             dax.set_ylabel(f"wCSET − method\n({VIEEG_METRICS[metric]})", fontsize=8)
 for row_i in (1, 2):
     mark_direction(vieeg_axes[row_i, -1])
-
-# shared y within the per-method row so the two subjects are comparable
-_lo = min(a.get_ylim()[0] for a in _abs_axes)
-_hi = max(a.get_ylim()[1] for a in _abs_axes)
-for a in _abs_axes:
-    a.set_ylim(_lo, _hi)
+share_ylim(vieeg_axes[0])  # per-method row comparable across subjects
 ```
 
 The spatial pattern behind these correlations is visible directly at the intracranial contacts (@fig-intra-reconstruction), at the timepoint where wCSET's own spatial correlation with the recording peaks: in Subject 1, wCSET's virtual iEEG reproduces the recorded positive cluster on the deep left temporal contacts, with the right sign on 7 of the 8 strongest contacts, while sLORETA's has the opposite sign on 6 of them; in Subject 2 the difference is subtler, in line with the closer correlations. The same fidelity shows up in the time domain (@fig-intra-channels): for each subject's single most temporally-correlated (and genuinely spike-containing, not spuriously correlated) intracranial channel, wCSET's virtual recording tracks the true channel's burst more closely than sLORETA's.
@@ -1258,9 +1077,6 @@ The spatial pattern behind these correlations is visible directly at the intracr
 #| fig-cap: "Recorded vs. virtual intracranial EEG at one timepoint, for the two main-text subjects (one row each). (a1, b1) Intracranial global field power (GFP, standard deviation across contacts) of the recorded iEEG and of wCSET's and sLORETA's virtual iEEG, each scaled to its own maximum within the spike window (shaded); the dashed line marks the timepoint shown on the right, the one maximizing wCSET's signed spatial correlation with the recording (sLORETA shown at the same timepoint). (a2–a4, b2–b4) Superior view of a translucent cortex with every intracranial contact colored by its amplitude at that timepoint: recorded iEEG, wCSET's and sLORETA's virtual iEEG. Each map is z-scored across contacts and shown with its own sign, as scored by the spatial correlation; r = signed spatial correlation with the recording."
 import json
 import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
-from matplotlib.cm import ScalarMappable
-from matplotlib.colors import Normalize
 
 # Glass-brain renders and GFP curves from processing_intra.qmd
 GLASS_DIR = "./results/intra/glass_example"
@@ -1300,21 +1116,14 @@ for row, sub in enumerate(MAIN_SUBJECTS):
     # (2-4) Glass brains at that timepoint
     for col, k in enumerate(["recorded"] + GLASS_METHODS, start=1):
         ax = glass_fig.add_subplot(_glass_grid[row, col])
-        ax.imshow(crop_white(mpimg.imread(f"{GLASS_DIR}/sub-{sub}_{k}.png")))
-        ax.set_xticks([])
-        ax.set_yticks([])
-        for spine in ax.spines.values():
-            spine.set_visible(False)
+        image_panel(ax, f"{GLASS_DIR}/sub-{sub}_{k}.png")
         title = "Recorded iEEG" if k == "recorded" else f"{METHOD_LABELS[k]} virtual iEEG\nr = {g['r'][k]:.2f}"
         ax.set_title(f"{letter}{col + 1}. {title}", loc="left", fontsize=10)
 
 # Shared colorbar for every glass brain
 _g0 = glass[MAIN_SUBJECTS[0]]
-cax = glass_fig.add_axes([0.62, 0.05, 0.22, 0.012])
-glass_fig.colorbar(ScalarMappable(norm=Normalize(-_g0["clim"], _g0["clim"]), cmap=_g0["cmap"]),
-                   cax=cax, orientation="horizontal")
-cax.set_xlabel("Contact amplitude at t (z across contacts)", fontsize=8)
-cax.tick_params(labelsize=7)
+colorbar(glass_fig, [0.62, 0.05, 0.22, 0.012], (-_g0["clim"], _g0["clim"]), _g0["cmap"],
+         "Contact amplitude at t (z across contacts)")
 plt.show()
 ```
 

@@ -1443,9 +1443,8 @@ the spike window and the paired comparison with wCSET (dz > 0: wCSET better).
 ```{python filename="intra_spatial_metrics_plot.py"}
 # | output: true
 import matplotlib.pyplot as plt
+from scripts.figures import COLORS
 
-SPATIAL_COLORS = {"wcset": "#2a78d6", "sloreta": "#008300", "cset": "#1baf7a",
-                  "dspm": "#4a3aa7", "wmne": "#e34948", "beltrami": "#eda100"}
 SPATIAL_METRICS = [("correlation_spatial_signed", "Signed spatial r", 0.0),
                    ("auc_spatial", "AUC on |amplitude|", 0.5)]
 
@@ -1467,7 +1466,7 @@ for col, sub in enumerate(SUBJECTS):
         for m in COMPETITORS + ["wcset"]:
             dm_ = d[d["Method"] == m].sort_values("times")
             main = m in ("wcset", "sloreta")
-            ax.plot(dm_["times"], dm_["Value"], color=SPATIAL_COLORS[m], linewidth=1.6 if main else 0.7,
+            ax.plot(dm_["times"], dm_["Value"], color=COLORS[m], linewidth=1.6 if main else 0.7,
                     alpha=1.0 if main else 0.6, zorder=3 if m == "wcset" else 2, label=m)
         ax.spines[["top", "right"]].set_visible(False)
         if row == 0:
@@ -1485,185 +1484,6 @@ plt.show()
 spatial_stats.round(3).sort_values(["Metric", "Subject", "Competitor"])
 ```
 
-Same layout as `index.qmd`'s `fig-intracranial-diff`, for both metrics and all
-four subjects (columns). Per metric, top row: value per method at each
-timepoint of the spike window (box = IQR, line = median, outliers hidden; gray
-band = permutation chance range, 95%, averaged over timepoints and methods);
-bottom row: paired difference, wCSET minus each other method, one value per
-timepoint (positive = wCSET better). Above each violin: significance (paired
-t-test with effective sample size, FDR-corrected), Cohen's dz (positive =
-wCSET better), and the percentage of timepoints at which wCSET beats the other
-method, relative to 50%.
-
-```{python filename="intra_spatial_metrics_box_plot.py"}
-# | output: true
-import matplotlib
-import matplotlib.pyplot as plt
-
-# Plot helpers copied from index.qmd (exploratory; move to a shared module if kept)
-FILL_ALPHA = 0.45
-LINE_COLOR = "#898781"
-METHOD_LABELS = {"wcset": "wCSET", "cset": "CSET", "sloreta": "sLORETA", "dspm": "dSPM",
-                 "wmne": "wMNE", "beltrami": "Beltrami"}
-BOX_ORDER = ["wcset"] + COMPETITORS
-
-def stars_for(p):
-    return "***" if p < 0.001 else "**" if p < 0.01 else "*" if p < 0.05 else "ns"
-
-def soften_boxes(ax):
-    for patch in ax.patches:
-        r, g, b, _ = patch.get_facecolor()
-        patch.set_facecolor((r, g, b, FILL_ALPHA))
-
-def paired_diff_panel(ax, diffs, order, colors, annotations):
-    """Violin per competitor of differences already oriented so positive = wCSET better."""
-    ax.axhline(0, color=LINE_COLOR, linewidth=1, zorder=0)
-    for i, c in enumerate(order):
-        y = np.asarray(diffs[c], dtype=float)
-        vp = ax.violinplot([y], positions=[i], widths=0.7, showextrema=False)
-        for body in vp["bodies"]:
-            body.set_facecolor(colors[c])
-            body.set_edgecolor(colors[c])
-            body.set_alpha(FILL_ALPHA)
-        q1, q3 = np.percentile(y, [25, 75])
-        ax.plot([i, i], [q1, q3], color="#0b0b0b", linewidth=1.5, zorder=3)
-        ax.plot([i - 0.22, i + 0.22], [np.median(y)] * 2, color="#0b0b0b", linewidth=2, zorder=4)
-    ymax = max(np.max(diffs[c]) for c in order)
-    ymin = min(np.min(diffs[c]) for c in order)
-    span = (ymax - ymin) or 1.0
-    n_lines = max(len(v) for v in annotations.values())
-    for i, c in enumerate(order):
-        for k, line in enumerate(annotations[c]):
-            ax.text(i, ymax + 0.02 * span + (n_lines - 1 - k) * 0.075 * span, line, ha="center", va="bottom",
-                    fontsize=8 if k == 0 else 7, color="#222222" if k == 0 else "#555555")
-    ax.set_ylim(ymin - 0.05 * span, ymax + (0.06 + n_lines * 0.075) * span)
-    ax.set_xticks(range(len(order)))
-    ax.spines[["top", "right"]].set_visible(False)
-
-def mark_direction(ax, better="wCSET better", worse="other method better"):
-    for text, dy, va in [(f"{better} ↑", 4, "bottom"), (f"{worse} ↓", -4, "top")]:
-        ax.annotate(text, xy=(1.0, 0.0), xycoords=("axes fraction", "data"), xytext=(4, dy),
-                    textcoords="offset points", fontsize=7, color="#666666", ha="left", va=va)
-
-fig, axes = plt.subplots(2 * len(SPATIAL_METRICS), len(SUBJECTS), figsize=(4.4 * len(SUBJECTS), 16),
-                         gridspec_kw={"hspace": 0.55, "wspace": 0.3}, squeeze=False)
-for m_i, (metric, label, chance) in enumerate(SPATIAL_METRICS):
-    abs_axes = axes[2 * m_i]
-    for col, sub in enumerate(SUBJECTS):
-        wide = (spatial_df[(spatial_df["Metric"] == metric) & (spatial_df["Subject"] == sub)]
-                .pivot_table(index="times", columns="Method", values="Value").dropna())
-        null = spatial_null[(spatial_null["Metric"] == metric) & (spatial_null["Subject"] == sub)]
-        stats = spatial_stats[(spatial_stats["Metric"] == metric) & (spatial_stats["Subject"] == sub)].set_index("Competitor")
-
-        # (top) value per method
-        ax = abs_axes[col]
-        ax.axhspan(null["null_lo"].mean(), null["null_hi"].mean(), color="#c3c2b7", alpha=0.35, linewidth=0, zorder=0)
-        ax.axhline(chance, color=LINE_COLOR, linestyle=":", linewidth=1, zorder=0)
-        bp = ax.boxplot([wide[m].to_numpy() for m in BOX_ORDER], positions=range(len(BOX_ORDER)),
-                        widths=0.55, patch_artist=True, showfliers=False)
-        for patch, m in zip(bp["boxes"], BOX_ORDER):
-            patch.set_facecolor(SPATIAL_COLORS[m])
-            patch.set_edgecolor("#222222")
-        soften_boxes(ax)
-        for element in ["whiskers", "caps", "medians"]:
-            for line in bp[element]:
-                line.set_color("#222222")
-        ax.set_xticks(range(len(BOX_ORDER)))
-        ax.set_xticklabels([f"{METHOD_LABELS[m]} (ref.)" if m == "wcset" else METHOD_LABELS[m] for m in BOX_ORDER],
-                           rotation=45, ha="right", fontsize=8)
-        ax.set_title(f"sub-{sub}: {label} per method", loc="left", fontsize=9)
-        ax.spines[["top", "right"]].set_visible(False)
-        if col == 0:
-            ax.set_ylabel(label, fontsize=8)
-
-        # (bottom) paired differences, positive = wCSET better
-        dax = axes[2 * m_i + 1, col]
-        diffs = {c: (wide["wcset"] - wide[c]).to_numpy() for c in COMPETITORS}
-        annot = {c: [stars_for(stats.loc[c, "p_corrected"]), f"dz={stats.loc[c, 'dz']:+.2f}",
-                     f"{(diffs[c] > 0).mean() - 0.5:+.0%}"] for c in COMPETITORS}
-        paired_diff_panel(dax, diffs, COMPETITORS, SPATIAL_COLORS, annot)
-        dax.set_xticklabels([METHOD_LABELS[c] for c in COMPETITORS], rotation=45, ha="right", fontsize=8)
-        dax.set_title(f"sub-{sub}: {label}, wCSET − method", loc="left", fontsize=9)
-        if col == 0:
-            dax.set_ylabel(f"wCSET − method\n({label})", fontsize=8)
-    mark_direction(axes[2 * m_i + 1, -1])
-
-    # shared y within the per-method row so subjects are comparable
-    lo = min(a.get_ylim()[0] for a in abs_axes)
-    hi = max(a.get_ylim()[1] for a in abs_axes)
-    for a in abs_axes:
-        a.set_ylim(lo, hi)
-plt.show()
-```
-
-Candidate main-text figure (replacing `index.qmd`'s `fig-intracranial-diff`),
-for the two subjects with a visible scalp EEG spike. One column per subject;
-row 1: signed spatial r per method with the permutation chance range; row 2:
-paired difference in signed r, wCSET minus each other method; row 3: same
-paired difference for the AUC on |amplitude| (sign-free robustness check).
-Everything else above goes to the Annex.
-
-```{python filename="intra_spatial_metrics_main_plot.py"}
-# | output: true
-MAIN_SUBJECTS = ["48", "34"]
-SUBJECT_TITLES = {"48": "Subject 1", "34": "Subject 2"}
-
-fig, axes = plt.subplots(3, len(MAIN_SUBJECTS), figsize=(4.6 * len(MAIN_SUBJECTS), 12),
-                         gridspec_kw={"hspace": 0.6, "wspace": 0.3}, squeeze=False)
-for col, sub in enumerate(MAIN_SUBJECTS):
-    letter = "ab"[col]
-
-    def _subject(metric):
-        wide = (spatial_df[(spatial_df["Metric"] == metric) & (spatial_df["Subject"] == sub)]
-                .pivot_table(index="times", columns="Method", values="Value").dropna())
-        stats = spatial_stats[(spatial_stats["Metric"] == metric) & (spatial_stats["Subject"] == sub)].set_index("Competitor")
-        return wide, stats
-
-    # (1) signed r per method, chance range shaded
-    wide, _ = _subject("correlation_spatial_signed")
-    null = spatial_null[(spatial_null["Metric"] == "correlation_spatial_signed") & (spatial_null["Subject"] == sub)]
-    ax = axes[0, col]
-    ax.axhspan(null["null_lo"].mean(), null["null_hi"].mean(), color="#c3c2b7", alpha=0.35, linewidth=0, zorder=0)
-    ax.axhline(0, color=LINE_COLOR, linestyle=":", linewidth=1, zorder=0)
-    bp = ax.boxplot([wide[m].to_numpy() for m in BOX_ORDER], positions=range(len(BOX_ORDER)),
-                    widths=0.55, patch_artist=True, showfliers=False)
-    for patch, m in zip(bp["boxes"], BOX_ORDER):
-        patch.set_facecolor(SPATIAL_COLORS[m])
-        patch.set_edgecolor("#222222")
-    soften_boxes(ax)
-    for element in ["whiskers", "caps", "medians"]:
-        for line in bp[element]:
-            line.set_color("#222222")
-    ax.set_xticks(range(len(BOX_ORDER)))
-    ax.set_xticklabels([f"{METHOD_LABELS[m]} (ref.)" if m == "wcset" else METHOD_LABELS[m] for m in BOX_ORDER],
-                       rotation=45, ha="right", fontsize=8)
-    ax.set_title(f"{letter}1. {SUBJECT_TITLES[sub]}: spatial correlation per method", loc="left", fontsize=9)
-    ax.spines[["top", "right"]].set_visible(False)
-    if col == 0:
-        ax.set_ylabel("Spatial correlation (signed r)\nvirtual vs. recorded iEEG", fontsize=8)
-
-    # (2, 3) paired differences, positive = wCSET better
-    for row, (metric, label) in enumerate([("correlation_spatial_signed", "spatial correlation"),
-                                           ("auc_spatial", "AUC on |amplitude|")], start=1):
-        wide, stats = _subject(metric)
-        diffs = {c: (wide["wcset"] - wide[c]).to_numpy() for c in COMPETITORS}
-        annot = {c: [stars_for(stats.loc[c, "p_corrected"]), f"dz={stats.loc[c, 'dz']:+.2f}",
-                     f"{(diffs[c] > 0).mean() - 0.5:+.0%}"] for c in COMPETITORS}
-        dax = axes[row, col]
-        paired_diff_panel(dax, diffs, COMPETITORS, SPATIAL_COLORS, annot)
-        dax.set_xticklabels([METHOD_LABELS[c] for c in COMPETITORS], rotation=45, ha="right", fontsize=8)
-        dax.set_title(f"{letter}{row + 1}. {SUBJECT_TITLES[sub]}: {label},\npaired difference vs. wCSET",
-                      loc="left", fontsize=9)
-        if col == 0:
-            dax.set_ylabel(f"wCSET − method\n({label})", fontsize=8)
-
-for row in (1, 2):
-    mark_direction(axes[row, -1])
-
-# shared y within the per-method row so the two subjects are comparable
-lo = min(a.get_ylim()[0] for a in axes[0])
-hi = max(a.get_ylim()[1] for a in axes[0])
-for a in axes[0]:
-    a.set_ylim(lo, hi)
-plt.show()
-```
+The per-method boxplots and paired differences of both metrics are drawn in
+`index.qmd` (`fig-intracranial-diff`, main-text subjects) and in the Annex
+(`fig-intra-full`, all subjects).
