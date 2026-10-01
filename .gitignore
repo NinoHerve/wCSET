@@ -22,3 +22,33 @@ __pycache__/
 # too large/private for a public repo
 /references/
 /reports/
+
+# Quarto render output at the root (the copy Quarto needs is in _freeze/site_libs)
+/site_libs/
+
+# Private notes
+/TODO.md
+/annex/TODO.md
+
+# Canva build spec, not used by the manuscript
+/validation-figure/
+
+# Patient MRI volumes and head surfaces (identifiable): only the screenshots
+# loaded by the annex and the provenance README are published
+/results/bem_comparison_spike/*
+!/results/bem_comparison_spike/charm_bone_segmentation.png
+!/results/bem_comparison_spike/charm_bem.png
+!/results/bem_comparison_spike/watershed_bem.png
+!/results/bem_comparison_spike/README.md
+
+# Renders no longer loaded by any .qmd
+/results/simf/gold_pp.png
+/results/simf/gold_qrp.png
+/results/simf/sloreta_pp.png
+/results/simf/sloreta_qrp.png
+/results/simf/wCSET_pp.png
+/results/simf/wCSET_qrp.png
+/results/simf/color_bar.png
+/results/simf/eeg_recording.png
+/results/discussion/harmonic_IPR_example.png
+/results/intra/reconstruction_spatial.png

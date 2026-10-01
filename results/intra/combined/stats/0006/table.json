@@ -5,11 +5,11 @@
     "n_pairs": 109,
     "n_a": 109,
     "n_b": 109,
-    "statistic": 0.6929621183906605,
-    "p_value": 0.4978453979159194,
-    "effect_size": 0.1646075112691892,
+    "statistic": 0.4598885315256238,
+    "p_value": 0.6515780479000228,
+    "effect_size": 0.10975885816876269,
     "effect_size_type": "cohens_dz",
-    "n_eff": 17.72228394395876,
+    "n_eff": 17.556017222191052,
     "p_corrected": NaN,
     "significant": null
   }
