@@ -1,0 +1,1201 @@
+---
+title: "Annex"
+bibliography: ../references.bib
+number-sections: true
+
+execute:
+  echo: false
+  freeze: true
+---
+
+<!--
+This document lives in its own nested Quarto project (annex/_quarto.yml,
+type: default), separate from the parent manuscript project one level up
+(../_quarto.yml, type: manuscript). That parent project's "notebooks:"
+mechanism was tried first, but its rendered "notebook preview" doesn't run
+Quarto's crossref numbering pass at all (confirmed empirically) and silently
+ignores --to overrides other than html - captions never got numbered and
+`--to docx`/`--to pdf` produced no output. Nesting a separate project here
+sidesteps both problems: Quarto's project resolution walks up from a file
+looking for the nearest _quarto.yml, so this one shadows the parent, and
+this document renders as a normal standalone article (proper @fig-.../
+@tbl-... numbering, full docx/html/jats support) - render it directly from
+here, e.g. `cd annex && quarto render annex.qmd --to docx`.
+
+Consequences of that separation:
+  - it is not built by the parent project's own `quarto render` - render it
+    separately as above;
+  - Quarto cross-references still don't resolve *across* the two projects
+    (they're independent crossref indexes), so references from index.qmd
+    into this document use manual text ("Annex Figure N"/"Annex Table N"),
+    and the one reference the other way - from this document back to the
+    main article's Figure 4 (the wCSET surrogate figure) - is written as
+    "Figure 4 of the main text" rather than @fig-surrogate;
+  - file paths in the code chunks below are relative to this directory
+    (annex/), hence the "../" prefixes into results/, scripts/, and the
+    project's config/bibliography files.
+-->
+
+```{python filename="annex_plot_configuration.py"}
+#| output: false
+# Duplicated from index.qmd's plot_configuration.py: this document is
+# rendered independently (separate Quarto/Python session) from the main
+# article, so the shared COLORS/METHODS palette and prose-formatting/stat
+# helpers used throughout the Annex's code chunks below must be redefined
+# here rather than inherited from index.qmd.
+COLORS = {
+    "wcset":    "#2a78d6",  # blue
+    "cset":     "#1baf7a",  # aqua
+    "sloreta":  "#008300",  # green
+    "dspm":     "#4a3aa7",  # violet
+    "wmne":     "#e34948",  # red
+    "beltrami": "#eda100",  # ochre - Study II/III only, see note below (was
+                            # orange #eb6834; kept in sync with index.qmd)
+}
+LINE_COLOR = "#898781"  # muted ink - carries no
+
+# transferred from processing_simf.qmd's comparison_plots.py - reimplemented
+# with plain matplotlib (rather than MetricSuite.plot()'s seaborn FacetGrid)
+# so it can use the same fixed method colors as the SPIKE resection figures;
+# MetricSuite.plot()'s relational path has no way to pass a custom hue palette
+# through to seaborn's FacetGrid.
+# MCE excluded from every study: its L1 sparsity makes it react to
+# correlation/AP-style metrics on a fundamentally different axis than the
+# other five methods (near-zero spatial correlation whenever it's silent,
+# but artificially clean precision-recall ranking whenever it fires) -
+# not a meaningful signal about connectivity priors, just a metric artifact.
+# Precision/AP figures also dropped from this document (Study 1 no longer
+# plots precision_hrp/pp or ap_hrp/pp): the ground-truth "active" mask
+# (gold > 0) they're scored against covers a huge, noise-independent
+# fraction of cortex by hrp/pp (propagation has already spread that far),
+# which sets a high, hard-to-move floor on AP - the metric doesn't track
+# reconstruction quality the way correlation/localization error do, and no
+# principled way was found to threshold the mask more strictly without
+# picking an arbitrary, SNR-dependent "reconstructibility" cutoff.
+# processing_simf.qmd still computes these metrics (for reference/appendix
+# use), they're just not plotted here anymore.
+METHODS = ["wcset", "cset", "sloreta", "dspm", "wmne"]
+METHOD_LABELS = {
+    "wcset": "wCSET", "cset": "CSET", "sloreta": "sLORETA", "dspm": "dSPM", "wmne": "wMNE",
+    "beltrami": "Beltrami",
+}
+# beltrami is a 6th competitor computed only for the clinical cohorts (Studies
+# II/III) - wCSET on the Laplace-Beltrami mesh eigenbasis, the GBF-like
+# geometry-only baseline (see Section 2.3.3's surrogate-connectome
+# construction). It has no counterpart in Study I's own METHODS, so it stays
+# out of the METHODS list itself (which drives Study I's plots) and gets
+# appended locally wherever Study II/III build their own method order.
+
+# Formatting helpers for inline-quoted statistics throughout the Results and
+# Discussion sections below - defined once here so every `{python} ...`
+# inline reference downstream uses the same rounding/threshold convention,
+# rather than re-implementing it at each of the many call sites. Numbers
+# quoted in prose are pulled live from the same `stat.wilcoxon`/`.ttest_ess`/
+# `.cluster_permutation` calls that build the figures (computed and
+# cached once by each processing_*.qmd's Statistics section, reloaded here
+# as an instant cache hit), rather than hand-typed, so that changing a test
+# and re-rendering updates the prose automatically instead of silently
+# drifting from what the code produces.
+def fmt_p(p, thresh=0.001):
+    """Bare comparison + value for prose, e.g. '< 0.001' or '= 0.023' - the
+    prose supplies its own 'p'/'p_corrected' label immediately before the
+    inline reference (e.g. `` p`{python} fmt_p(...)` `` renders 'p = 0.023'
+    or 'p < 0.001'), since which label applies varies by context."""
+    return f"< {thresh}" if p < thresh else f"= {p:.3f}"
+
+# Reference-method annotation for the group_comparison/cluster_permutation
+# figures below - neither mindmap function exposes a hook to customize its
+# legend/tick-label text, so these mutate what's already drawn (in place, not
+# replacing it) rather than reaching into the mindmap package itself.
+def mark_reference(ax, reference, suffix=" (ref.)"):
+    """Appends `suffix` to `reference`'s entry in `ax`'s already-built legend, in place."""
+    for text in ax.get_legend().get_texts():
+        if text.get_text() == reference:
+            text.set_text(text.get_text() + suffix)
+            break
+
+def ref_labels(names, reference, suffix=" (ref.)"):
+    """Tick-label list with `suffix` appended to `reference`'s entry."""
+    return [f"{n}{suffix}" if n == reference else n for n in names]
+
+def fmt_stat(value, digits=2):
+    """Effect size (rank-biserial, Cohen's dz, etc.) for prose, e.g. '-0.48'."""
+    return f"{value:.{digits}f}"
+
+def fmt_num(value, digits=1):
+    """Plain descriptive number (medians, mm, %, correlation units) for prose."""
+    return f"{value:.{digits}f}"
+
+def main_cluster(cluster_df):
+    """The largest-mass cluster from a single competitor's
+    `ClusterResult.clusters_by_pair[(reference, competitor)]` table -
+    the one worth quoting in prose when a competitor has more than one
+    (typically one real cluster plus a few negligible-mass leftovers)."""
+    return cluster_df.loc[cluster_df["mass"].abs().idxmax()]
+
+def competitor_row(result, competitor, reference="wcset"):
+    """Row for one competitor from a `PairwiseResult.table` - the new API's
+    table has arbitrary `group_a`/`group_b` columns instead of the old
+    `"Label"` column, so this looks up whichever side of the pair
+    `competitor` landed on."""
+    t = result.table
+    row = t[(t["group_a"] == reference) & (t["group_b"] == competitor)]
+    if row.empty:
+        row = t[(t["group_a"] == competitor) & (t["group_b"] == reference)]
+    return row.iloc[0]
+```
+
+::::: {.content-visible when="output"}
+
+::: {.callout-info}
+**Prerequisites**
+To run all the code in this manuscript, you will need the following software:
+- FreeSurfer
+- SimNIBS
+- python
+- git
+- yq
+We recommend you build a virtual environment for the python framework using conda. It is important that you use python version 3.11, the newest python version that lets all the used dependencies coexist. The virtual environment should then contain the mindmap package, specifically designed to hold any functions related to this project.
+```bash
+cd ~/location/for/mindmap/package
+git clone https://github.com/NinoHerve/mindmap.git
+
+cd ~/location/for/manuscript/project
+git clone https://github.com/NinoHerve/wCSET.git
+
+conda create -n <env-name> python=3.11
+conda activate <env-name>
+pip install .
+```
+You should now be ready to run anything that comes ahead.
+:::
+
+:::::
+
+# Synthetic Data — Data Acquisition and Preprocessing
+
+This section lists the data needed to reproduce the synthetic data described in Section 2.1.1, and the processing applied to it before simulation. The corresponding code is in `processing_simf.qmd` of the manuscript repository ([github.com/NinoHerve/wCSET](https://github.com/NinoHerve/wCSET)).
+
+**Data source.** All subject data come from the VEPCON dataset [@pascucci_source_2022], publicly available on OpenNeuro as dataset ds003505 ([openneuro.org/datasets/ds003505](https://openneuro.org/datasets/ds003505); paths below as of snapshot 1.1.2). Only one participant, `sub-10`, is used. None of VEPCON's EEG recordings, raw diffusion images or other participants are needed.
+
+| File (relative to the dataset root) | Content | Used for |
+|:---|:---|:---|
+| `sub-10/anat/sub-10_T1w.nii.gz` | Raw T1-weighted MRI | CHARM tissue segmentation (BEM) |
+| `derivatives/freesurfer-7.1.1/sub-10/` | FreeSurfer reconstruction (whole subject folder) | Source space, parcellation, electrode coregistration |
+| `derivatives/cmp-v3.0.3/sub-10/dwi/sub-10_model-CSD_desc-DET_tractogram.trk` | Whole-brain tractogram, in diffusion space | Long-range connectome edges |
+| `derivatives/cmp-v3.0.3/sub-10/xfm/final0GenericAffine.mat` | Affine registration between T1w and diffusion space (ANTs) | Mapping streamline endpoints to T1w space |
+
+: VEPCON files required for the synthetic data. {#tbl-vepcon-files}
+
+**Tractogram provenance.** The tractogram is used as distributed, without re-running tractography. According to its Connectome Mapper 3 configuration file (`derivatives/cmp-v3.0.3/sub-10/sub-10_diffusion_config.json`), the diffusion data were corrected for eddy currents and motion (FSL `eddy_correct`), without denoising or bias-field correction. Fiber orientations were reconstructed with constrained spherical deconvolution (CSD, maximal harmonic order 4) in MRtrix3. One million streamlines were then generated with deterministic tractography (`SD_stream`; step 0.5 mm, length 5–200 mm, maximum angle 45°, FOD cutoff 0.05), without anatomically-constrained tractography (ACT), and filtered with SIFT. These settings come from a later Connectome Mapper release than the one described in @pascucci_source_2022, and differ from the tractograms that @ruequeralt_connectome_2024 recomputed from the same raw DWI for CSET (10 million streamlines with ACT, after denoising and bias-field correction).
+
+**External resources.** Besides VEPCON, the pipeline uses:
+
+- the EGI 256-channel HydroCel template montage built into MNE-Python [@gramfort_meg_2013], used as sensor layout (no subject-specific electrode positions);
+- the Lausanne 2018 scale-4 cortical atlas and the HCP probabilistic thalamic-nuclei atlas, with the MNI ICBM152 2009c template, needed to build the MultiConn parcellation [@aleman-gomez_multi-scale_2022];
+- the MultiConn probabilistic connectivity atlas at scale 4 [@aleman-gomez_multi-scale_2022], needed only for the atlas surrogate (Section 2.3.3).
+
+**Processing steps.** Everything else is derived from the files above:
+
+1. *Head model.* The T1w is segmented with SimNIBS CHARM [@puonti_accurate_2020], and the three BEM surfaces (inner skull, outer skull, scalp) are built from this segmentation (Volume Conduction Model, below).
+2. *Parcellation.* The MultiConn scale-4 parcellation is computed on the FreeSurfer reconstruction (white-matter margin 2 mm; thalamic atlas thresholded at probability 0.05). Its cortical labels provide the cortex mask and the 446 regions used for the probe set.
+3. *Source space.* Dipoles are placed on the FreeSurfer white-matter surface (oct6 spacing) and restricted to the cortex mask (Source Space, below).
+4. *Electrodes.* The EGI template is reduced by removing the same cheek electrodes as in Clinical Dataset A (Section 2.1.2). It is aligned to the subject with a rigid fiducial-based registration, and each electrode is then projected radially onto the CHARM scalp surface.
+5. *Connectome.* Streamline endpoints are mapped from diffusion space to T1w space with the affine transform above (the nonlinear `final1Warp.nii.gz` is not used). Streamlines are kept only if both endpoints fall in the cortex mask. Each remaining endpoint is assigned to a dipole within 4 mm, and each edge is weighted by fiber length. Short-range gray-matter edges are then added where tractography found none (Connectivity Matrices, below).
+
+# Synthetic Data — Additional Simulation Details
+
+This section provides implementation-level detail for the synthetic data described in Section 2.1.1.
+
+| Parameter | Symbol | Value | Unit | Description | Ref. |
+|:---|:---:|---:|:---:|:---|:---:|
+| Spike duration | $W$ | 0.05 | s | Total duration of the double-Hanning-window spike waveform. | [@kane_revised_2017] |
+| Axonal conduction speed (long-range) | $v(l>35)$ | 4.5 | mm/ms | Conduction speed for long-range (non-U-fiber) tracts, i.e. edges longer than the U-fiber length cutoff. | [@lemarechal_brain_2022; @van_blooijs_developmental_2023] |
+| U-fiber conduction speed | $v(l\leq35)$ | 2.5 | mm/ms | Conduction speed for short-range U-fibers (edges at or below the U-fiber length cutoff), distinctly slower than long-range tracts. | [@van_blooijs_developmental_2023] |
+| U-fiber maximum length | — | 35 | mm | Length cutoff separating U-fibers from long-range tracts. | — |
+| Nodal delay per hop | $\tau_p$ | 7 | ms | Per-hop relay delay representing the time a cortical population takes to receive, integrate, and re-fire an input; accumulated once per edge on the propagation path. | [@lemarechal_brain_2022] |
+| Spatial decay factor | $\gamma$ | 0.5 | — | Per-hop amplitude decay factor applied to propagating activity; a tuned/free parameter, since no literature value exists for this quantity. | — |
+| Delay jitter (s.d., per hop) | $\sigma_\tau$ | 1 | ms | Per-hop timing-jitter standard deviation, accumulated as jitter$\times\sqrt{\text{hops}}$ along the propagation path to avoid deterministic, sample-locked arrival times. | — |
+| Sensor noise floor (fixed) | — | 2.0 | µV RMS | Fixed instrument/electrode-noise floor added at the sensor level, independent of the source-space noise contribution. | — |
+| Target sensor noise (total) | — | 15.0 | µV RMS | Target total delivered sensor-level background noise (instrument floor plus forward-projected source-space noise). | [@nunez_electric_2006] |
+| Target SNR | — | 5 | — | Target single-trial peak-amplitude SNR used to scale source activity before sensor projection. | [@gonsisko_electroencephalographic_2024] |
+| Source regions (probe set) | — | 100 | — | Number of source regions simulated, drawn from the shared spatially-uniform (farthest-point-sampled) probe set. | — |
+| Repetitions per region | — | 8 | — | Number of repeated simulations per source region (independent noise draws), set via power analysis. | — |
+
+: Simulation parameters. Dashes mark free/tuned parameters with no literature-derived value. {#tbl-sim-params}
+
+**Propagation model rationale.** A neural mass model [@jansen_electroencephalogram_1995] would capture propagation more physiologically, but such models become unstable at high mass counts, since network size and coupling strength jointly determine dynamical stability [@sanz-leon_mathematical_2015] — which is why other source-reconstruction studies typically cap the number of masses around 1,000, with dipoles spaced roughly 1 cm apart [@siu_structural_2026], a spacing at which the forward model's own point-dipole assumption starts to break down [@nunez_multi-scale_2019]. Our patch-seeded, connectome-driven propagation model avoids this trade-off, keeping the dipole model at high resolution (~7,600 dipoles, ~3.3 mm spacing) while remaining simple enough to generate realistic EEG spikes; we do not claim it is more faithful to reality than neural mass or field models, only that it offers insight a simple patch simulation cannot while staying tractable at high dipole counts.
+
+**Spike waveform.** The spike waveform is a double Hanning window, following the same construction as @dewouters_source-reconstructed_2026:
+
+$$
+s_0(t) = \begin{cases} h\!\left(t,\, \tfrac{2}{3}W\right) & 0 \leq t \leq \tfrac{2}{3}W \\[4pt] -\tfrac{1}{2}\,h\!\left(t - \tfrac{2}{3}W,\; \tfrac{1}{3}W\right) & \tfrac{2}{3}W < t \leq W \end{cases}
+$$
+
+where $h(t, T) = \frac{1}{2}\!\left[1 - \cos\!\left(\tfrac{2\pi t}{T}\right)\right]$ is a Hanning window of duration $T$, and $W = 0.05$ s (50 ms) is the total spike duration, chosen to fall centrally within the consensus clinical EEG duration convention for interictal spikes specifically (20–70 ms) [@kane_revised_2017].
+
+**Propagation delay model.** The total propagation delay $\tau_j$ to dipole $j$ was computed as the sum of per-edge delays along the shortest path from the source:
+
+$$
+\tau_j = \sum_{(u,v)\,\in\,\mathcal{P}_j} \!\left(\frac{l_{uv}}{v(l_{uv})} + \tau_p\right) + \epsilon_\tau, \qquad v(l) = \begin{cases} 4.5 \text{ mm/ms} & l > 35 \text{ mm (long-range)} \\ 2.5 \text{ mm/ms} & l \leq 35 \text{ mm (U-fiber)} \end{cases}
+$$
+
+where $l_{uv}$ is the fiber length of edge $(u,v)$ in mm, and $v(l_{uv})$ is a conduction speed that depends on fiber length: 4.5 mm/ms for long-range tracts above 35 mm — the central estimate of two independent large-sample cortico-cortical evoked potential (CCEP) studies converging on ~3–6 m/s for adult long-range association fibers [@lemarechal_brain_2022; @van_blooijs_developmental_2023] — and a slower 2.5 mm/ms for short-range U-fibers at or below 35 mm, reflecting their distinctly slower reported conduction (~2–3 m/s) relative to long-range tracts [@van_blooijs_developmental_2023]. $\tau_p = 7$ ms is a fixed nodal delay per hop representing synaptic transmission plus relay latency, consistent with the population-level excitatory/inhibitory synaptic time constants (5.8–7.3 ms) estimated directly from CCEP modelling [@lemarechal_brain_2022]. $\epsilon_\tau \sim \mathcal{N}(0, \sigma_\tau)$, with $\sigma_\tau = 1$ ms, is a per-dipole jitter term modelling uncertainty in propagation timing, accumulated once per hop along the shortest path (i.e. scaling with $\sqrt{h_j}$ rather than a single flat perturbation of the total path delay).
+
+**Noise model derivation.** Sensor-level noise comprised a small fixed instrument/electrode-noise floor (2.0 µV RMS) plus a source-space contribution solved to bring the total delivered sensor-level baseline noise to a target of 15.0 µV RMS — the literature midpoint of the commonly-cited ~10–20 µV RMS scalp EEG background noise range [@nunez_electric_2006]. The signal-to-noise ratio (SNR) was calibrated to a fixed single-trial target of 5 (peak amplitude relative to baseline standard deviation) by scaling the source activity prior to sensor projection: this sits above the ~2.0–3.2 linear-ratio range reported for single-trial interictal spikes [@gonsisko_electroencephalographic_2024], chosen as a practical compromise to keep delivered spikes comfortably above the simulator's own noise floor while remaining much closer to the single-trial literature range than a post-averaging-scale target would be.
+
+**Power analysis.** The number of regions (100) and repetitions (8) per region were set via a power analysis targeting adequate power for the region-paired method comparisons reported throughout the Results, ensuring that the relative ranking of reconstruction methods is robust across a spatially-diverse sample of source regions rather than reflecting any single one; the main effect of method alone was already saturated at power ≈ 1.0 across every tested design.
+
+# Clinical Dataset B — Additional Details
+
+This section provides additional recruitment, implantation, and ethics detail for the simultaneous EEG/iEEG cohort described in Section 2.1.3, drawn from @roehri_scalp-negative_2025, the source study for this cohort.
+
+**Recruitment and implantation.** Patients were recruited at the EEG and Epilepsy Unit, Geneva University Hospital, among consecutive patients who underwent simultaneous iEEG–hdEEG recording between 2014 and 2019 during presurgical evaluation for pharmacoresistant focal epilepsy. Intracranial recordings used stereo-EEG (SEEG) intracerebral macroelectrodes implanted per standard clinical presurgical planning; the simultaneous recording session was performed on the last day before iEEG electrode removal, pairing the SEEG with a 257-channel geodesic scalp EEG net (Electrical Geodesic Inc.).
+
+**Ethics approval.** The study was approved by the Geneva Regional Research Ethics Committee (protocol 13-004).
+
+**MRI sequencing parameters.** The T1-weighted scan was acquired on a 3-T scanner (Siemens Prisma); @roehri_scalp-negative_2025 does not report further sequence parameters (TR/TE/voxel size).
+
+# Connectivity Matrices — Additional Implementation Details
+
+This section provides implementation-level detail for the connectivity matrices described in Section 2.3.3.
+
+**Empirical connectomes.** Short-range links connect each dipole to its geodesically nearest neighbors on the cortical manifold, subject to two constraints: a maximum geodesic distance of 15 mm, and a maximum of 8 such neighbors per dipole. The 15 mm threshold is reasonably well-grounded: at this source space's resolution it excludes only ~1% of true (Euclidean) nearest-neighbor pairs from being connected — down from ~6.4% at an earlier, coarser source-space resolution — and it also falls within the ~5–30 mm range typically cited for U-fiber length scales. The 8-neighbor cap is a softer, less rigorously-grounded choice: raised from an earlier value of 3 simply to preserve similar relative local coverage after dipole density roughly tripled at the current resolution (candidate neighbors within 15 mm rose from ~35 to ~88 per dipole), rather than derived from an independent criterion of its own.
+
+**Atlas surrogate.** The MultiConn atlas reference population used to define long-range tracts comprises 66 subjects, and a tract is retained only if present across all 66. Rather than connecting every dipole pair between two atlas-connected regions, only a fraction of the possible dipole-to-dipole edges is instantiated, at a sparsity level (14%) determined by matching the edge density of this same sub-10 subject's own empirical connectome (above) — the only subject in our sample with real tractography data available.
+
+**Local surrogate.** Nodes are additionally connected across hemispheres to their homotopic (mirror-symmetric) partner to keep the resulting graph connected.
+
+**Beltrami-operator surrogate.** Eigenmodes are computed using the `lapy` Python library (v1.6.0) for the underlying finite-element stiffness/mass matrix assembly. This mesh is the triangulation of the source space itself, in dipole space (Section 2.3.1) — the decimated, cortex-only surface used for the dipoles — rather than the dense FreeSurfer surface typically used for this computation. This matches @wang_geometry_2026's own approach: their Laplace-Beltrami eigenmodes are likewise computed on their own downsampled, dipole-resolution source space (~10,000 dipoles per hemisphere for real data, ~4,000 per hemisphere for their benchmark simulations — comparable in spirit to this manuscript's own ~7,600-dipole source space) rather than the dense native FreeSurfer mesh; their Discussion's contrast against "coarse regional parcellations" refers to connectome/atlas-eigenmode approaches like CSET, not to mesh density.
+
+**Harmonic localization (inverse participation ratio).** The Discussion hypothesizes that the true connectome underperforms its dMRI-free surrogates in Study I because its reconstruction-weighted harmonics are more spatially localized. @fig-ipr-harmonics quantifies this: for each condition, every harmonic's inverse participation ratio (IPR) — $\sum_i x_i^4$ for an orthonormal harmonic $x$, higher for harmonics concentrated on fewer dipoles — is weighted by wCSET's own reconstruction weight for that harmonic (Section 2.4.1) and averaged, excluding each condition's trivial constant mode(s) (maximally spread by construction, regardless of graph structure). The true connectome's weighted-mean IPR is higher than every graph-based surrogate's and higher than beltrami's — consistent with a more rigid, spatially specific prior that helps only when it matches genuine tract-driven clustering.
+
+```{python filename="simf_ipr_harmonics_plot.py"}
+#| echo: false
+#| label: fig-ipr-harmonics
+#| fig-cap: "Reconstruction-weighted mean inverse participation ratio (IPR) of each condition's harmonics (subject sub-10) — the basis wCSET's spatial prior is built from. Higher IPR means harmonics concentrated on fewer, sometimes spatially disjoint dipoles; lower IPR means harmonics that vary smoothly across the cortex. The true connectome (original) produces more localized harmonics than every dMRI-free surrogate."
+import numpy as np
+import matplotlib.pyplot as plt
+import sys
+sys.path.insert(0, "..")
+from scripts.data_manager import SimfManager
+
+# Reproduces surrogate_harmonics_investigation.ipynb's weighted-mean-IPR
+# result under the reader-facing surrogate names used throughout this
+# manuscript (Section 2.3.3) rather than the on-disk `Surrogate` tags.
+dm_ipr = SimfManager("../simf.config.yml")
+sub_ipr = "10"
+
+LOWPASS_CONDS = ["original", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin"]
+HARM = 5
+LOGPASS_CUTOFF = 150
+ALL_CONDS = LOWPASS_CONDS + ["beltrami"]
+
+IPR_LABELS = {
+    "original": "original", "beltrami": "beltrami",
+    "fused": "atlas", "fused-bin": "atlas-bin",
+    "geom-atlas": "local", "geom-atlas-bin": "local-bin",
+}
+IPR_COLORS = {
+    "original": LINE_COLOR, "beltrami": "#2a78d6",
+    "fused": "#eb6834", "fused-bin": "#1baf7a",
+    "geom-atlas": "#eda100", "geom-atlas-bin": "#e87ba4",
+}
+
+def _load_eig(desc):
+    kwargs = {} if desc == "original" else {"desc": desc}
+    eig = dm_ipr.load(sub_ipr, "eig", **kwargs)
+    return eig["vec"], eig["val"]
+
+eigs_ipr = {d: _load_eig(d) for d in ALL_CONDS}
+
+# wCSET's own reconstruction weight per harmonic (Section 2.4.1): exponential
+# lowpass (harm=5) for the true connectome and its four graph-based
+# surrogates, GBF's logpass/cutoff=150 for beltrami - the same two
+# weighting mechanisms used throughout the manuscript, not recomputed
+# differently here.
+def _lowpass_weight(val, harm=HARM):
+    return np.exp(-harm * val)
+
+def _logpass_weight(val, cutoff=LOGPASS_CUTOFF):
+    w = np.zeros_like(val)
+    lam_cutoff = val[cutoff - 1]
+    normalized = np.clip(val[:cutoff] / lam_cutoff, 1e-8, 1.0)
+    w[:cutoff] = np.sqrt(-np.log(normalized))
+    return w
+
+weights_ipr = {name: _lowpass_weight(eigs_ipr[name][1]) for name in LOWPASS_CONDS}
+weights_ipr["beltrami"] = _logpass_weight(eigs_ipr["beltrami"][1])
+
+# Inverse participation ratio: IPR = sum(x_i^4) for an orthonormal harmonic x
+# (sum(x_i^2)=1) - a condensed-matter-physics measure of how localized a
+# wavefunction (here, a cortical harmonic) is.
+def _ipr(eigvec):
+    p = eigvec ** 2
+    return np.sum(p ** 2, axis=0)
+
+iprs_ipr = {name: _ipr(eigs_ipr[name][0]) for name in ALL_CONDS}
+
+# Reconstruction-weighted mean IPR, one number per condition - excludes each
+# condition's trivial constant/near-constant mode(s) (k=0 for the graph
+# Laplacian conditions; k=0,1 for beltrami, one per independently-solved
+# hemisphere), which carry the top weight by construction but are, by
+# definition, maximally spread out regardless of graph structure.
+ipr_summary = {}
+for name in LOWPASS_CONDS:
+    w, p = weights_ipr[name][1:], iprs_ipr[name][1:]
+    ipr_summary[name] = np.sum(w * p) / np.sum(w)
+w_b, p_b = weights_ipr["beltrami"][2:], iprs_ipr["beltrami"][2:]
+ipr_summary["beltrami"] = np.sum(w_b * p_b) / np.sum(w_b)
+
+ipr_order = ["original", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin", "beltrami"]
+
+ipr_fig, ipr_ax = plt.subplots(figsize=(6, 4.5))
+ipr_ax.bar(
+    range(len(ipr_order)), [ipr_summary[n] for n in ipr_order],
+    color=[IPR_COLORS[n] for n in ipr_order],
+)
+ipr_ax.set_ylabel("Reconstruction-weighted mean IPR")
+ipr_ax.set_xticks(range(len(ipr_order)))
+ipr_ax.set_xticklabels([IPR_LABELS[n] for n in ipr_order], rotation=30, ha="right")
+ipr_ax.spines[["top", "right"]].set_visible(False)
+plt.tight_layout()
+```
+
+To make "IPR" concrete rather than abstract, @fig-ipr-example renders two actual harmonics from the true connectome's own spectrum, both drawn from the same low-frequency band (k=1–30) that carries the largest individual per-harmonic weight in wCSET's reconstruction (Section 2.4.2) — so the visual difference between them reflects localization, not frequency. The lowest-IPR harmonic in that band (k=`{python} k_lo_ipr`, IPR=`{python} ipr_lo_val`) is spread smoothly across almost the entire cortex, essentially a single left-right gradient; the highest-IPR harmonic (k=`{python} k_hi_ipr`, IPR=`{python} ipr_hi_val`, ~`{python} ipr_ratio_val`× higher) instead concentrates its activity onto a few disjoint patches. This is what "more spatially concentrated" means for the true connectome's weighted-mean IPR above: not that every harmonic it relies on looks like the right-hand panel, but that its harmonics tend further in that direction than the surrogates'.
+
+```{python filename="simf_ipr_example_plot.py"}
+#| echo: false
+#| label: fig-ipr-example
+#| fig-cap: "Example low-frequency harmonics (k=1-30 band) of the true connectome (subject sub-10), illustrating what inverse participation ratio (IPR) means spatially. Left: the lowest-IPR harmonic in this band, spread smoothly across the cortex. Right: the highest-IPR harmonic in this band, concentrated onto a few disjoint patches. Dorsal view, both hemispheres."
+import mindmap as mm
+import pyvista as pv
+import matplotlib.pyplot as plt
+
+pv.OFF_SCREEN = True
+
+# Restrict the example search to the same low-frequency band (k=1-30,
+# excluding the trivial k=0 constant mode) that dominates wCSET's
+# per-harmonic weight, rather than searching the full spectrum - a harmonic
+# with extreme IPR far out in the spectrum wouldn't illustrate what the
+# weighted-mean IPR above is actually summarizing.
+ipr_band = range(1, 31)
+iprs_original = iprs_ipr["original"]
+k_lo_ipr = min(ipr_band, key=lambda k: iprs_original[k])
+k_hi_ipr = max(ipr_band, key=lambda k: iprs_original[k])
+
+ipr_lo_val = fmt_stat(iprs_original[k_lo_ipr], 4)
+ipr_hi_val = fmt_stat(iprs_original[k_hi_ipr], 4)
+ipr_ratio_val = fmt_num(iprs_original[k_hi_ipr] / iprs_original[k_lo_ipr], 1)
+
+# Reloads the forward solution just for its source space (dipole positions/
+# hemisphere split) - not otherwise needed by this section, so not part of
+# the shared eigs_ipr/dm_ipr setup above.
+src_ipr = dm_ipr.load(sub_ipr, "fwd", desc="sim")["src"]
+vec_original = eigs_ipr["original"][0]
+
+ipr_example_panel = (
+    mm.viz.BrainPlot.from_source_space(
+        src_ipr, values=vec_original[:, k_lo_ipr], states=[0],
+        title=f"k={k_lo_ipr} (low IPR)", view="dorsal",
+    )
+    | mm.viz.BrainPlot.from_source_space(
+        src_ipr, values=vec_original[:, k_hi_ipr], states=[0],
+        title=f"k={k_hi_ipr} (high IPR)", view="dorsal",
+    )
+)
+ipr_example_img = ipr_example_panel.screenshot()
+
+ipr_example_fig, ipr_example_ax = plt.subplots(
+    figsize=(ipr_example_img.shape[1] / 130, ipr_example_img.shape[0] / 130)
+)
+ipr_example_ax.imshow(ipr_example_img)
+ipr_example_ax.axis("off")
+plt.tight_layout()
+```
+
+# Source Reconstruction Framework — Additional Details
+
+**Standard inverse solutions — full derivation.** This section provides the full derivation of the standard inverse solutions (wMNE, dSPM, sLORETA) introduced in Section 2.4.
+
+From a Bayesian perspective, $\mathbf s$ is treated as a random variable with a prior distribution $P(\mathbf s)$ [@knosche_eegmeg_2022]. Assuming a Gaussian prior $\mathbf s \sim \mathcal N(0, \Sigma_{\mathbf s})$, reconstruction becomes a Maximum A Posteriori (MAP) estimation, leading to the optimization problem given in Eq. (1) of the main text. There, $\mathbf C$ acts as a weighting matrix derived from the prior covariance, such that $\mathbf C^T\mathbf C = \mathbf \Sigma_{\mathbf s}^{-1}$. In practice, the true source covariance $\Sigma_{\mathbf s}$ is unknown and replaced with the identity matrix — the assumption of independent, equal-variance sources that gives wMNE, dSPM and sLORETA their "independent-source" label throughout this work.
+
+wMNE additionally adjusts source variances, generating the depth-weighting matrix $\mathbf W_d$ applied to counteract the bias of $l_2$-regularized solutions toward superficial dipoles:
+
+$$
+\mathbf \Sigma_{\mathbf s} = \mathbf W_d^2, \qquad \text{where} \quad W_{d,ii} = \lVert \mathbf L_{:i}\rVert^{-\kappa}
+$$
+
+so that deep sources, with small lead-field norms, receive a larger prior variance. In the SVD form of the main text, $\mathbf B=\mathbf W_d$.
+
+For wMNE, the depth-weighting exponent was set to $\kappa=0.8$, the MEG-optimized value reported by @lin_assessing_2006 (who found a higher optimal range, 2.0–5.0, for EEG specifically). sLORETA and dSPM apply an additional post-hoc standardization on top of the minimum-norm estimate, and were run without additional depth weighting, since this noise-normalization step already compensates for depth bias on its own.
+
+With $\mathbf B=\mathbf I$ and the SVD $\mathbf L=\mathbf E_f\boldsymbol\Gamma\mathbf E_\ell^\top$ of the main text, both standardizations divide the minimum-norm estimate $s^*_k$ of source $k$ by a norm computed from the same decomposition:
+
+$$
+z_k^{\text{dSPM}}=\frac{s^*_k}{\lVert[\mathbf E_\ell\mathbf D_\lambda]_{k,:}\rVert},\qquad
+z_k^{\text{sLORETA}}=\frac{s^*_k}{\big\lVert[\mathbf E_\ell\,\mathrm{diag}(\gamma_j/\sqrt{\gamma_j^2+\lambda})]_{k,:}\big\rVert}
+$$
+
+The dSPM denominator is the noise standard deviation of source $k$, since the whitened noise has identity covariance [@dale_dynamic_2000]. The sLORETA denominator is the square root of the $k$-th diagonal entry of the resolution matrix [@pascual-marqui_standardized_2002]. MNE-Python's sLORETA factor differs from this one by the constant $1/\sqrt\lambda$, which rescales the maps without changing their shape [@gramfort_meg_2013].
+
+**GBF — full formulation.** wCSET (Eq. 4) is reconfigured to approximate GBF via three changes to its own formulation: (i) $\mathbf U$ becomes the Laplace-Beltrami eigenbasis of the cortical mesh (Section 2.3.3) rather than the connectome's; (ii) no depth weighting ($\mathbf W_d = \mathbf I$); and (iii) the exponential weights (Eq. 3) become GBF's hard-truncated, log-form weighting, $W_{h,ii} = \sqrt{-\log(\mu_i/\mu_S)}$ for the $S$ lowest-frequency Beltrami eigenmodes and $W_{h,ii}=0$ beyond ($\mu_i$: Laplace-Beltrami eigenvalues).
+
+**GBF cutoff tuning.** Wang et al. tune a scale parameter $\beta$ for their log-form weighting, but our pipeline trace-renormalizes the inverse kernel before the ridge solve (standard practice), which renders $\beta$ a pure rescale with no effect on the reconstruction. Rather than leave this comparator's one nominally free parameter untuned, we instead tuned the parameter that actually shapes the weighting under our normalization, the cutoff $S$: a sweep against simulated ground truth showed $S=150$ roughly halving peak-localization error relative to $S=300$ (6.1 vs. 14.7 mm) while matching or exceeding it on average precision.
+
+# Volume Conduction Model — Additional Implementation Details
+
+**Head-model pipeline.** Brain tissues were segmented into three compartments (inner skull, outer skull, scalp) using the SimNIBS CHARM pipeline (v4.5; @puonti_accurate_2020). Each compartment mask was smoothed via morphological closing and fitted with a deformable grade-5 icosahedral template, each surface constrained in turn to stay outside its inner neighbor's already-fitted surface (skin fitted last, constrained by the outer skull; outer skull constrained by the inner skull) — the "sequential and non-intersecting" fitting referenced in the main text.
+
+**Skull-base limitation.** The boundary element method requires each tissue compartment to be a closed, watertight surface, but the true skull base is not: openings such as the foramen magnum and the smaller foramina nerves and vessels pass through break that assumption. Rather than attempt to model this genuinely perforated geometry, our fitting procedure simply closes the skull surfaces off smoothly below a fixed height, sacrificing anatomical accuracy at the very base of the skull by design. This is only acceptable if the resulting error stays away from the sources actually reconstructed here: @lanfer_skull_2012 found that errors from simplifying the inferior skull, while not negligible in general, concentrate in deep sources near the skull base (e.g., cerebellum) — a region this manuscript's cortical-surface-only source space never reconstructs from in the first place.
+
+**Why the default watershed extraction is sub-optimal.** MNE-Python's default pipeline (`mne.bem.make_watershed_bem`, delegating to FreeSurfer's `mri_watershed`) fits the outer scalp surface directly from the T1 via a deformable surface fit, but T1-weighted MRI has poor bone contrast, so the inner and outer skull surfaces are not obtained the same principled way: the inner skull is instead approximated by expanding the brain mask outward by a fixed margin, and the outer skull by retracting the already-fit scalp surface inward, rather than by detecting the actual bone boundary. Neither is a genuine tissue-boundary detection step, which is why watershed-derived skull surfaces are a well-known source of geometry problems and MNE's own documentation recommends visually inspecting them before use — precisely the failure mode motivating this manuscript's custom CHARM-based pipeline instead.
+
+**BEM comparison against MNE-Python's default watershed extraction.** To illustrate the sub-optimal geometries this produces, we additionally ran MNE-Python's default FreeSurfer watershed extraction (`mne.bem.make_watershed_bem`, FreeSurfer v7.4.1) on the flagship simulation subject (sub-10) and compared the resulting surfaces against the CHARM-based ones actually used for reconstruction (@tbl-bem-comparison). The default watershed geometry fails MNE's own BEM-construction check outright: calling `mne.make_bem_model` on it raises `RuntimeError: Surface inner skull is not completely inside surface outer skull`. Checking each compartment pair's nesting directly confirms why: 42/10,242 (0.41%) inner-skull vertices lie geometrically outside the outer-skull surface, and 4/10,242 (0.04%) outer-skull vertices lie outside the scalp, with the two skull surfaces coming within 0.32 mm of touching at their closest point. The CHARM-based pipeline's sequential, constrained fitting produces zero such violations by construction, with a comfortable 2.32 mm minimum gap between the skull surfaces, and its BEM model builds without error.
+
+| Metric | MNE default watershed | Custom CHARM pipeline |
+|:---|---:|---:|
+| Inner-skull vertices outside outer-skull | 42 / 10,242 (0.41%) | 0 / 10,242 (0.00%) |
+| Outer-skull vertices outside scalp | 4 / 10,242 (0.04%) | 0 / 10,242 (0.00%) |
+| Minimum inner-to-outer-skull gap | 0.32 mm | 2.32 mm |
+| Minimum outer-skull-to-scalp gap | 2.12 mm | 3.21 mm |
+| `mne.make_bem_model` / `make_bem_solution` | Fails (nesting violation) | Succeeds |
+
+: BEM geometry comparison for the flagship simulation subject (sub-10): MNE-Python's default watershed extraction vs. the custom CHARM-based pipeline used throughout this manuscript. {#tbl-bem-comparison}
+
+**A second example where watershed does not fail outright.** The sub-10 case above is a hard failure — MNE refuses to build a BEM model at all. That is not the only failure mode: for subject sub-pat10 of the SPIKE resection cohort (Clinical Dataset A), the default watershed geometry *passes* MNE's nesting check (`mne.make_bem_model` and `mne.make_bem_solution` both succeed without error) and is still visibly wrong (@fig-bem-spike). Panel (a) shows CHARM's own tissue segmentation (`Bone-Cortical`/`Bone-Cancellous` in tan, `Skin` not shown) as anatomical reference for where the skull actually is — not independent ground truth, since panel (b)'s CHARM surface is fit directly from this same segmentation, but a meaningful check on panel (c)'s watershed surface, which never sees this segmentation at all. CHARM's outer-skull contour (panel b) closely follows the segmented bone boundary. Watershed's (panel c) does not: it balloons outward well past the true skull, consistent with the coarse expand-the-brain/retract-the-scalp heuristic described above rather than genuine bone detection.
+
+```{python filename="spike_bem_comparison_plot.py"}
+#| echo: false
+#| label: fig-bem-spike
+#| fig-cap: "BEM comparison for a second subject (sub-pat10, SPIKE cohort), where the default watershed geometry does not fail MNE's nesting check outright but is still visibly wrong. (a) CHARM's own tissue segmentation (tan: Bone-Cortical/Bone-Cancellous), shown for anatomical reference, not as independent ground truth. (b) CHARM-based surfaces (white: inner/outer skull, orange: scalp) closely follow the segmented bone boundary. (c) MNE default watershed surfaces (white: inner/outer skull, orange: scalp, pink: brain) extend well past it, particularly inferiorly. Screenshots from freeview; surfaces and volumes prepared in `results/bem_comparison_spike/` (see that folder's README for provenance and exact commands)."
+import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
+
+bem_spike_dir = "../results/bem_comparison_spike"
+bem_spike_panels = [
+    (f"{bem_spike_dir}/charm_bone_segmentation.png", "a. CHARM tissue segmentation"),
+    (f"{bem_spike_dir}/charm_bem.png", "b. CHARM surfaces"),
+    (f"{bem_spike_dir}/watershed_bem.png", "c. MNE default watershed"),
+]
+
+# Composite of three external freeview screenshots - not reproducible inline
+# (freeview is an interactive viewer; screenshots taken by hand).
+bem_spike_fig, bem_spike_axes = plt.subplots(1, 3, figsize=(13, 5))
+for ax, (path, title) in zip(bem_spike_axes, bem_spike_panels):
+    ax.imshow(mpimg.imread(path))
+    ax.set_title(title, fontsize=10)
+    ax.axis("off")
+plt.tight_layout()
+```
+
+**Skull-conductivity mismatch precedent.** A similar strategy — perturbing skull conductivity between the forward and inverse models to avoid the inverse crime — has been used elsewhere to probe the sensitivity of EEG source analysis to head-model mismatch [@vorwerk_skull_2014].
+
+```{python filename="forward_mismatch_stats.py"}
+#| output: false
+import sys
+import numpy as np
+sys.path.insert(0, "..")
+from scripts.data_manager import SimfManager
+
+# Self-contained, like the other Annex sections above: reloads the two
+# forward solutions actually used for Study I (Section 2.3.2) rather than
+# hand-computing this offline - processing_simf.qmd does not itself compute
+# this comparison, so there is no cached result to reuse here.
+dm_fwd = SimfManager("../simf.config.yml")
+sub_fwd = "10"
+fwd_sim = dm_fwd.load(sub_fwd, "fwd", desc="sim")
+fwd_inv = dm_fwd.load(sub_fwd, "fwd", desc="inv")
+
+G_sim = fwd_sim["sol"]["data"]
+G_inv = fwd_inv["sol"]["data"]
+
+# Relative difference measure (RDM): per-dipole leadfield columns normalized
+# to unit norm (removing amplitude scaling), then the norm of their
+# difference - a standard forward-model comparison metric quantifying
+# topographic (shape) mismatch, of the kind used in the head-model-mismatch
+# literature (@vorwerk_skull_2014). 0 = identical topography, 2 = inverted.
+G_sim_n = G_sim / np.linalg.norm(G_sim, axis=0, keepdims=True)
+G_inv_n = G_inv / np.linalg.norm(G_inv, axis=0, keepdims=True)
+rdm = np.linalg.norm(G_sim_n - G_inv_n, axis=0)
+
+fwd_n_dipoles = f"{G_sim.shape[1]:,}"
+fwd_rdm_median = fmt_num(np.median(rdm) * 100, 1)
+fwd_rdm_mean = fmt_num(np.mean(rdm) * 100, 1)
+fwd_rdm_iqr_lo = fmt_num(np.percentile(rdm, 25) * 100, 1)
+fwd_rdm_iqr_hi = fmt_num(np.percentile(rdm, 75) * 100, 1)
+```
+
+**Forward-model mismatch magnitude.** Comparing the two forward solutions' gain matrices directly for the flagship simulation subject (sub-10, `{python} fwd_n_dipoles`-dipole source space): the relative difference measure (RDM) — a standard forward-model comparison metric quantifying topographic (shape) differences independently of amplitude scaling, the relevant summary of forward-model *mismatch* since a source-reconstruction method invariant to overall amplitude scaling would not be biased by gain differences alone — has a median of `{python} fwd_rdm_median`% across dipoles (mean `{python} fwd_rdm_mean`%, IQR [`{python} fwd_rdm_iqr_lo`%, `{python} fwd_rdm_iqr_hi`%]), consistent with the "~10%" figure quoted in the main text.
+
+# Source Space — Additional Implementation Details
+
+**Surface reconstruction and dipole placement.** The cortical surface was reconstructed using FreeSurfer (v7.4.1). Dipoles were placed via an oct6 icosahedral subdivision (after excluding medial-wall and non-cortical vertices) using MNE-Python (v1.9.0; @gramfort_meg_2013).
+
+**Orientation-constraint rationale.** Dipole orientations were fixed normal to the cortical manifold — a constraint widely adopted in distributed source imaging because the dominant contributors to the EEG signal, pyramidal neurons, have net dipole moments oriented normal to the cortical surface [@dale_improved_1993]. For the connectivity-informed methods, the constraint is also a structural requirement. The connectome describes connections between pairs of fixed cortical locations. Each location carries a single scalar source amplitude. A free-orientation dipole instead has three orthogonal components, which have no counterpart in the connectome.
+
+# Signal Preprocessing — Additional Details
+
+**Study 2 filtering parameters.** Data-provider preprocessing (per @vorderwulbecke_high-density_2025) included bandpass filtering (high-pass: 0.3–1 Hz; low-pass: 30–100 Hz, with filter settings varying across patients due to the longitudinal nature of the dataset), downsampling to 250 Hz, and interpolation of noisy channels from neighbouring electrodes using 3D splines.
+
+**Study 3 channel-comparison window.** The analysis window around each spike was the continuous interval over which the evoked response's global field power (GFP) stayed above 3 standard deviations of the pre-spike baseline.
+
+# Statistical Analysis — Additional Details
+
+**Autocorrelation-corrected effective sample size.** For the paired t-test with effective sample size (used for Study 3's channel/timepoint comparisons), the effective sample size is computed as $n_{\text{eff}} = n / (1 + 2\sum_{k=1}^{K} \rho_k)$, where $\rho_k$ is the paired-difference series' own lag-$k$ autocorrelation, summed until it falls within the white-noise 95% confidence band ($1.96/\sqrt{n}$), capped at $n/4$ — the standard correction for testing the mean of a serially-correlated series. This down-weights the nominal pair count to reflect the true amount of independent evidence when neighbouring channels or timepoints are correlated.
+
+**Cluster-based permutation testing.** Continuous comparisons (e.g. across SNR or connectome perturbation severity) used a one-sample, sign-flip permutation test on the paired-difference series (MNE-Python's `permutation_cluster_1samp_test`; 3000 permutations), which identifies contiguous clusters of the coordinate where the two methods differ, rather than testing each point independently. The cluster-forming threshold matched the test's own two-tailed α = 0.05 default; each cluster's p-value reflects how extreme its summed test statistic is relative to the permutation null, and effect size (Cohen's dz) is computed from each subject's difference averaged across the cluster's span.
+
+# Robustness to Data Noise — Full Results (Section 3.1.2)
+
+```{python filename="simf_noise_stats.py"}
+#| output: false
+import mindmap as mm
+
+noise_metrics = mm.metric.MetricSuite.load("../results/simf/noise_sweep")
+competitors = [m for m in METHODS if m != "wcset"]
+
+# region-as-subject cluster-permutation summary vs. wCSET, every competitor
+# on one shared axes - "compact version" pattern from
+# mindmap/tutorials/analysis/metrics/metricsuite-noisesweep.ipynb. Region is
+# the repeated-measures unit (the same physical region at every SNR level;
+# repetitions aren't matched across levels, since each draws its own
+# independent seed), SNR level is the swept coordinate, tested via
+# mne.stats.permutation_cluster_1samp_test. noise_sweep_comparison.py
+# registers `region`. Unlike the tutorial's correlation_pp example,
+# localization_error_qrp is lower-is-better (mm to the true source), hence
+# higher_is_better=False. Identical call to the one already cached by
+# processing_simf.qmd's Statistics section.
+noise_loc_snr_order = sorted(
+    noise_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})["snr"].unique(), reverse=True
+)
+
+noise_loc_results = noise_metrics.stat.cluster_permutation(
+    "localization_error", coord="snr", group_by="Method",
+    comparisons=noise_metrics.stat.build_comparisons(["wcset"], competitors), pairing_col="region",
+    coord_order=noise_loc_snr_order, higher_is_better=False, filters={"phase": "qrp"},
+    n_permutations=3000, seed=0,
+)
+
+# statistics quoted in the prose below. main_cluster() always returns the
+# largest-mass cluster regardless of significance, so its result must be
+# checked against "p_corrected" before being described as significant in
+# prose: wMNE and dSPM each have one cluster that survives FDR correction;
+# sLORETA's largest cluster does not. CSET is a further step down from
+# that: its clusters_by_pair table against wCSET is entirely empty (no
+# candidate cluster of either sign anywhere in the SNR range), so
+# main_cluster() can't be called on it at all - handled separately below
+# rather than assumed non-empty like the other three competitors.
+noise_loc_wmne = main_cluster(noise_loc_results.clusters_by_pair[("wcset", "wmne")])
+noise_loc_sloreta = main_cluster(noise_loc_results.clusters_by_pair[("wcset", "sloreta")])
+noise_loc_cset_clusters = noise_loc_results.clusters_by_pair[("wcset", "cset")]
+noise_loc_dspm = main_cluster(noise_loc_results.clusters_by_pair[("wcset", "dspm")])
+
+noise_loc_wmne_p = fmt_p(noise_loc_wmne["p_corrected"])
+noise_loc_wmne_dz = fmt_stat(noise_loc_wmne["effect_size"])
+noise_loc_wmne_snr_start = fmt_num(noise_loc_wmne["snr_start"], 0)
+
+noise_loc_sloreta_p = fmt_p(noise_loc_sloreta["p_corrected"])
+noise_loc_sloreta_dz = fmt_stat(noise_loc_sloreta["effect_size"])
+noise_loc_sloreta_snr = fmt_num(noise_loc_sloreta["snr_start"], 0)
+noise_loc_sloreta_snr_end = fmt_num(noise_loc_sloreta["snr_end"], 0)
+
+# No p_corrected/effect_size to quote when no cluster exists at all - the
+# prose below states this directly instead of quoting cluster statistics.
+noise_loc_cset_has_cluster = not noise_loc_cset_clusters.empty
+
+noise_loc_dspm_p = fmt_p(noise_loc_dspm["p_corrected"])
+noise_loc_dspm_dz = fmt_stat(noise_loc_dspm["effect_size"])
+noise_loc_dspm_snr_start = fmt_num(noise_loc_dspm["snr_start"], 0)
+noise_loc_dspm_snr_end = fmt_num(noise_loc_dspm["snr_end"], 0)
+
+_loc_medians = noise_metrics.metadata["derived"]["loc_median"]
+noise_loc_wmne_median20 = fmt_num(_loc_medians["wmne"][str(float(20))])
+noise_loc_wmne_median1 = fmt_num(_loc_medians["wmne"][str(float(1))])
+noise_loc_dspm_median1 = fmt_num(_loc_medians["dspm"][str(float(1))])
+noise_loc_wcset_median1 = fmt_num(_loc_medians["wcset"][str(float(1))])
+
+# Same region-as-subject cluster-permutation summary, once per phase -
+# correlation is higher-is-better (unlike localization error), matching the
+# tutorial's own correlation_pp example directly. Identical calls to the
+# ones already cached by processing_simf.qmd's Statistics section.
+noise_corr_snr_order = sorted(
+    noise_metrics.to_df(metrics="correlation", filters={"phase": "qrp"})["snr"].unique(), reverse=True
+)
+
+noise_corr_results = {}
+for phase in ["qrp", "pp"]:
+    noise_corr_results[phase] = noise_metrics.stat.cluster_permutation(
+        "correlation", coord="snr", group_by="Method",
+        comparisons=noise_metrics.stat.build_comparisons(["wcset"], competitors), pairing_col="region",
+        coord_order=noise_corr_snr_order, higher_is_better=True, filters={"phase": phase},
+        n_permutations=3000, seed=0,
+    )
+
+# statistics quoted in the prose below: largest-mass cluster per competitor
+# per phase (all share p_corrected=0.001, so a single formatted value covers
+# every one of them), plus the min/max effect size across all 8 (4
+# competitors x 2 phases) to state the range quoted in prose, and wCSET's
+# own median correlation at the SNR extremes.
+_all_dz = {}
+for phase in ["qrp", "pp"]:
+    for comp in competitors:
+        c = main_cluster(noise_corr_results[phase].clusters_by_pair[("wcset", comp)])
+        _all_dz[(phase, comp)] = c["effect_size"]
+
+noise_corr_p_all = fmt_p(main_cluster(noise_corr_results["qrp"].clusters_by_pair[("wcset", "wmne")])["p_corrected"])
+noise_corr_dz_min_key = min(_all_dz, key=lambda k: _all_dz[k])
+noise_corr_dz_max_key = max(_all_dz, key=lambda k: _all_dz[k])
+noise_corr_dz_min = fmt_stat(_all_dz[noise_corr_dz_min_key])
+noise_corr_dz_max = fmt_stat(_all_dz[noise_corr_dz_max_key])
+_phase_name = lambda p: "quarter rising phase" if p == "qrp" else "peak phase"
+noise_corr_dz_min_label = f"{METHOD_LABELS[noise_corr_dz_min_key[1]]} at {_phase_name(noise_corr_dz_min_key[0])}"
+noise_corr_dz_max_label = f"{METHOD_LABELS[noise_corr_dz_max_key[1]]} at {_phase_name(noise_corr_dz_max_key[0])}"
+
+_corr_medians_qrp = noise_metrics.metadata["derived"]["corr_qrp_median"]
+_corr_medians_pp = noise_metrics.metadata["derived"]["corr_pp_median"]
+noise_corr_wcset_qrp20 = fmt_num(_corr_medians_qrp["wcset"][str(float(20))], 2)
+noise_corr_wcset_qrp1 = fmt_num(_corr_medians_qrp["wcset"][str(float(1))], 2)
+noise_corr_wcset_pp20 = fmt_num(_corr_medians_pp["wcset"][str(float(20))], 2)
+noise_corr_wcset_pp1 = fmt_num(_corr_medians_pp["wcset"][str(float(1))], 2)
+```
+
+To assess whether the improvements shown above survive noisier measurement conditions, we swept the simulated target SNR from 20 down to 1 and repeated source reconstruction with each method (Section 2.1.1), re-evaluating localization error and spatial correlation with the ground truth as before.
+
+Localization error increased for every method as SNR decreased (@fig-noise-localization), but wMNE alone accounts for most of that pattern: already several times wCSET's error at the highest SNR tested (median `{python} noise_loc_wmne_median20` mm at SNR=20), it climbed steadily worse from there and was significantly worse than wCSET across the entire SNR range tested (region-paired cluster-permutation, p_corrected `{python} noise_loc_wmne_p`, Cohen's dz = `{python} noise_loc_wmne_dz`), reaching `{python} noise_loc_wmne_median1` mm by SNR=1. The other four methods (wCSET, CSET, sLORETA, dSPM) instead behaved similarly to one another, staying low until roughly SNR=4–5 before climbing. sLORETA's and dSPM's high-SNR plateaus did reach significance against wCSET (SNR=`{python} noise_loc_sloreta_snr`–`{python} noise_loc_sloreta_snr_end`, p_corrected `{python} noise_loc_sloreta_p`; SNR=`{python} noise_loc_dspm_snr_start`–`{python} noise_loc_dspm_snr_end`, p_corrected `{python} noise_loc_dspm_p`), but with modest effect sizes (dz = `{python} noise_loc_sloreta_dz` and `{python} noise_loc_dspm_dz` respectively) that didn't extend to lower SNR; CSET's own curve never diverged from wCSET's enough to register even a candidate cluster anywhere in the range tested — a stronger statement than "not significant," since no cluster (and so no p-value or effect size) exists to report.
+
+```{python filename="simf_localization_noise_plot.py"}
+#| echo: false
+#| label: fig-noise-localization
+#| fig-cap: "Localization error (mm) versus single-trial SNR (subject sub-10, quarter rising phase), median curve with thin IQR whiskers across the 100 simulated regions. Markers are filled/solid where wCSET's error is significantly lower than the competitor's (region-paired cluster-permutation); wCSET is the reference."
+import matplotlib.pyplot as plt
+
+noise_loc_fig, noise_loc_ax = plt.subplots(figsize=(7, 5))
+noise_loc_fig, noise_loc_ax = noise_metrics.plot.cluster_permutation(
+    noise_loc_results, colors=COLORS, marker="o", markersize=5, ax=noise_loc_ax,
+)
+mark_reference(noise_loc_ax, "wcset")
+noise_loc_ax.set_xscale("log")
+noise_loc_ax.set_xlabel("Target SNR")
+noise_loc_ax.set_ylabel("Localization error (mm)")
+noise_loc_ax.spines[["top", "right"]].set_visible(False)
+plt.tight_layout()
+```
+
+For spatial correlation with the ground truth (@fig-noise-correlation), wCSET significantly outperformed all four competitors at both the quarter rising phase and the peak, across nearly the entire SNR range tested (region-paired cluster-permutation, all p_corrected `{python} noise_corr_p_all`; effect sizes ranging from dz = `{python} noise_corr_dz_min` vs. `{python} noise_corr_dz_min_label` to dz = `{python} noise_corr_dz_max` vs. `{python} noise_corr_dz_max_label`) — unlike localization error, this advantage held at low SNR too, even as correlation declined monotonically for every method (e.g. wCSET: `{python} noise_corr_wcset_qrp20`→`{python} noise_corr_wcset_qrp1` at quarter rising phase and `{python} noise_corr_wcset_pp20`→`{python} noise_corr_wcset_pp1` at peak, from SNR=20 to SNR=1). The sole exception was at SNR=1, where correlations for every method had collapsed toward zero.
+
+```{python filename="simf_correlation_noise_plot.py"}
+#| echo: false
+#| label: fig-noise-correlation
+#| fig-cap: "Spatial correlation versus single-trial SNR (subject sub-10) at the quarter rising phase (left) and peak phase (right), median curve with thin IQR whiskers across the 100 simulated regions. Markers are filled/solid where wCSET's correlation is significantly higher than the competitor's (region-paired cluster-permutation); wCSET is the reference."
+import matplotlib.pyplot as plt
+
+noise_corr_fig, noise_corr_axes = plt.subplots(1, 2, figsize=(13, 5))
+noise_corr_panels = [("qrp", "Quarter rising phase", 0), ("pp", "Peak phase", 1)]
+
+for phase, title, col in noise_corr_panels:
+    ax = noise_corr_axes[col]
+    noise_corr_fig, ax = noise_metrics.plot.cluster_permutation(
+        noise_corr_results[phase], colors=COLORS, marker="o", markersize=5, ax=ax,
+    )
+    # cluster_permutation() builds its own legend from synthetic
+    # proxy artists (not real plotted lines), so it can't be harvested via
+    # get_legend_handles_labels() the way the old seaborn-based .plot() call
+    # could - keep only the rightmost panel's legend rather than trying to
+    # merge into one shared figure-level legend.
+    if col == 0:
+        ax.get_legend().remove()
+    else:
+        mark_reference(ax, "wcset")
+    ax.set_xscale("log")
+    ax.set_xlabel("Target SNR")
+    ax.set_ylabel("")  # set once, explicitly, on axes[0] below
+    ax.set_title(title)
+    ax.spines[["top", "right"]].set_visible(False)
+
+noise_corr_axes[0].set_ylabel("Spatial correlation (ground truth vs. reconstruction)")
+# axes[1]'s legend (built internally by plot.cluster_permutation() above)
+# stays as the figure's only legend.
+
+plt.tight_layout()
+```
+
+# Robustness to Prior Noise — Full Results (Section 3.1.3)
+
+```{python filename="simf_degradation_stats.py"}
+#| output: false
+import mindmap as mm
+
+# per explicit instruction, only the permutation experiment is shown here
+# (deletion/addition still computed and saved by processing_simf.qmd's
+# Statistics section, just not plotted or discussed in this document).
+operator = "permutation"
+
+deg_metrics = mm.metric.MetricSuite.load("../results/simf/degradation")
+
+# --- localization error --- reference=sLORETA (doesn't degrade),
+# competitors=CSET/wCSET: tests when a corrupted connectome makes CSET/
+# wCSET perform significantly worse than using no connectome at all,
+# rather than a relative CSET-vs-wCSET comparison. Identical call to the
+# one already cached by processing_simf.qmd's Statistics section.
+# phase="qrp" always (no pp counterpart exists for this metric).
+deg_comparisons = deg_metrics.stat.build_comparisons(["sloreta"], ["cset", "wcset"])
+pct_order = sorted(deg_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})["percentage"].unique())
+loc_result = deg_metrics.stat.cluster_permutation(
+    "localization_error", coord="percentage", group_by="Method", comparisons=deg_comparisons,
+    pairing_col="region", coord_order=pct_order, higher_is_better=False, filters={"phase": "qrp"},
+    n_permutations=3000, seed=0,
+)
+loc_clusters_cset = loc_result.clusters_by_pair[("sloreta", "cset")]
+loc_clusters_wcset = loc_result.clusters_by_pair[("sloreta", "wcset")]
+
+# --- spatial correlation --- same sLORETA-reference comparison as
+# above. phase="qrp" always (no pp counterpart is computed for
+# degradation, see degradation_reconstruction.py).
+pct_order_c = sorted(deg_metrics.to_df(metrics="correlation", filters={"phase": "qrp"})["percentage"].unique())
+corr_result = deg_metrics.stat.cluster_permutation(
+    "correlation", coord="percentage", group_by="Method", comparisons=deg_comparisons,
+    pairing_col="region", coord_order=pct_order_c, higher_is_better=True, filters={"phase": "qrp"},
+    n_permutations=3000, seed=0,
+)
+corr_clusters_cset = corr_result.clusters_by_pair[("sloreta", "cset")]
+corr_clusters_wcset = corr_result.clusters_by_pair[("sloreta", "wcset")]
+
+# --- statistics quoted in the prose below --- selected by sign rather
+# than by cluster position/count: how many clusters exist (and where)
+# depends on the current simulation parameters (see
+# parameter_estimates_review.md) and isn't safe to hard-code - a prior
+# version of this cell assumed fixed counts per pair and broke (IndexError)
+# once results/simf/degradation was regenerated under retuned physical
+# parameters. Per cluster_permutation_mne's sign convention, sign=-1 means
+# the competitor (CSET/wCSET) significantly beats sLORETA, sign=+1 means
+# sLORETA significantly beats the competitor; `cluster_where` returns None
+# when no cluster of that sign exists (currently the case for loc/wcset's
+# "worse" cluster - see prose, wCSET no longer becomes significantly worse
+# than sLORETA on localization error at any tested degradation level).
+# main_cluster()'s own significance caveat applies to each cluster
+# individually here too - corr/wcset's "worse" cluster does NOT survive FDR
+# correction (p_corrected `0.069` > 0.05), so the prose below must describe
+# it as a trend, not a significant effect.
+
+def cluster_where(cluster_df, sign):
+    """The cluster (if any) where the competitor significantly beats
+    sLORETA (sign=-1) or sLORETA significantly beats the competitor
+    (sign=1) - None if no such cluster exists in the current result."""
+    rows = cluster_df[cluster_df["sign"] == sign]
+    return rows.iloc[0] if not rows.empty else None
+
+deg_loc_cset_better = cluster_where(loc_clusters_cset, -1)
+deg_loc_cset_better_end = fmt_num(deg_loc_cset_better["percentage_end"], 0)
+deg_loc_cset_better_p, deg_loc_cset_better_dz = fmt_p(deg_loc_cset_better["p_corrected"]), fmt_stat(deg_loc_cset_better["effect_size"])
+
+deg_loc_cset_c = cluster_where(loc_clusters_cset, 1)
+deg_loc_cset_p, deg_loc_cset_dz = fmt_p(deg_loc_cset_c["p_corrected"]), fmt_stat(deg_loc_cset_c["effect_size"])
+deg_loc_cset_start = fmt_num(deg_loc_cset_c["percentage_start"], 0)
+
+deg_loc_wcset_early = cluster_where(loc_clusters_wcset, -1)
+deg_loc_wcset_early_end = fmt_num(deg_loc_wcset_early["percentage_end"], 0)
+deg_loc_wcset_early_p, deg_loc_wcset_early_dz = fmt_p(deg_loc_wcset_early["p_corrected"]), fmt_stat(deg_loc_wcset_early["effect_size"])
+deg_loc_wcset_worse = cluster_where(loc_clusters_wcset, 1)  # None under current results - see prose
+
+deg_corr_cset_early = cluster_where(corr_clusters_cset, -1)
+deg_corr_cset_early_p, deg_corr_cset_early_dz = fmt_p(deg_corr_cset_early["p_corrected"]), fmt_stat(deg_corr_cset_early["effect_size"])
+deg_corr_cset_early_end = fmt_num(deg_corr_cset_early["percentage_end"], 0)
+deg_corr_cset_late = cluster_where(corr_clusters_cset, 1)
+deg_corr_cset_late_p, deg_corr_cset_late_dz = fmt_p(deg_corr_cset_late["p_corrected"]), fmt_stat(deg_corr_cset_late["effect_size"])
+deg_corr_cset_late_start = fmt_num(deg_corr_cset_late["percentage_start"], 0)
+
+deg_corr_wcset_early = cluster_where(corr_clusters_wcset, -1)
+deg_corr_wcset_early_p, deg_corr_wcset_early_dz = fmt_p(deg_corr_wcset_early["p_corrected"]), fmt_stat(deg_corr_wcset_early["effect_size"])
+deg_corr_wcset_early_end = fmt_num(deg_corr_wcset_early["percentage_end"], 0)
+deg_corr_wcset_late = cluster_where(corr_clusters_wcset, 1)
+deg_corr_wcset_late_p = fmt_p(deg_corr_wcset_late["p_corrected"])  # does not survive correction - quoted as a trend only
+
+# localization/correlation medians quoted in prose - read from
+# processing_simf.qmd's precomputed metadata["derived"], not recomputed here.
+_perm_d = deg_metrics.metadata["derived"]
+deg_loc_perm_wcset_lo, deg_loc_perm_wcset_hi = _perm_d["loc_wcset_0_60"]
+deg_loc_perm_wcset_70 = _perm_d["loc_wcset_70"]
+deg_loc_perm_wcset_100 = _perm_d["loc_wcset_100"]
+
+deg_loc_perm_wcset_lo_s = fmt_num(deg_loc_perm_wcset_lo)
+deg_loc_perm_wcset_hi_s = fmt_num(deg_loc_perm_wcset_hi)
+deg_loc_perm_wcset_70_s = fmt_num(deg_loc_perm_wcset_70)
+deg_loc_perm_wcset_100_s = fmt_num(deg_loc_perm_wcset_100)
+
+deg_corr_perm_wcset_0 = fmt_num(_perm_d["corr_wcset_0"], 2)
+deg_corr_perm_wcset_100 = fmt_num(_perm_d["corr_wcset_100"], 2)
+_cset_lo, _cset_hi = _perm_d["corr_cset_0_60"]
+deg_corr_perm_cset_lo = fmt_num(_cset_lo, 2)
+deg_corr_perm_cset_hi = fmt_num(_cset_hi, 2)
+deg_corr_perm_cset_100 = fmt_num(_perm_d["corr_cset_100"], 2)
+```
+
+Using the connectome-perturbation procedure of Section 2.3.3, we re-evaluated localization error (@fig-degradation-localization) and spatial correlation (@fig-degradation-correlation) for CSET and wCSET, benchmarked directly against sLORETA rather than against each other: sLORETA is connectome-agnostic, so its performance cannot be affected by connectome corruption, making it a natural floor — the degradation level at which a connectivity-informed method becomes significantly worse than sLORETA is the point past which using the (corrupted) connectome is actively counterproductive, rather than merely less helpful. dSPM remains connectome-agnostic too and is shown only as a flat, untested reference line.
+
+wCSET's localization error remained essentially flat under permutation up to 60% (`{python} deg_loc_perm_wcset_lo_s`–`{python} deg_loc_perm_wcset_hi_s` mm), only climbing noticeably beyond that point (`{python} deg_loc_perm_wcset_70_s` mm at 70%, `{python} deg_loc_perm_wcset_100_s` mm at 100%). Benchmarked against sLORETA (region-paired cluster-permutation), wCSET was significantly *more* accurate across low-to-moderate degradation (0–`{python} deg_loc_wcset_early_end`%, p_corrected `{python} deg_loc_wcset_early_p`, Cohen's dz = `{python} deg_loc_wcset_early_dz`), and never became significantly worse than sLORETA at any degradation level tested, including full (100%) permutation. CSET showed the same early advantage over a comparable range (0–`{python} deg_loc_cset_better_end`%, p_corrected `{python} deg_loc_cset_better_p`, dz = `{python} deg_loc_cset_better_dz`), but unlike wCSET this advantage reversed: CSET became significantly worse than sLORETA from `{python} deg_loc_cset_start`% onward (p_corrected `{python} deg_loc_cset_p`, dz = `{python} deg_loc_cset_dz`) — a degradation level at which wCSET's own localization error never reached a significant deficit, even under full connectome permutation.
+
+```{python filename="simf_localization_degradation_plot.py"}
+#| echo: false
+#| label: fig-degradation-localization
+#| fig-cap: "Localization error (mm) versus percentage of connectome edges randomly permuted (subject sub-10, quarter rising phase), for CSET and wCSET; median curve with thin IQR whiskers across the 100 simulated regions. Markers are filled/solid where significantly different from sLORETA, tested at each degradation level (region-paired cluster-permutation). Dashed line: dSPM's undegraded-connectome reference level."
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
+# flat reference: dSPM is connectome-agnostic (not recomputed per
+# degradation level), so its flagship (undegraded) median is reused as-is
+# by processing_simf.qmd's Statistics section, plot-only (not quoted in the
+# prose above).
+deg_ref_loc = deg_metrics.metadata["derived"]["ref_loc"]
+
+# two-pair result (sLORETA vs CSET, sLORETA vs wCSET) -> plot.cluster_permutation()
+# dispatches to the compact multi-competitor overlay (same pattern as the
+# noise-sweep figures above, simf_noise_stats.py), reference (sLORETA)
+# auto-inferred from the group shared by both pairs.
+deg_loc_fig, deg_loc_ax = plt.subplots(figsize=(6, 5))
+deg_loc_fig, deg_loc_ax = deg_metrics.plot.cluster_permutation(
+    loc_result, colors=COLORS, marker="o", markersize=4, ax=deg_loc_ax,
+)
+mark_reference(deg_loc_ax, "sloreta")
+# dSPM stays a flat, untested reference line (still connectome-agnostic,
+# just not part of this comparison) - sLORETA no longer needs one, it's
+# plotted as its own tested curve above.
+deg_loc_ax.axhline(deg_ref_loc["dspm"], color=COLORS["dspm"], linestyle="--", linewidth=1.5, zorder=0.5)
+deg_loc_ax.set_xlabel("Connectome degradation (%)")
+deg_loc_ax.set_ylabel("Localization error (mm)")
+deg_loc_ax.spines[["top", "right"]].set_visible(False)
+
+legend_handles = [
+    Line2D([0], [0], color=COLORS["dspm"], linestyle="--", linewidth=1.5, label="dspm (undegraded)"),
+]
+deg_loc_fig.legend(handles=legend_handles, loc="lower center", ncol=1, bbox_to_anchor=(0.5, -0.04))
+
+deg_loc_fig.tight_layout()
+```
+
+
+Spatial correlation with the ground truth showed a similar but more pronounced pattern: permutation slowly degraded wCSET's correlation (`{python} deg_corr_perm_wcset_0` at 0% down to `{python} deg_corr_perm_wcset_100` at 100%), while CSET's own correlation stayed comparatively flat through 60% (`{python} deg_corr_perm_cset_lo`–`{python} deg_corr_perm_cset_hi`) before also declining sharply thereafter (`{python} deg_corr_perm_cset_100` at 100%). Against sLORETA, both methods started out significantly better (region-paired cluster-permutation: CSET 0–`{python} deg_corr_cset_early_end`%, p_corrected `{python} deg_corr_cset_early_p`, dz = `{python} deg_corr_cset_early_dz`; wCSET 0–`{python} deg_corr_wcset_early_end`%, p_corrected `{python} deg_corr_wcset_early_p`, dz = `{python} deg_corr_wcset_early_dz`), but only CSET's advantage reversed into a significant deficit, from `{python} deg_corr_cset_late_start`% onward (p_corrected `{python} deg_corr_cset_late_p`, dz = `{python} deg_corr_cset_late_dz`). wCSET's correlation, by contrast, never became significantly worse than sLORETA's, even at full permutation — its apparent dip at 100% did not reach significance (p_corrected `{python} deg_corr_wcset_late_p`).
+
+
+```{python filename="simf_correlation_degradation_plot.py"}
+#| echo: false
+#| label: fig-degradation-correlation
+#| fig-cap: "Spatial correlation versus percentage of connectome edges randomly permuted (subject sub-10, quarter rising phase only), for CSET and wCSET; median curve with thin IQR whiskers across the 100 simulated regions. Markers are filled/solid where significantly different from sLORETA, tested at each degradation level (region-paired cluster-permutation). Dashed line: dSPM's undegraded-connectome reference level."
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
+# sLORETA's flagship values were injected into deg_metrics itself
+# (replicated at every percentage) so it can be the tested baseline above;
+# dSPM stays a flat, untested reference line, plot-only (not quoted in the
+# prose above).
+deg_ref_corr = deg_metrics.metadata["derived"]["ref_corr"]
+
+deg_corr_fig, deg_corr_ax = plt.subplots(figsize=(6, 5))
+deg_corr_fig, deg_corr_ax = deg_metrics.plot.cluster_permutation(
+    corr_result, colors=COLORS, marker="o", markersize=4, ax=deg_corr_ax,
+)
+mark_reference(deg_corr_ax, "sloreta")
+deg_corr_ax.axhline(deg_ref_corr["dspm"], color=COLORS["dspm"], linestyle="--", linewidth=1.5, zorder=0.5)
+deg_corr_ax.set_xlabel("Connectome degradation (%)")
+deg_corr_ax.set_ylabel("Spatial correlation (ground truth vs. reconstruction)")
+deg_corr_ax.spines[["top", "right"]].set_visible(False)
+
+legend_handles = [
+    Line2D([0], [0], color=COLORS["dspm"], linestyle="--", linewidth=1.5, label="dspm (undegraded)"),
+]
+deg_corr_fig.legend(handles=legend_handles, loc="lower center", ncol=1, bbox_to_anchor=(0.5, -0.04))
+
+deg_corr_fig.tight_layout()
+```
+
+# Surrogate alternatives — Full Results (Section 3.1.4)
+
+```{python filename="simf_surrogate_full_stats.py"}
+#| output: false
+import mindmap as mm
+
+# self-contained, like the other "Full Results" Annex sections above -
+# reloads and recomputes independently of the main-text surrogate cell
+# rather than reusing its variables (same identical calls, disk-cache hit).
+surrogates_full = ["beltrami", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin"]
+conditions_full = ["original"] + surrogates_full
+
+# same reader-facing renaming as the main-text cell (Section 3.1.4) - fused/
+# fused-bin/geom-atlas/geom-atlas-bin are the on-disk `Surrogate` tags.
+SURROGATE_LABELS_FULL = {
+    "fused": "atlas", "fused-bin": "atlas-bin",
+    "geom-atlas": "local", "geom-atlas-bin": "local-bin",
+}
+
+surr_metrics_full = mm.metric.MetricSuite.load("../results/simf/surrogates")
+surr_comparisons_full = surr_metrics_full.stat.build_comparisons(["original"], surrogates_full)
+
+# CSET's own breakdown - wCSET's is reported in full in the main text.
+surr_loc_cset = surr_metrics_full.stat.wilcoxon(
+    "localization_error", group_by="Surrogate",
+    comparisons=surr_comparisons_full, pairing_col="region",
+    filters={"Method": "cset", "phase": "qrp"},
+)
+surr_corr_cset = {}
+for phase in ["qrp", "pp"]:
+    surr_corr_cset[phase] = surr_metrics_full.stat.wilcoxon(
+        "correlation", group_by="Surrogate",
+        comparisons=surr_comparisons_full, pairing_col="region",
+        filters={"Method": "cset", "phase": phase},
+    )
+
+def _cset_row(table, surrogate):
+    return competitor_row(table, surrogate, reference="original")
+
+# statistics quoted in the prose below.
+loc_cset_p = {s: fmt_p(_cset_row(surr_loc_cset, s)["p_corrected"]) for s in surrogates_full}
+loc_cset_r = {s: fmt_stat(_cset_row(surr_loc_cset, s)["effect_size"]) for s in surrogates_full}
+
+corr_cset_p = {
+    (s, ph): fmt_p(_cset_row(surr_corr_cset[ph], s)["p_corrected"])
+    for ph in ["qrp", "pp"] for s in surrogates_full
+}
+corr_cset_r = {
+    (s, ph): fmt_stat(_cset_row(surr_corr_cset[ph], s)["effect_size"])
+    for ph in ["qrp", "pp"] for s in surrogates_full
+}
+```
+
+This section reports CSET's full surrogate-connectome breakdown (@fig-surrogate-cset), summarized qualitatively in the main text alongside wCSET's own (Section 3.1.4), which is reported there in full.
+
+For localization error, CSET was significantly less accurate with beltrami (p_corrected `{python} loc_cset_p['beltrami']`, r = `{python} loc_cset_r['beltrami']`) and the local surrogate (p_corrected `{python} loc_cset_p['geom-atlas']`, r = `{python} loc_cset_r['geom-atlas']`); the atlas, atlas-bin, and local-bin surrogates did not differ significantly from the original connectome (p_corrected `{python} loc_cset_p['fused']`, `{python} loc_cset_p['fused-bin']`, and `{python} loc_cset_p['geom-atlas-bin']` respectively).
+
+For spatial correlation, CSET was significantly lower than the original connectome with the atlas surrogate at both the quarter rising phase (p_corrected `{python} corr_cset_p[('fused', 'qrp')]`) and the peak (p_corrected `{python} corr_cset_p[('fused', 'pp')]`), and likewise with the local (p_corrected `{python} corr_cset_p[('geom-atlas', 'qrp')]` and `{python} corr_cset_p[('geom-atlas', 'pp')]`) and local-bin (p_corrected `{python} corr_cset_p[('geom-atlas-bin', 'qrp')]` and `{python} corr_cset_p[('geom-atlas-bin', 'pp')]`) surrogates at both phases. The atlas-bin surrogate reached significance only at the peak (p_corrected `{python} corr_cset_p[('fused-bin', 'pp')]`), not at the quarter rising phase (p_corrected `{python} corr_cset_p[('fused-bin', 'qrp')]`). Beltrami never differed significantly from the original connectome, at either phase (p_corrected `{python} corr_cset_p[('beltrami', 'qrp')]` and `{python} corr_cset_p[('beltrami', 'pp')]`).
+
+```{python filename="simf_surrogate_cset_plot.py"}
+#| echo: false
+#| label: fig-surrogate-cset
+#| fig-cap: "CSET accuracy using the true structural connectome versus five dMRI-free connectome surrogates (subject sub-10; box = IQR, line = median). (a) Localization error (mm) at the quarter rising phase. (b, c) Spatial correlation with ground truth at the quarter rising phase (b) and peak phase (c). Dashed lines mark dSPM's and sLORETA's true-connectome medians as reference. Stars mark significance vs. the original (true) connectome (Wilcoxon signed-rank, region-paired, FDR-corrected). wCSET's equivalent comparisons are reported in Figure 4 of the main text."
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
+CONDITION_COLORS_FULL = {
+    "original": LINE_COLOR,
+    "beltrami": "#2a78d6",
+    "fused": "#eb6834",
+    "fused-bin": "#1baf7a",
+    "geom-atlas": "#eda100",
+    "geom-atlas-bin": "#e87ba4",
+}
+
+surr_ref_loc_full = surr_metrics_full.metadata["derived"]["ref_loc"]
+surr_ref_corr_full = surr_metrics_full.metadata["derived"]["ref_corr"]
+ref_methods_full = ["dspm", "sloreta"]
+phase_titles_full = {"qrp": "Quarter rising phase", "pp": "Peak phase"}
+panel_letters_full = {"loc": "a", "qrp": "b", "pp": "c"}
+
+surr_cset_fig, surr_cset_axes = plt.subplots(1, 3, figsize=(len(conditions_full) * 1.3 * 2.4, 5.5))
+
+# panel a: localization error at qrp.
+ax_loc_cset = surr_cset_axes[0]
+surr_cset_fig, ax_loc_cset = surr_metrics_full.plot.group_comparison(
+    surr_loc_cset, order=conditions_full, palette=CONDITION_COLORS_FULL, points=False,
+    showfliers=False, width=0.6, ax=ax_loc_cset,
+)
+for ref_method in ref_methods_full:
+    ax_loc_cset.axhline(surr_ref_loc_full[ref_method], color=COLORS[ref_method], linestyle="--", linewidth=1.5, zorder=0.5)
+ax_loc_cset.set_xticks(range(len(conditions_full)))
+ax_loc_cset.set_xticklabels(ref_labels([SURROGATE_LABELS_FULL.get(c, c) for c in conditions_full], "original"), rotation=45, ha="right")
+ax_loc_cset.set_xlabel("")
+ax_loc_cset.set_ylabel("Localization error (mm)")
+ax_loc_cset.set_title(f"{panel_letters_full['loc']}. Localization error\n(quarter rising phase)")
+ax_loc_cset.spines[["top", "right"]].set_visible(False)
+
+# panels b, c: spatial correlation at qrp / peak phase, sharing a y-scale.
+corr_axes_cset = {}
+for phase in ["qrp", "pp"]:
+    ax = surr_cset_axes[1 if phase == "qrp" else 2]
+    corr_axes_cset[phase] = ax
+    surr_cset_fig, ax = surr_metrics_full.plot.group_comparison(
+        surr_corr_cset[phase], order=conditions_full, palette=CONDITION_COLORS_FULL, points=False,
+        showfliers=False, width=0.6, ax=ax,
+    )
+    for ref_method in ref_methods_full:
+        ax.axhline(surr_ref_corr_full[phase][ref_method], color=COLORS[ref_method], linestyle="--", linewidth=1.5, zorder=0.5)
+    ax.set_xticks(range(len(conditions_full)))
+    ax.set_xticklabels(ref_labels([SURROGATE_LABELS_FULL.get(c, c) for c in conditions_full], "original"), rotation=45, ha="right")
+    ax.set_xlabel("")
+    ax.set_ylabel("Spatial correlation")
+    ax.set_title(f"{panel_letters_full[phase]}. {phase_titles_full[phase]}")
+    ax.spines[["top", "right"]].set_visible(False)
+for ax in corr_axes_cset.values():
+    ax.set_ylim(0, 0.9)
+
+surr_cset_legend_handles = [
+    Line2D([0], [0], color=COLORS[m], linestyle="--", linewidth=1.5, label=f"{m} (original connectome)")
+    for m in ref_methods_full
+]
+surr_cset_fig.legend(handles=surr_cset_legend_handles, loc="lower center", ncol=2, bbox_to_anchor=(0.5, -0.04))
+
+plt.tight_layout()
+```
+
+
+
+
+
+
+
+
+
+
+
+# Study I Example Run — All Views (Section 3.1.1)
+
+All four cortical views of the example run shown in the main text (@fig-flagship-example of the main text shows the left hemisphere only). Spatial correlations with the ground truth are computed over the whole cortex.
+
+```{python filename="simf_example_all_views.py"}
+#| label: fig-flagship-all-views
+#| fig-cap: "Ground truth, wCSET and sLORETA for the main-text example run (sub-10, ctx-lh-caudalmiddlefrontal_3), all four cortical views, at (a) the quarter rising phase (t₁) and (b) the peak phase (t₂). Each row is independently normalized (own maximum = 1). r = spatial correlation with the ground truth over the whole cortex."
+import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
+
+fig, axes = plt.subplots(2, 1, figsize=(12, 13))
+for ax, (path, title) in zip(axes, [
+    ("../results/simf/flagship_reconstruction_grid_qrp.png", "a. Quarter rising phase (t₁)"),
+    ("../results/simf/flagship_reconstruction_grid_pp.png", "b. Peak phase (t₂)"),
+]):
+    ax.imshow(mpimg.imread(path))
+    ax.set_title(title, loc="left", fontsize=11)
+    ax.axis("off")
+plt.tight_layout()
+```
+
+# Deep-Source Subjects (sub-12/sub-50) — Full Results (Section 3.3.1)
+
+This section reports full results for the two Clinical Dataset B subjects whose sources were too deep to produce a visible scalp EEG spike (sub-12, sub-50; Section 2.1.3): their EEG-derived reconstruction, and the virtual iEEG projected from it (Section 2.5.2), is inherently less reliable than Subjects 1 and 2's own (main-text Section 3.3.1; see also the Discussion), so their results are reported separately here rather than pooled into the main comparison (@fig-intracranial-diff of the main text; sub-34/sub-48 only). Both metrics evaluated there — per-timepoint spatial correlation and per-channel temporal correlation — are reported here in full, using the same autocorrelation-corrected paired test (Section 2.6.4).
+
+```{python filename="intra_deepsource_stats.py"}
+#| output: false
+import numpy as np
+import mindmap as mm
+
+# Self-contained, like the other Annex sections above: reloads and
+# recomputes independently of index.qmd's own results_intra_vieeg_significance.py
+# cell rather than reusing its variables (identical stat.ttest_ess() calls,
+# disk-cache hit against processing_intra.qmd's Statistics section).
+vieeg_metrics = mm.metric.MetricSuite.load("../results/intra/combined")
+COMPETITORS = ["sloreta", "cset", "dspm", "wmne", "beltrami"]
+SUBJECT_ORDER = ["12", "50"]
+METRIC_BLOCKS = [
+    ("correlation_spatial", "times", "Spatial corr.\n(diff per timepoint)"),
+    ("correlation_temporal", "channel", "Temporal corr.\n(diff per channel)"),
+]
+METRIC_LABELS = {"correlation_spatial": "spatial correlation", "correlation_temporal": "temporal correlation"}
+
+def paired_diffs(subject, metric, coord):
+    # exact post-dropna order already cached by processing_intra.qmd's
+    # Statistics section - reused verbatim (as index.qmd's own paired_diffs()
+    # does for sub-34/48) to keep the stat.ttest_ess() call below an instant
+    # cache hit rather than a silent recompute under a different order.
+    order = vieeg_metrics.metadata["derived"]["subject_order"][subject][metric]
+    df_sub = vieeg_metrics.to_df(metrics=metric, filters={"Subject": subject})
+    wide = df_sub.pivot_table(index=coord, columns="Method", values="Value", aggfunc="mean").reindex(order)
+    wide = wide.dropna(subset=["wcset"] + COMPETITORS)
+    return {c: (wide["wcset"] - wide[c]).to_numpy() for c in COMPETITORS}, wide.index.tolist()
+
+deep_results, deep_diffs = {}, {}
+for metric, coord, ylabel in METRIC_BLOCKS:
+    for subject in SUBJECT_ORDER:
+        diffs, order = paired_diffs(subject, metric, coord)
+        deep_results[(subject, metric)] = vieeg_metrics.stat.ttest_ess(
+            metric, group_by="Method", comparisons=vieeg_metrics.stat.build_comparisons(["wcset"], COMPETITORS),
+            pairing_col=coord, subject_order=order, filters={"Subject": subject},
+        )
+        deep_diffs[(subject, metric)] = diffs
+
+# statistics quoted in the prose below.
+deep_50_spatial_p_sloreta = fmt_p(competitor_row(deep_results[("50", "correlation_spatial")], "sloreta")["p_corrected"])
+deep_50_spatial_dz_sloreta = fmt_stat(competitor_row(deep_results[("50", "correlation_spatial")], "sloreta")["effect_size"])
+deep_50_spatial_p_dspm = fmt_p(competitor_row(deep_results[("50", "correlation_spatial")], "dspm")["p_corrected"])
+deep_50_spatial_dz_dspm = fmt_stat(competitor_row(deep_results[("50", "correlation_spatial")], "dspm")["effect_size"])
+deep_50_spatial_p_wmne = fmt_p(competitor_row(deep_results[("50", "correlation_spatial")], "wmne")["p_corrected"])
+deep_50_spatial_dz_wmne = fmt_stat(competitor_row(deep_results[("50", "correlation_spatial")], "wmne")["effect_size"])
+deep_50_temporal_p_cset = fmt_p(competitor_row(deep_results[("50", "correlation_temporal")], "cset")["p_corrected"])
+deep_50_temporal_dz_cset = fmt_stat(competitor_row(deep_results[("50", "correlation_temporal")], "cset")["effect_size"])
+
+# sub-12's single most favorable comparison across both metrics/every
+# competitor - computed once by processing_intra.qmd's Statistics section
+# (metadata["derived"]) specifically for this prose, found programmatically
+# there rather than assumed, so it stays correct on reanalysis.
+deep_min_p = fmt_p(vieeg_metrics.metadata["derived"]["sub12_min_p"])
+deep_min_competitor_label = METHOD_LABELS[vieeg_metrics.metadata["derived"]["sub12_min_competitor"]]
+deep_min_metric_label = METRIC_LABELS[vieeg_metrics.metadata["derived"]["sub12_min_metric"]]
+```
+
+For sub-12, wCSET did not differ significantly from any competitor on either metric (@fig-deepsource-diff, left column); even its single most favorable comparison overall — `{python} deep_min_competitor_label` on `{python} deep_min_metric_label` — fell short of significance (p_corrected = `{python} deep_min_p`). This matches the Discussion's framing: for this subject, no method's reconstruction tracked the ground truth well enough to distinguish one from another.
+
+For sub-50, the picture is mixed rather than uniformly null. On spatial correlation (@fig-deepsource-diff, top right), wCSET performed significantly *worse* than sLORETA (p_corrected `{python} deep_50_spatial_p_sloreta`, dz = `{python} deep_50_spatial_dz_sloreta`), dSPM (p_corrected `{python} deep_50_spatial_p_dspm`, dz = `{python} deep_50_spatial_dz_dspm`), and wMNE (p_corrected `{python} deep_50_spatial_p_wmne`, dz = `{python} deep_50_spatial_dz_wmne`), though not significantly different from CSET or Beltrami. On temporal correlation (@fig-deepsource-diff, bottom right), the sole significant comparison ran the other way: wCSET significantly outperformed CSET (p_corrected `{python} deep_50_temporal_p_cset`, dz = `{python} deep_50_temporal_dz_cset`). Unlike Subjects 1 and 2, where a wCSET advantage, when present, held consistently across competitors, sub-50 shows no single method — wCSET included — leading uniformly across both metrics, underscoring why these two subjects are reported separately rather than pooled into the main comparison.
+
+```{python filename="intra_deepsource_plot.py"}
+#| echo: false
+#| label: fig-deepsource-diff
+#| fig-cap: "Per-timepoint spatial-correlation (top row) and per-channel temporal-correlation (bottom row) differences, wCSET minus each competitor, for the two Clinical Dataset B subjects with deep sources and no visible scalp EEG spike — the counterpart to Figure 6 of the main text, which covers the two subjects with a visible spike. Win rate relative to the 50% chance line and effective sample size (n_eff) are annotated above each box. Stars mark significance from an autocorrelation-corrected paired t-test (ttest_ess)."
+import matplotlib.pyplot as plt
+
+
+def draw_deepsource_panel(ax, subject, metric, title=None):
+    diffs = deep_diffs[(subject, metric)]
+    results = deep_results[(subject, metric)]
+
+    data = [diffs[c] for c in COMPETITORS]
+    bp = ax.boxplot(data, positions=range(len(COMPETITORS)), widths=0.5,
+                     patch_artist=True, showfliers=False, zorder=2)
+    for patch, c in zip(bp["boxes"], COMPETITORS):
+        patch.set_facecolor(COLORS[c])
+        patch.set_alpha(0.55)
+    for element in ["whiskers", "caps", "medians"]:
+        for line in bp[element]:
+            line.set_color("#333333")
+
+    rng = np.random.default_rng(0)
+    for i, c in enumerate(COMPETITORS):
+        y = diffs[c]
+        x = i + rng.uniform(-0.15, 0.15, size=len(y))
+        point_colors = np.where(y > 0, "tab:green", "tab:red")
+        ax.scatter(x, y, s=6, alpha=0.45, c=point_colors, linewidths=0, zorder=3)
+
+    ax.axhline(0, color="black", linewidth=1, linestyle="--", zorder=1)
+    ax.set_xticks(range(len(COMPETITORS)))
+    ax.set_xticklabels(COMPETITORS, fontsize=8)
+
+    ymax, ymin = max(np.max(d) for d in data), min(np.min(d) for d in data)
+    span = ymax - ymin
+    for i, c in enumerate(COMPETITORS):
+        row = competitor_row(results, c)
+        rel_win = vieeg_metrics.metadata["derived"]["win_rate"][f"{subject}|{metric}|{c}"] - 0.5
+        p = row["p_corrected"]
+        stars = "***" if p < 0.001 else "**" if p < 0.01 else "*" if p < 0.05 else "ns"
+        win_color = "tab:green" if rel_win > 0 else "tab:red"
+        ax.text(i, ymax + 0.10 * span, stars, ha="center", va="bottom", fontsize=7, color="#222222")
+        ax.text(i, ymax + 0.055 * span, f"{rel_win:+.0%}", ha="center", va="bottom",
+                fontsize=7.5, color=win_color, fontweight="bold")
+        ax.text(i, ymax + 0.01 * span, f"n_eff={row['n_eff']:.0f}", ha="center", va="bottom",
+                fontsize=6, color="#666666")
+
+    ax.set_ylim(ymin - 0.08 * span, ymax + 0.32 * span)
+    if title:
+        ax.set_title(title, fontsize=9)
+
+
+deepsource_fig, deepsource_axes = plt.subplots(
+    len(METRIC_BLOCKS), len(SUBJECT_ORDER),
+    figsize=(4.2 * len(SUBJECT_ORDER), 3.6 * len(METRIC_BLOCKS)),
+    squeeze=False,
+)
+
+for row_i, (metric, coord, ylabel) in enumerate(METRIC_BLOCKS):
+    for col_i, subject in enumerate(SUBJECT_ORDER):
+        ax = deepsource_axes[row_i, col_i]
+        draw_deepsource_panel(ax, subject, metric, title=f"sub-{subject}" if row_i == 0 else None)
+        if col_i == 0:
+            ax.set_ylabel(ylabel, fontsize=8)
+
+plt.tight_layout()
+```
+
