@@ -757,10 +757,19 @@ previously only 4 of them were projected here.
 **Parameter choices (`compute_virtual_ieeg`):**
 
 - `conductivity = 0.25` S/m: infinite homogeneous-space conductivity used
-  for the point-source-to-electrode projection. **FILL**
+  for the point-source-to-electrode projection. Taken from Grova et al.
+  (2016), who lower it from the usual 0.33 S/m following Cosandier-Rimele
+  et al. (2007): the infinite-medium model slightly underestimates the
+  potential compared with a three-shell model, and 0.25 S/m compensates.
+  It only enters as a global 1/σ scale factor, so it has no effect on any
+  correlation-based metric computed below (hence not mentioned in the
+  manuscript).
 - `threshold = 0.003` (m, i.e. 3 mm): minimal source-to-electrode distance
-  before the projection's `1/distance`-type falloff is capped, to avoid a
-  blow-up at zero distance. **FILL** (why exactly 3 mm)
+  before the projection's `1/distance²` falloff is capped, to avoid a
+  blow-up at zero distance. 3 mm is the iEEG-MRI coregistration accuracy
+  assumed by Grova et al. (2016), after Dykstra et al. (2012): closer
+  source-contact distances are within localization error and can't be
+  trusted, so they're clamped to 3 mm.
 
 ```{python filename="estimate_ieeg.py"}
 # | output: false
@@ -796,7 +805,7 @@ def compute_vieeg(sub, overwrite):
         v = mm.analysis.eeg.compute_virtual_ieeg(
             src, stc, iave,
             conductivity = 0.25,  # conductivity adjusted for infinite homogeneous space
-            threshold = 0.003,   # minimal distance for exponential
+            threshold = 0.003,   # minimal source-contact distance (m) for the 1/r² falloff
         )
 
         vieeg.append(v)

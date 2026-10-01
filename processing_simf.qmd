@@ -2001,7 +2001,7 @@ STCs are loaded once and reused for both timepoints, since these loads (and
 the render itself) are the expensive part - only the time index into each
 STC changes between the two output PNGs. The wCSET/sLORETA row labels carry
 their signed Pearson spatial correlation with gold at that timepoint (same
-definition as `fig-correlation-time`), so the two reconstruction rows are
+definition as `fig-s1-localization`), so the two reconstruction rows are
 readable without a separate lookup. Saved as static PNGs (off-screen
 PyVista render), embedded by `index.qmd` rather than computed inline there.
 
@@ -2044,7 +2044,7 @@ def render_flagship_reconstruction_grid(overwrite=False):
 
   def spatial_corr(stc, phase_time):
     """Signed Pearson spatial correlation vs. gold at `phase_time` - same
-    definition as the qrp/peak correlation curve in `fig-correlation-time`."""
+    definition as the correlation curve in `fig-s1-localization`."""
     idx_gold = gold_stc.time_as_index(phase_time)[0]
     idx = stc.time_as_index(phase_time)[0]
     return np.corrcoef(gold_stc.data[:, idx_gold], stc.data[:, idx])[0, 1]
@@ -2077,6 +2077,56 @@ def render_flagship_reconstruction_grid(overwrite=False):
     grid.screenshot(fpng, window_size=(1600, 1200))
 
 render_flagship_reconstruction_grid(overwrite=True)
+```
+
+Single, unlabeled left-hemisphere panels of the same run for the main-text
+example figure (labels, colorbar and EEG trace are added in `index.qmd`),
+plus each reconstruction's whole-cortex spatial correlation with gold.
+
+```{python filename="flagship_example_panels.py"}
+# | output: false
+
+import json
+
+PANEL_DIR = Path("./results/simf/flagship_example")
+LH_VIEWS = ["lateral", "medial"]
+
+def render_flagship_example_panels(overwrite=False):
+  fjson = PANEL_DIR / "correlations.json"
+  if fjson.exists() and not overwrite:
+    print("Already exists, skipping.")
+    return
+  PANEL_DIR.mkdir(parents=True, exist_ok=True)
+
+  src = dm.load(sub, "fwd", desc="sim")["src"]
+  ave = dm.load(sub, "ave", task="spk", run=run)
+  gold_stc = dm.load(sub, "gold", task="spk", run=run)
+  conditions = {
+    "gold": gold_stc,
+    "wcset": dm.load(sub, "stc", task="spk", run=run, desc="wcset"),
+    "sloreta": dm.load(sub, "stc", task="spk", run=run, desc="sloreta"),
+  }
+
+  correlations = {}
+  for phase, ratio, _ in PHASES:
+    phase_time = mm.analysis.eeg.get_rising_phase(ave, ratio=ratio, as_idx=False)
+    gold = gold_stc.data[:, gold_stc.time_as_index(phase_time)[0]]
+    correlations[phase] = {"time": float(phase_time)}
+    for name, stc in conditions.items():
+      data = stc.data[:, stc.time_as_index(phase_time)[0]]
+      if name != "gold":
+        correlations[phase][name] = float(np.corrcoef(gold, data)[0, 1])
+      values = np.abs(data) / np.abs(data).max()
+      for view in LH_VIEWS:
+        panel = mm.viz.BrainPlot.from_source_space(
+          src, values=values, states=[0], hemi="lh", view=view, title="",
+          scalar_name="activity", mesh_params={"clim": (0.0, 1.0), "cmap": "Reds", "show_scalar_bar": False},
+        )
+        panel.screenshot(PANEL_DIR / f"{phase}_{name}_lh-{view}.png", window_size=(800, 600))
+
+  fjson.write_text(json.dumps(correlations, indent=2))
+
+render_flagship_example_panels(overwrite=True)
 ```
 
 ## Experiment 1: Noise/SNR Sweep Reconstruction & Validation

@@ -861,7 +861,8 @@ picks it up transparently:
 # Source Reconstruction Evaluation
 
 Evaluate every solver from `solve_inverse.py` against the resection (ground
-truth), at two points of the spike (quarter-rising-phase and peak). Two
+truth), at three points of the spike (half rising phase, the main one;
+quarter rising phase; and peak). Two
 complementary metrics per (subject, method, phase):
 
 - `find_peak_resection_distance`: classic ESI baseline - distance from the
@@ -957,9 +958,12 @@ def evaluate_resection_localization(overwrite=False):
         patch_area = mm.anatomy.source_space.build_dipole_patch_area(src)
         resection_vertex_mask = mm.anatomy.source_space.sample_nifti_at_source_space(src, resec, ras2tkras)
 
-        # 2. Spike phases to evaluate: quarter rising phase (main) and peak
-        # (comparison) - 25%, matching Study I's simulation cohort convention.
+        # 2. Spike phases to evaluate: half rising phase (main, 50% - the
+        # evaluation point Vorderwülbecke et al. 2020 recommend for
+        # this dataset), quarter rising phase (kept for comparison with Study
+        # I's 25% simulation convention) and peak.
         phases = {
+            "hrp": mm.analysis.eeg.get_rising_phase(ave, ratio=0.5, as_idx=True),
             "qrp": mm.analysis.eeg.get_rising_phase(ave, ratio=0.25, as_idx=True),
             "pp":  mm.analysis.eeg.get_rising_phase(ave, ratio=1.0, as_idx=True),
         }
@@ -1006,7 +1010,7 @@ def evaluate_resection_localization(overwrite=False):
     combined.save(fmetrics, overwrite=overwrite)
     shutil.rmtree(checkpoint_dir)
 
-evaluate_resection_localization(overwrite=True)  # must force-regen: results/spike/resection predates this session's solve_inverse.py parameter changes (depth/lambda2/harm, wMNE rename) and the switch back from half- to quarter-rising-phase (ratio=0.25, "qrp" - was "hrp"/ratio=0.5), so overwrite=False would silently skip already-processed subjects and leave them stale
+evaluate_resection_localization(overwrite=True)  # must force-regen: results/spike/resection predates the addition of the half rising phase ("hrp", ratio=0.5) alongside "qrp", so overwrite=False would silently skip already-processed subjects and leave them without it
 ```
 
 ## Chance-Level Cluster Threshold
@@ -1090,7 +1094,7 @@ compute_chance_cluster_threshold(overwrite=False)
 ## Reconstruction Render (Resection Example)
 
 Illustrative cortical-surface figure for `index.qmd`'s Study II Results:
-wCSET vs. sLORETA reconstruction at the quarter rising phase, across the
+wCSET vs. sLORETA reconstruction at the half rising phase, across the
 four canonical single-hemisphere views, with the resection zone outlined
 (via a boundary contour on the same mesh, not a translucent fill - a
 solid-fill overlay coincident with the activity mesh produces GPU z-fighting
@@ -1105,7 +1109,7 @@ not a separate visual approximation. It's only drawn on whichever
 hemisphere it falls in for that method/row.
 
 **Which subject:** picked automatically from the already-computed
-`results/spike/resection` suite (qrp phase, seizure-free/ILAE==1, excluding
+`results/spike/resection` suite (hrp phase, seizure-free/ILAE==1, excluding
 the same subjects excluded from the Statistics section below) rather than
 hand-picked, since the study's own claim is that wCSET's peak lands inside
 the resection while standard methods' doesn't - the subject chosen is
@@ -1144,7 +1148,7 @@ def select_example_subject():
 
     suite = mm.metric.MetricSuite.load("./results/spike/resection")
     df = suite.to_df()
-    df = df[(df["ILAE"] == 1) & (~df["Subject"].isin(excluded_subjects)) & (df["phase"] == "qrp")]
+    df = df[(df["ILAE"] == 1) & (~df["Subject"].isin(excluded_subjects)) & (df["phase"] == "hrp")]
 
     wide = df[df["Metric"].isin(["peak_distance_mm", "peak_inside_resection"])].pivot_table(
         index=["Subject", "Method"], columns="Metric", values="Value", aggfunc="first",
@@ -1176,7 +1180,7 @@ def render_resection_reconstruction_grid(overwrite=False):
     ras2tkras = dm.load(sub, "ras2tkras")
     resection_mask = mm.anatomy.source_space.sample_nifti_at_source_space(src, resec, ras2tkras).astype(float)
 
-    qrp_time = mm.analysis.eeg.get_rising_phase(ave, ratio=0.25, as_idx=False)
+    hrp_time = mm.analysis.eeg.get_rising_phase(ave, ratio=0.5, as_idx=False)
 
     hemis = ["lh", "rh"]
     split = src[0]["nuse"]
@@ -1199,7 +1203,7 @@ def render_resection_reconstruction_grid(overwrite=False):
 
     def render_row(method, show_titles):
         stc = dm.load(sub, "stc", task="spike", desc=method)
-        idx = stc.time_as_index(qrp_time)[0]
+        idx = stc.time_as_index(hrp_time)[0]
         values = np.abs(stc.data[:, idx])
 
         # single global-activity-maximum dipole - same definition as
@@ -1247,6 +1251,85 @@ def render_resection_reconstruction_grid(overwrite=False):
 render_resection_reconstruction_grid(overwrite=True)
 ```
 
+Single, unlabeled panels of the same example for the main-text figure (labels,
+colorbar and legend are added in `index.qmd`), plus the example's metadata.
+
+```{python filename="resection_example_panels.py"}
+# | output: false
+
+import json
+
+PANEL_DIR = Path("./results/spike/resection_example")
+
+def render_resection_example_panels(overwrite=False):
+    fjson = PANEL_DIR / "example.json"
+    if fjson.exists() and not overwrite:
+        print("Already exists, skipping.")
+        return
+    PANEL_DIR.mkdir(parents=True, exist_ok=True)
+
+    sub = select_example_subject()
+    src = dm.load(sub, "fwd")["src"]
+    ave = dm.load(sub, "ave", task="spike")
+    resec = dm.load(sub, "resec-ramp", space="pre")
+    ras2tkras = dm.load(sub, "ras2tkras")
+    resection_mask = mm.anatomy.source_space.sample_nifti_at_source_space(src, resec, ras2tkras).astype(float)
+    hrp_time = mm.analysis.eeg.get_rising_phase(ave, ratio=0.5, as_idx=False)
+
+    hemis = ["lh", "rh"]
+    split = src[0]["nuse"]
+    slices = {"lh": slice(0, split), "rh": slice(split, None)}
+    surfaces = {h: surf_to_polydata(src[i]["rr"] * 1000, src[i]["tris"]) for i, h in enumerate(hemis)}
+    vmaps = {h: build_dense_vertex_map(src[i]) for i, h in enumerate(hemis)}
+
+    # Resection boundary per hemisphere
+    outlines = {}
+    for h in hemis:
+        resection_dense = paint_on_dense_mesh(resection_mask[slices[h]], vmaps[h])
+        if resection_dense.max() == 0:
+            continue
+        contour_mesh = surfaces[h].copy()
+        contour_mesh["resection"] = resection_dense
+        outlines[h] = contour_mesh.contour(isosurfaces=[0.5], scalars="resection")
+
+    distances = mm.metric.MetricSuite.load("./results/spike/resection").to_df(
+        metrics="peak_distance_mm", filters={"Subject": sub, "phase": "hrp"},
+    ).set_index("Method")["Value"]
+
+    meta = {"subject": sub, "time": float(hrp_time), "peak_distance_mm": {}}
+    for method in ["wcset", "sloreta"]:
+        stc = dm.load(sub, "stc", task="spike", desc=method)
+        values = np.abs(stc.data[:, stc.time_as_index(hrp_time)[0]])
+        peak_vertex = int(np.argmax(values))
+        peak_hemi = "lh" if peak_vertex < split else "rh"
+        peak_mesh = pv.PolyData((mm.anatomy.source_space.get_dipole_positions(src)[peak_vertex] * 1000)[None, :])
+        values = values / values.max()
+        meta["peak_distance_mm"][method] = float(distances[method])
+
+        for hemi in hemis:
+            for view in ["lateral", "medial"]:
+                panel = mm.viz.BrainPlot(
+                    surfaces=surfaces[hemi].copy(), values=paint_on_dense_mesh(values[slices[hemi]], vmaps[hemi]),
+                    hemi=hemi, view=view, title="", scalar_name=method,
+                    mesh_params={"clim": (0.0, 1.0), "cmap": "Reds", "show_scalar_bar": False},
+                )
+                if hemi in outlines:
+                    panel = panel + mm.viz.SurfacePlot(
+                        mesh=outlines[hemi], scalar_name="resection_outline",
+                        mesh_params={"color": "black", "point_size": 5, "render_points_as_spheres": True},
+                    )
+                if hemi == peak_hemi:
+                    panel = panel + mm.viz.SurfacePlot(
+                        mesh=peak_mesh, scalar_name=f"{method}_peak",
+                        mesh_params={"color": "lime", "point_size": 36, "render_points_as_spheres": True},
+                    )
+                panel.screenshot(PANEL_DIR / f"{method}_{hemi}-{view}.png", window_size=(800, 600))
+
+    fjson.write_text(json.dumps(meta, indent=2))
+
+render_resection_example_panels(overwrite=True)
+```
+
 # Statistics
 
 Computes and caches every statistical test - and every derived scalar quoted
@@ -1292,11 +1375,11 @@ EXCLUDED_SUBJECTS = ["pat01", "pat18"]
 all_subjects = resection.to_df(metrics="peak_distance_mm")["Subject"].unique()
 included_subjects = [s for s in all_subjects if s not in EXCLUDED_SUBJECTS]
 
-# seizure-free (ILAE=1) subjects only, minus the exclusions above, quarter
+# seizure-free (ILAE=1) subjects only, minus the exclusions above, half
 # rising phase (the primary evaluation point) - the suite-native replacement
 # for a manual df[(df["ILAE"]==1) & ~df["Subject"].isin(EXCLUDED_SUBJECTS)]
 # filter.
-FILTERS = {"phase": "qrp", "ILAE": 1, "Subject": included_subjects}
+FILTERS = {"phase": "hrp", "ILAE": 1, "Subject": included_subjects}
 comparisons = resection.stat.build_comparisons(["wcset"], COMPETITORS)
 
 # Wilcoxon signed-rank vs. wCSET, subject-paired, FDR-corrected.
