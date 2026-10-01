@@ -940,13 +940,17 @@ Two illustrative figures for `index.qmd`'s Study III Results, both for the
 two main-text subjects (34/48 - the ones with a visible scalp EEG spike; see
 `index.qmd`'s note on why 12/50 are Annex-only).
 
-**Spatial panel:** wCSET vs. sLORETA cortical reconstruction, one view per
-subject (the hemisphere dominated by wCSET's own reconstruction, lateral
-view - these are lateralized clinical sources, not bilateral like Study I's
-simulations, so the full 4-view grid used there would mostly show empty
-cortex). Timepoint is the one that maximizes wCSET's own `correlation_spatial`
-(from the already-computed `results/intra/combined` suite) - sLORETA is
-rendered at that *same* timepoint (not its own best) for a fair comparison.
+**Glass-brain panel:** recorded iEEG vs. wCSET's and sLORETA's virtual iEEG
+on a translucent cortex, every contact colored by its amplitude at one
+timepoint - the one that maximizes wCSET's own `correlation_spatial` (from the
+already-computed `results/intra/combined` suite), sLORETA shown at that *same*
+timepoint. Each map is z-scored across contacts and virtual maps are flipped to
+the recorded polarity when anticorrelated, mirroring the metric (scale-free,
+`polarity_invariant=True`), so what is displayed is exactly what
+`correlation_spatial` scores. Only the PNGs and the small `sub-*.json` files
+(intracranial GFP curves, spike window, timepoint, r) are produced here;
+`index.qmd` assembles the figure from them. `SensorPlot` keeps MNE's metres
+while `BrainPlot.from_source_space` uses mm, hence the montage rescaling below.
 
 **Channel-trace panel:** true intracranial recording vs. wCSET's and
 sLORETA's virtual iEEG, for the channel that maximizes wCSET's
@@ -960,6 +964,7 @@ sub-48), so no fallback further down the ranking is needed here.
 ```{python filename="intra_reconstruction_renders.py"}
 # | output: false
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -974,7 +979,8 @@ pv.OFF_SCREEN = True
 dm = IntraManager("intra.config.yml")
 MAIN_SUBJECTS = ["48", "34"]  # display order matches index.qmd's own MAIN_SUBJECTS ("Subject 1" = 48)
 
-fpng_brains = Path("./results/intra/reconstruction_spatial.png")
+glass_dir = Path("./results/intra/glass_example")
+GLASS_METHODS = ["wcset", "sloreta"]
 fpng_channels = Path("./results/intra/reconstruction_channels.png")
 
 def best_correlation_time(suite_df, sub):
@@ -1006,38 +1012,65 @@ def best_nonspurious_channel(suite_df, sub, iave, min_burst_ratio=3.0):
 
     raise RuntimeError(f"No non-spurious channel found for sub-{sub} - lower min_burst_ratio.")
 
-def render_spatial_panel(overwrite=False):
-    if fpng_brains.exists() and not overwrite:
+def render_glass_example(overwrite=False, clim=3.0, cmap="RdBu_r", view="superior"):
+    if (glass_dir / f"sub-{MAIN_SUBJECTS[-1]}.json").exists() and not overwrite:
         print("Already exists, skipping.")
         return
+    glass_dir.mkdir(parents=True, exist_ok=True)
 
     suite_df = mm.metric.MetricSuite.load("./results/intra/combined").to_df()
+    baseline = (0, 1.0)
 
-    row = None
     for sub in MAIN_SUBJECTS:
         src = dm.load(sub, "fwd")["src"]
+        raw_i = dm.load(sub, "i-ave", task="spk")
+        ieeg = {"recorded": mm.analysis.eeg.normalize_evoked_by_baseline(raw_i, baseline=baseline)}
+        for m in GLASS_METHODS:
+            v = dm.load(sub, "v-ave", task="spk", desc=m).reorder_channels(ieeg["recorded"].ch_names)
+            ieeg[m] = mm.analysis.eeg.normalize_evoked_by_baseline(v, baseline=baseline)
+        tmin, tmax = mm.analysis.eeg.find_spike_window(raw_i, baseline=baseline)
         t = best_correlation_time(suite_df, sub)
-        split = src[0]["nuse"]
+        idx = ieeg["recorded"].time_as_index(t)[0]
 
-        panel = None
-        for method in ["wcset", "sloreta"]:
-            stc = dm.load(sub, "stc", task="spk", desc=method)
-            idx = stc.time_as_index(t)[0]
-            values = np.abs(stc.data[:, idx])
-            values = values / values.max()
+        # Contact values at t: polarity matched to the recording, z-scored across contacts
+        snap = {k: e.data[:, idx] for k, e in ieeg.items()}
+        for m in GLASS_METHODS:
+            if np.corrcoef(snap["recorded"], snap[m])[0, 1] < 0:
+                snap[m] = -snap[m]
+        snap = {k: (x - x.mean()) / x.std() for k, x in snap.items()}
 
-            if method == "wcset":
-                hemi = "lh" if values[:split].max() > values[split:].max() else "rh"
-
-            p = mm.viz.BrainPlot.from_source_space(
-                src, values=values, states=[0], hemi=hemi, view="lateral",
-                title=f"sub-{sub} {method}", scalar_name=f"{sub}_{method}",
-                mesh_params={"clim": (0.0, 1.0), "cmap": "Reds"},
+        for k, values in snap.items():
+            sensors = ieeg["recorded"].copy().crop(t, t, include_tmax=True)
+            sensors.data[:, 0] = values
+            for d in sensors.info["dig"]:  # metres -> mm, to match the cortex
+                d["r"] = d["r"] * 1000
+            cortex = mm.viz.BrainPlot.from_source_space(
+                src, hemi="both", view=view, mesh_params={"color": "#a8a7a0", "opacity": 0.10},
             )
-            panel = p if panel is None else panel | p
-        row = panel if row is None else row & panel
+            contacts = mm.viz.SensorPlot(
+                sensors, scalar_name="ieeg_z",
+                mesh_params={"clim": (-clim, clim), "cmap": cmap, "point_size": 18,
+                             "render_points_as_spheres": True, "show_scalar_bar": False},
+            )
+            (cortex + contacts).screenshot(glass_dir / f"sub-{sub}_{k}.png", window_size=(700, 700))
 
-    row.screenshot(fpng_brains, window_size=(800, 800))
+        # Intracranial GFP (std across contacts), each scaled to its own max within the spike window
+        times = ieeg["recorded"].times
+        in_win = (times >= tmin) & (times <= tmax)
+        shown = (times >= tmin - 0.3) & (times <= tmax + 0.3)
+        gfp = {}
+        for k, e in ieeg.items():
+            g = e.data.std(axis=0)
+            gfp[k] = (g / g[in_win].max())[shown].tolist()
+
+        meta = {
+            "time": float(t), "window": [float(tmin), float(tmax)],
+            "clim": clim, "cmap": cmap, "view": view,
+            "r": {m: float(np.corrcoef(snap["recorded"], snap[m])[0, 1]) for m in GLASS_METHODS},
+            "times": times[shown].tolist(), "gfp": gfp,
+        }
+        with open(glass_dir / f"sub-{sub}.json", "w") as f:
+            json.dump(meta, f)
 
 def render_channel_panel(overwrite=False):
     if fpng_channels.exists() and not overwrite:
@@ -1074,7 +1107,7 @@ def render_channel_panel(overwrite=False):
     fig.savefig(fpng_channels, dpi=150)
     plt.close(fig)
 
-render_spatial_panel(overwrite=True)
+render_glass_example(overwrite=True)
 render_channel_panel(overwrite=True)
 ```
 

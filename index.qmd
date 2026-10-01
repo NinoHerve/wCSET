@@ -1251,37 +1251,71 @@ for a in _abs_axes:
     a.set_ylim(_lo, _hi)
 ```
 
-The spatial pattern behind these correlations is visible directly on the cortical surface (@fig-intra-reconstruction): wCSET's reconstruction stays more concentrated than sLORETA's in both subjects, at the timepoint where wCSET's own spatial correlation with the true intracranial recording peaks. The same fidelity shows up in the time domain (@fig-intra-channels): for each subject's single most temporally-correlated (and genuinely spike-containing, not spuriously correlated) intracranial channel, wCSET's virtual recording tracks the true channel's burst more closely than sLORETA's.
+The spatial pattern behind these correlations is visible directly at the intracranial contacts (@fig-intra-reconstruction), at the timepoint where wCSET's own spatial correlation with the recording peaks: in Subject 1, wCSET's virtual iEEG reproduces the recorded positive cluster on the deep left temporal contacts, with the right sign on 7 of the 8 strongest contacts, while sLORETA weakens or reverses several of them; in Subject 2 the difference is subtler, in line with the closer correlations. The same fidelity shows up in the time domain (@fig-intra-channels): for each subject's single most temporally-correlated (and genuinely spike-containing, not spuriously correlated) intracranial channel, wCSET's virtual recording tracks the true channel's burst more closely than sLORETA's.
 
 ```{python filename="results_intra_spatial_plot.py"}
 #| echo: false
 #| label: fig-intra-reconstruction
-#| fig-cap: "wCSET vs. sLORETA cortical reconstruction for the two main-text subjects, lateral view of the hemisphere dominated by wCSET's own activity. Timepoint is the one maximizing wCSET's spatial correlation with the true intracranial recording for that subject; sLORETA is shown at the same timepoint for a fair comparison. Each panel independently normalized (own max = 1.0)."
+#| fig-cap: "Recorded vs. virtual intracranial EEG at one timepoint, for the two main-text subjects (one row each). (a1, b1) Intracranial global field power (GFP, standard deviation across contacts) of the recorded iEEG and of wCSET's and sLORETA's virtual iEEG, each scaled to its own maximum within the spike window (shaded); the dashed line marks the timepoint shown on the right, the one maximizing wCSET's spatial correlation with the recording (sLORETA shown at the same timepoint). (a2–a4, b2–b4) Superior view of a translucent cortex with every intracranial contact colored by its amplitude at that timepoint: recorded iEEG, wCSET's and sLORETA's virtual iEEG. Each map is z-scored across contacts and virtual maps are shown in the polarity of the recording, as in the spatial-correlation metric (scale-free, polarity-invariant); r = spatial correlation with the recording."
+import json
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import Normalize
 
-fig, ax = plt.subplots(figsize=(7, 7))
-ax.imshow(mpimg.imread("./results/intra/reconstruction_spatial.png"))
-ax.set_xticks([])
-ax.set_yticks([])
-for spine in ax.spines.values():
-    spine.set_visible(False)
-plt.show()
-```
+# Glass-brain renders and GFP curves from processing_intra.qmd
+GLASS_DIR = "./results/intra/glass_example"
+GLASS_METHODS = ["wcset", "sloreta"]
+glass = {sub: json.load(open(f"{GLASS_DIR}/sub-{sub}.json")) for sub in MAIN_SUBJECTS}
 
-```{python filename="results_intra_channels_plot.py"}
-#| echo: false
-#| label: fig-intra-channels
-#| fig-cap: "True intracranial recording vs. wCSET's and sLORETA's virtual iEEG, for each main-text subject's most temporally-correlated channel (subject to a non-spurious check: peak amplitude must exceed 3x the channel's own pre-spike baseline RMS - both channels shown clear this by a wide margin)."
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
+# sLORETA's GFP fluctuates a lot: thin and behind, so wCSET vs. recorded stays readable
+GFP_STYLES = {
+    "recorded": dict(color="black", linewidth=1.8, zorder=3, label="Recorded iEEG"),
+    "wcset": dict(color=COLORS["wcset"], linewidth=1.4, zorder=2, label="wCSET virtual iEEG"),
+    "sloreta": dict(color=COLORS["sloreta"], linewidth=0.7, alpha=0.6, zorder=1, label="sLORETA virtual iEEG"),
+}
 
-fig, ax = plt.subplots(figsize=(11, 3.8))
-ax.imshow(mpimg.imread("./results/intra/reconstruction_channels.png"))
-ax.set_xticks([])
-ax.set_yticks([])
-for spine in ax.spines.values():
-    spine.set_visible(False)
+glass_fig = plt.figure(figsize=(14, 7.6))
+_glass_grid = glass_fig.add_gridspec(len(MAIN_SUBJECTS), 4, width_ratios=[1.5, 1, 1, 1], wspace=0.08, hspace=0.35)
+for row, sub in enumerate(MAIN_SUBJECTS):
+    g = glass[sub]
+    letter = "ab"[row]
+
+    # (1) GFP, chosen timepoint marked
+    ax = glass_fig.add_subplot(_glass_grid[row, 0])
+    ax.axvspan(*g["window"], color="#f1f0eb", zorder=0, linewidth=0)
+    for k, style in GFP_STYLES.items():
+        ax.plot(g["times"], g["gfp"][k], **style)
+    ax.axvline(g["time"], color="#0b0b0b", linestyle="--", linewidth=1)
+    ax.text(g["time"], 1.02, f" t = {g['time'] * 1000:.0f} ms", transform=ax.get_xaxis_transform(),
+            fontsize=8, ha="left", va="bottom")
+    ax.set_ylim(0, 1.05)
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Intracranial GFP\n(scaled to own max)")
+    ax.set_title(f"{letter}1. {SUBJECT_TITLES[sub]}: intracranial GFP", loc="left", fontsize=10, pad=14)
+    ax.spines[["top", "right"]].set_visible(False)
+    if row == 0:
+        glass_fig.legend(*ax.get_legend_handles_labels(), loc="upper center", ncol=3, fontsize=9,
+                         frameon=False, bbox_to_anchor=(0.5, 1.0))
+
+    # (2-4) Glass brains at that timepoint
+    for col, k in enumerate(["recorded"] + GLASS_METHODS, start=1):
+        ax = glass_fig.add_subplot(_glass_grid[row, col])
+        ax.imshow(crop_white(mpimg.imread(f"{GLASS_DIR}/sub-{sub}_{k}.png")))
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        title = "Recorded iEEG" if k == "recorded" else f"{METHOD_LABELS[k]} virtual iEEG\nr = {g['r'][k]:.2f}"
+        ax.set_title(f"{letter}{col + 1}. {title}", loc="left", fontsize=10)
+
+# Shared colorbar for every glass brain
+_g0 = glass[MAIN_SUBJECTS[0]]
+cax = glass_fig.add_axes([0.62, 0.05, 0.22, 0.012])
+glass_fig.colorbar(ScalarMappable(norm=Normalize(-_g0["clim"], _g0["clim"]), cmap=_g0["cmap"]),
+                   cax=cax, orientation="horizontal")
+cax.set_xlabel("Contact amplitude at t (z across contacts)", fontsize=8)
+cax.tick_params(labelsize=7)
 plt.show()
 ```
 
