@@ -3,7 +3,6 @@ project:
 
 manuscript:
   article: index.qmd
-  notebooks: []
   manuscript-url: https://github.com/NinoHerve/wCSET
 
 format:
