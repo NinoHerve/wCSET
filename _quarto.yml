@@ -1,9 +1,18 @@
 project:
   type: manuscript
+  # Only the article is rendered; the processing_*.qmd files and notebooks are
+  # heavy pipelines meant to be run manually, cell by cell.
+  render:
+    - index.qmd
 
 manuscript:
   article: index.qmd
   manuscript-url: https://github.com/NinoHerve/wCSET
+  # Listing notebooks explicitly stops Quarto from auto-discovering (and
+  # executing) every .qmd/.ipynb/.md in the folder as a notebook preview.
+  notebooks:
+    - notebook: index.qmd
+      title: Article Notebook
 
 format:
   html:
