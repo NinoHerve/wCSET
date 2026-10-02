@@ -283,17 +283,15 @@ loc1_results = simf_metrics.stat.wilcoxon(
 )
 
 # Statistics quoted in the prose.
-def _loc1(method):
-    return competitor_row(loc1_results, method)
-
-loc1_sloreta_p = fmt_p(_loc1("sloreta")["p_corrected"], thresh=0.0001)
-loc1_sloreta_r = fmt_stat(_loc1("sloreta")["effect_size"])
-loc1_dspm_p = fmt_p(_loc1("dspm")["p_corrected"])
-loc1_dspm_r = fmt_stat(_loc1("dspm")["effect_size"])
-loc1_wmne_p = fmt_p(_loc1("wmne")["p_corrected"], thresh=0.0001)
-loc1_wmne_r = fmt_stat(_loc1("wmne")["effect_size"])
-loc1_cset_p = fmt_p(_loc1("cset")["p_corrected"])
-loc1_cset_r = fmt_stat(_loc1("cset")["effect_size"])
+_loc1 = loc1_results.vs("wcset")  # one row per competitor, effect as stored (wCSET - competitor)
+loc1_sloreta_p = fmt_p(_loc1.loc["sloreta", "p_corrected"], thresh=0.0001)
+loc1_sloreta_r = fmt_stat(_loc1.loc["sloreta", "effect"])
+loc1_dspm_p = fmt_p(_loc1.loc["dspm", "p_corrected"])
+loc1_dspm_r = fmt_stat(_loc1.loc["dspm", "effect"])
+loc1_wmne_p = fmt_p(_loc1.loc["wmne", "p_corrected"], thresh=0.0001)
+loc1_wmne_r = fmt_stat(_loc1.loc["wmne", "effect"])
+loc1_cset_p = fmt_p(_loc1.loc["cset", "p_corrected"])
+loc1_cset_r = fmt_stat(_loc1.loc["cset", "effect"])
 
 # Spatial correlation over time: cluster permutation vs. wCSET, paired by region.
 times_order = sorted(simf_metrics.to_df(metrics="correlation")["times"].unique())
@@ -418,32 +416,24 @@ corr1_ax.tick_params(labelbottom=False)
 
 # (a) Per method
 simf_metrics.plot.group_comparison(
-    loc1_results, order=METHODS, palette=COLORS, points=False,
-    showfliers=False, width=0.5, alpha=0, saturation=1, ax=loc1_ax,
+    loc1_results, order=METHODS, palette=COLORS, points=False, showfliers=False, width=0.5, alpha=0, saturation=1,
+    fill_alpha=FILL_ALPHA, tick_labels=METHOD_LABELS, reference_suffix=" (ref.)", ax=loc1_ax,
 )
-soften_boxes(loc1_ax)
-loc1_ax.set_xticks(range(len(METHODS)))
-loc1_ax.set_xticklabels(ref_labels([METHOD_LABELS[m] for m in METHODS], "wCSET"), rotation=45, ha="right")
+plt.setp(loc1_ax.get_xticklabels(), rotation=45, ha="right")
 loc1_ax.set_xlabel("")
 loc1_ax.set_ylabel("Localization error (mm)")
 loc1_ax.set_title("a1. Localization error per method", loc="left", fontsize=10)
 loc1_ax.spines[["top", "right"]].set_visible(False)
 
 # (b) Paired differences per region (competitor − wCSET; lower error is better)
-_loc1_df = simf_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})
-_loc1_wide = _loc1_df.groupby(["region", "Method"])["Value"].mean().unstack()
-loc1_diffs = {c: (_loc1_wide[c] - _loc1_wide["wcset"]).dropna().to_numpy(dtype=float) for c in competitors}
-loc1_annot = {
-    c: [stars_for(competitor_row(loc1_results, c)["p_corrected"]),
-        f"r={ref_effect(loc1_results, c, higher_is_better=False):+.2f}",
-        f"{(d > 0).sum()}/{(d == 0).sum()}/{(d < 0).sum()}"]
-    for c, d in loc1_diffs.items()
-}
-paired_diff_panel(loc1_dax, loc1_diffs, competitors, COLORS, loc1_annot)
-loc1_dax.set_xticklabels([METHOD_LABELS[c] for c in competitors], rotation=45, ha="right")
+simf_metrics.plot.paired_differences(
+    loc1_results, reference="wcset", higher_is_better=False, order=competitors, palette=COLORS,
+    annotate=("stars", "effect", "counts"), tick_labels=METHOD_LABELS,
+    direction_labels=("wCSET better", "other method better"), ax=loc1_dax,
+)
+plt.setp(loc1_dax.get_xticklabels(), rotation=45, ha="right")
 loc1_dax.set_ylabel("Method − wCSET (mm)")
 loc1_dax.set_title("a2. Localization error: paired difference vs. wCSET\n(per region)", loc="left", fontsize=10)
-mark_direction(loc1_dax)
 
 # Median qrp and peak times across runs, for the reference lines.
 qrp_median = simf_metrics.metadata["derived"]["qrp_time_median"]
@@ -605,14 +595,11 @@ for method in methods:
     )
 
 # Statistics quoted in the prose.
-def _loc_row(method, surrogate):
-    return competitor_row(surr_loc_results[method], surrogate, reference="original")
-
-loc_wcset_p = {s: fmt_p(_loc_row("wcset", s)["p_corrected"]) for s in surrogates}
-loc_wcset_r = {s: fmt_stat(_loc_row("wcset", s)["effect_size"]) for s in surrogates}
-_loc_wcset_r_abs = {s: abs(_loc_row("wcset", s)["effect_size"]) for s in surrogates}
-loc_wcset_r_lo = fmt_stat(min(_loc_wcset_r_abs.values()))
-loc_wcset_r_hi = fmt_stat(max(_loc_wcset_r_abs.values()))
+_loc_wcset = surr_loc_results["wcset"].vs("original")  # effect as stored (original - surrogate)
+loc_wcset_p = {s: fmt_p(_loc_wcset.loc[s, "p_corrected"]) for s in surrogates}
+loc_wcset_r = {s: fmt_stat(_loc_wcset.loc[s, "effect"]) for s in surrogates}
+loc_wcset_r_lo = fmt_stat(_loc_wcset.loc[surrogates, "effect"].abs().min())
+loc_wcset_r_hi = fmt_stat(_loc_wcset.loc[surrogates, "effect"].abs().max())
 
 # Spatial correlation at qrp and peak, paired by region.
 surr_ref_corr = surr_metrics.metadata["derived"]["ref_corr"]
@@ -628,7 +615,7 @@ for phase in ["qrp", "pp"]:
 
 # Statistics quoted in the prose.
 def _corr_row(method, phase, surrogate):
-    return competitor_row(surr_corr_results[(method, phase)], surrogate, reference="original")
+    return surr_corr_results[(method, phase)].vs("original").loc[surrogate].rename({"effect": "effect_size"})
 
 corr_wcset_beltrami_qrp, corr_wcset_beltrami_pp = _corr_row("wcset", "qrp", "beltrami"), _corr_row("wcset", "pp", "beltrami")
 corr_wcset_beltrami_r_lo = fmt_stat(min(abs(corr_wcset_beltrami_qrp["effect_size"]), abs(corr_wcset_beltrami_pp["effect_size"])))
@@ -680,7 +667,6 @@ Spatial correlation showed the same pattern: every surrogate significantly *incr
 #| label: fig-surrogate
 #| fig-cap: "wCSET accuracy using the true structural connectome versus five dMRI-free connectome surrogates (subject sub-10). Column a: localization error at the quarter rising phase; column b: spatial correlation with ground truth at the quarter rising phase; column c: spatial correlation with ground truth at the peak phase. Row 1 (a1, b1, c1): values per connectome condition; row 2 (a2, b2, c2): paired differences vs. the original connectome. (a1, b1, c1) Per condition (box = IQR, line = median); dashed lines mark dSPM's and sLORETA's true-connectome medians as reference. (a2, b2, c2) Paired difference vs. the original connectome for the panel above, one value per region (mean over repetitions; violin = distribution, thick line = median, thin line = IQR), oriented so positive = surrogate better. Above each violin: significance vs. the original connectome (Wilcoxon signed-rank, region-paired, FDR-corrected), rank-biserial r (positive = surrogate better), and the number of regions where the surrogate is better/tied/worse. CSET's equivalent comparisons are reported in Annex Figure 8."
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 
 # Colors per connectome condition (original = gray).
 CONDITION_COLORS = {
@@ -696,6 +682,10 @@ surr_ref_loc = surr_metrics.metadata["derived"]["ref_loc"]
 ref_methods = ["dspm", "sloreta"]
 panel_letters = {"loc": "a1", "qrp": "b1", "pp": "c1"}
 
+def surr_ref_lines(medians):
+    """dSPM's and sLORETA's true-connectome medians, drawn as dashed reference lines."""
+    return {f"{METHOD_LABELS[m]} (original connectome)": (medians[m], COLORS[m]) for m in ref_methods}
+
 # wCSET only; CSET is in the Annex.
 surr_fig, _surr_grid = plt.subplots(
     2, 3, figsize=(len(conditions) * 1.3 * 2.4, 11), gridspec_kw={"hspace": 0.55},
@@ -705,14 +695,11 @@ surr_axes, surr_daxes = _surr_grid[0], _surr_grid[1]
 # (a) Localization error at qrp
 ax_loc = surr_axes[0]
 surr_metrics.plot.group_comparison(
-    surr_loc_results["wcset"], order=conditions, palette=CONDITION_COLORS, points=False,
-    showfliers=False, width=0.6, alpha=0, saturation=1, ax=ax_loc,
+    surr_loc_results["wcset"], order=conditions, palette=CONDITION_COLORS, points=False, showfliers=False,
+    width=0.6, alpha=0, saturation=1, fill_alpha=FILL_ALPHA, tick_labels=SURROGATE_LABELS,
+    reference_suffix=" (ref.)", reference_lines=surr_ref_lines(surr_ref_loc), ax=ax_loc,
 )
-soften_boxes(ax_loc)
-for ref_method in ref_methods:
-    ax_loc.axhline(surr_ref_loc[ref_method], color=COLORS[ref_method], linestyle="--", linewidth=1.5, zorder=0.5)
-ax_loc.set_xticks(range(len(conditions)))
-ax_loc.set_xticklabels(ref_labels([SURROGATE_LABELS.get(c, c) for c in conditions], "original"), rotation=45, ha="right")
+plt.setp(ax_loc.get_xticklabels(), rotation=45, ha="right")
 ax_loc.set_xlabel("")
 ax_loc.set_ylabel("Localization error (mm)")
 ax_loc.set_title(f"{panel_letters['loc']}. Localization error per condition", loc="left", fontsize=10)
@@ -725,13 +712,10 @@ for phase in ["qrp", "pp"]:
     corr_axes[phase] = ax
     surr_metrics.plot.group_comparison(
         surr_corr_results[("wcset", phase)], order=conditions, palette=CONDITION_COLORS, points=False,
-        showfliers=False, width=0.6, alpha=0, saturation=1, ax=ax,
+        showfliers=False, width=0.6, alpha=0, saturation=1, fill_alpha=FILL_ALPHA, tick_labels=SURROGATE_LABELS,
+        reference_suffix=" (ref.)", reference_lines=surr_ref_lines(surr_ref_corr[phase]), ax=ax,
     )
-    soften_boxes(ax)
-    for ref_method in ref_methods:
-        ax.axhline(surr_ref_corr[phase][ref_method], color=COLORS[ref_method], linestyle="--", linewidth=1.5, zorder=0.5)
-    ax.set_xticks(range(len(conditions)))
-    ax.set_xticklabels(ref_labels([SURROGATE_LABELS.get(c, c) for c in conditions], "original"), rotation=45, ha="right")
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
     ax.set_xlabel("")
     ax.set_ylabel("Spatial correlation")
     ax.set_title(f"{panel_letters[phase]}. Spatial correlation per condition", loc="left", fontsize=10)
@@ -739,40 +723,24 @@ for phase in ["qrp", "pp"]:
 for ax in corr_axes.values():
     ax.set_ylim(0, 0.9)
 
-# (d–f) Paired differences per region, positive = surrogate better
-def _surr_diffs(metric, phase, higher_is_better):
-    d = surr_metrics.to_df(metrics=metric, filters={"Method": "wcset", "phase": phase})
-    w = d.groupby(["region", "Surrogate"])["Value"].mean().unstack()
-    sign = 1 if higher_is_better else -1
-    return {c: (sign * (w[c] - w["original"])).dropna().to_numpy(dtype=float) for c in surrogates}
-
+# (d–f) Paired differences per region, positive = surrogate better: "original" is the reference,
+# so the metric's direction is flipped (higher_is_better=not ...) to orient differences toward the surrogate.
 _surr_panels = [
-    ("a2", "Localization error", surr_loc_results["wcset"], _surr_diffs("localization_error", "qrp", False), False,
-     "Original − surrogate\n(localization error, mm)"),
-    ("b2", "Spatial correlation", surr_corr_results[("wcset", "qrp")], _surr_diffs("correlation", "qrp", True), True,
-     "Surrogate − original\n(spatial correlation)"),
-    ("c2", "Spatial correlation", surr_corr_results[("wcset", "pp")], _surr_diffs("correlation", "pp", True), True,
-     "Surrogate − original\n(spatial correlation)"),
+    ("a2", "Localization error", surr_loc_results["wcset"], False, "Original − surrogate\n(localization error, mm)"),
+    ("b2", "Spatial correlation", surr_corr_results[("wcset", "qrp")], True, "Surrogate − original\n(spatial correlation)"),
+    ("c2", "Spatial correlation", surr_corr_results[("wcset", "pp")], True, "Surrogate − original\n(spatial correlation)"),
 ]
-for dax, (letter, metric_label, res, diffs, hib, ylabel) in zip(surr_daxes, _surr_panels):
-    annot = {
-        c: [stars_for(competitor_row(res, c, reference="original")["p_corrected"]),
-            # negated: positive = surrogate better
-            f"r={-ref_effect(res, c, reference='original', higher_is_better=hib):+.2f}",
-            f"{(d > 0).sum()}/{(d == 0).sum()}/{(d < 0).sum()}"]
-        for c, d in diffs.items()
-    }
-    paired_diff_panel(dax, diffs, surrogates, CONDITION_COLORS, annot)
-    dax.set_xticklabels([SURROGATE_LABELS.get(c, c) for c in surrogates], rotation=45, ha="right")
+for i, (dax, (letter, metric_label, res, hib, ylabel)) in enumerate(zip(surr_daxes, _surr_panels)):
+    surr_metrics.plot.paired_differences(
+        res, reference="original", higher_is_better=not hib, order=surrogates, palette=CONDITION_COLORS,
+        annotate=("stars", "effect", "counts"), tick_labels=SURROGATE_LABELS, ax=dax,
+        direction_labels=("surrogate better", "original better") if i == len(_surr_panels) - 1 else None,
+    )
+    plt.setp(dax.get_xticklabels(), rotation=45, ha="right")
     dax.set_ylabel(ylabel)
     dax.set_title(f"{letter}. {metric_label}:\npaired difference vs. original", loc="left", fontsize=10)
-mark_direction(surr_daxes[-1], better="surrogate better", worse="original better")
 
-surr_legend_handles = [
-    Line2D([0], [0], color=COLORS[m], linestyle="--", linewidth=1.5, label=f"{METHOD_LABELS[m]} (original connectome)")
-    for m in ref_methods
-]
-surr_fig.legend(handles=surr_legend_handles, loc="lower center", ncol=2, bbox_to_anchor=(0.5, -0.04))
+surr_fig.legend(*ax_loc.get_legend_handles_labels(), loc="lower center", ncol=2, bbox_to_anchor=(0.5, -0.04))
 
 plt.tight_layout()
 
@@ -829,21 +797,22 @@ resection_peak_median_dspm = fmt_num(_peak_medians["dspm"])
 resection_peak_median_wmne = fmt_num(_peak_medians["wmne"])
 resection_peak_median_beltrami = fmt_num(_peak_medians["beltrami"])
 
-resection_peak_p_cset = fmt_p(competitor_row(_peak, "cset")["p_corrected"])
-resection_peak_r_cset = fmt_stat(competitor_row(_peak, "cset")["effect_size"])
-resection_peak_p_dspm = fmt_p(competitor_row(_peak, "dspm")["p_corrected"])
-resection_peak_r_dspm = fmt_stat(competitor_row(_peak, "dspm")["effect_size"])
-resection_peak_p_sloreta = fmt_p(competitor_row(_peak, "sloreta")["p_corrected"])
-resection_peak_r_sloreta = fmt_stat(competitor_row(_peak, "sloreta")["effect_size"])
-resection_peak_p_wmne = fmt_p(competitor_row(_peak, "wmne")["p_corrected"])
-resection_peak_r_wmne = fmt_stat(competitor_row(_peak, "wmne")["effect_size"])
-resection_peak_p_beltrami = fmt_p(competitor_row(_peak, "beltrami")["p_corrected"])
-resection_peak_r_beltrami = fmt_stat(competitor_row(_peak, "beltrami")["effect_size"])
+_peak_vs = _peak.vs("wcset")  # one row per competitor, effect as stored (wCSET - competitor)
+resection_peak_p_cset = fmt_p(_peak_vs.loc["cset", "p_corrected"])
+resection_peak_r_cset = fmt_stat(_peak_vs.loc["cset", "effect"])
+resection_peak_p_dspm = fmt_p(_peak_vs.loc["dspm", "p_corrected"])
+resection_peak_r_dspm = fmt_stat(_peak_vs.loc["dspm", "effect"])
+resection_peak_p_sloreta = fmt_p(_peak_vs.loc["sloreta", "p_corrected"])
+resection_peak_r_sloreta = fmt_stat(_peak_vs.loc["sloreta", "effect"])
+resection_peak_p_wmne = fmt_p(_peak_vs.loc["wmne", "p_corrected"])
+resection_peak_r_wmne = fmt_stat(_peak_vs.loc["wmne", "effect"])
+resection_peak_p_beltrami = fmt_p(_peak_vs.loc["beltrami", "p_corrected"])
+resection_peak_r_beltrami = fmt_stat(_peak_vs.loc["beltrami", "effect"])
 
 # Competitor closest to significance, quoted in the prose.
-_closest = min(competitors, key=lambda c: competitor_row(_peak, c)["p_corrected"])
+_closest = _peak_vs.loc[competitors, "p_corrected"].idxmin()
 resection_peak_closest = METHOD_LABELS[_closest]
-resection_peak_p_min = fmt_p(competitor_row(_peak, _closest)["p_corrected"])
+resection_peak_p_min = fmt_p(_peak_vs.loc[_closest, "p_corrected"])
 ```
 
 Simulation offers a controlled testbed, but real clinical data will always differ. We evaluated localization accuracy against the resected epileptogenic zone in seizure-free patients (ILAE 1, n=`{python} resection_n`), alongside wMNE, sLORETA, dSPM, and the Beltrami-eigenbasis GBF variant (@sec-inverse) as a sixth method.
@@ -870,32 +839,24 @@ resection_dax = resection_fig.add_subplot(_res_left[1])
 
 # (a) Per method
 resection_metrics.plot.group_comparison(
-    resection_results["peak_distance_mm"], order=RESECTION_METHODS, palette=COLORS,
-    points=True, showfliers=False, alpha=0, saturation=1, ax=resection_ax,
+    resection_results["peak_distance_mm"], order=RESECTION_METHODS, palette=COLORS, points=True, showfliers=False,
+    alpha=0, saturation=1, fill_alpha=FILL_ALPHA, tick_labels=METHOD_LABELS, reference_suffix=" (ref.)", ax=resection_ax,
 )
-soften_boxes(resection_ax)
-resection_ax.set_xticks(range(len(RESECTION_METHODS)))
-resection_ax.set_xticklabels(ref_labels([METHOD_LABELS[m] for m in RESECTION_METHODS], "wCSET"), rotation=45, ha="right")
+plt.setp(resection_ax.get_xticklabels(), rotation=45, ha="right")
 resection_ax.set_xlabel("")
 resection_ax.set_ylabel("Peak-to-resection\ndistance (mm)")
 resection_ax.set_title("a1. Peak-to-resection distance, per method", loc="left", fontsize=10)
 resection_ax.spines[["top", "right"]].set_visible(False)
 
 # (b) Paired differences per subject (competitor − wCSET; lower distance is better)
-_res_df = resection_metrics.to_df(metrics="peak_distance_mm", filters=FILTERS)
-_res_wide = _res_df.pivot_table(index="Subject", columns="Method", values="Value")
-resection_diffs = {c: (_res_wide[c] - _res_wide["wcset"]).dropna().to_numpy(dtype=float) for c in competitors}
-resection_annot = {
-    c: [stars_for(competitor_row(_peak, c)["p_corrected"]),
-        f"r={ref_effect(_peak, c, higher_is_better=False):+.2f}",
-        f"{(d > 0).sum()}/{(d == 0).sum()}/{(d < 0).sum()}"]
-    for c, d in resection_diffs.items()
-}
-paired_diff_panel(resection_dax, resection_diffs, competitors, COLORS, resection_annot)
-resection_dax.set_xticklabels([METHOD_LABELS[c] for c in competitors], rotation=45, ha="right")
+resection_metrics.plot.paired_differences(
+    _peak, reference="wcset", higher_is_better=False, order=competitors, palette=COLORS,
+    annotate=("stars", "effect", "counts"), tick_labels=METHOD_LABELS,
+    direction_labels=("wCSET closer", "other method closer"), ax=resection_dax,
+)
+plt.setp(resection_dax.get_xticklabels(), rotation=45, ha="right")
 resection_dax.set_ylabel("Method − wCSET (mm)")
 resection_dax.set_title("a2. Peak-to-resection distance:\npaired difference vs. wCSET (per subject)", loc="left", fontsize=10)
-mark_direction(resection_dax, better="wCSET closer", worse="other method closer")
 
 # (c) Example subject, rows = view, columns = method
 RES_DIR = "./results/spike/resection_example"
@@ -970,14 +931,13 @@ COMPETITORS = ["sloreta", "cset", "dspm", "wmne", "beltrami"]
 STANDARD = ["cset", "sloreta", "dspm", "wmne"]  # Beltrami reported separately
 VIEEG_METRICS = {"correlation_spatial_signed": "spatial correlation", "auc_spatial": "AUC on |amplitude|"}
 
-# Per-timepoint values, paired differences (positive = wCSET better) and cached test results.
-vieeg_wide, vieeg_diffs, vieeg_results = {}, {}, {}
+# Per-timepoint values and cached test results.
+vieeg_wide, vieeg_results = {}, {}
 for metric in VIEEG_METRICS:
     for subject in SUBJECT_ORDER:
         wide = (vieeg_metrics.to_df(metrics=metric, filters={"Subject": subject})
                 .pivot_table(index="times", columns="Method", values="Value").dropna())
         vieeg_wide[(subject, metric)] = wide
-        vieeg_diffs[(subject, metric)] = {c: (wide["wcset"] - wide[c]).to_numpy() for c in COMPETITORS}
         vieeg_results[(subject, metric)] = vieeg_metrics.stat.ttest_ess(
             metric, group_by="Method", comparisons=vieeg_metrics.stat.build_comparisons(["wcset"], COMPETITORS),
             pairing_col="times", subject_order=wide.index.tolist(), filters={"Subject": subject},
@@ -988,12 +948,10 @@ def vieeg_chance(subject, metric):
     d = vieeg_null[(vieeg_null["Metric"] == metric) & (vieeg_null["Subject"] == subject)]
     return d["null_lo"].mean(), d["null_hi"].mean()
 
-# Statistics quoted in the prose.
-def _p(subject, metric, competitor):
-    return competitor_row(vieeg_results[(subject, metric)], competitor)["p_corrected"]
-
-def _winrate(subject, metric, competitor):
-    return float((vieeg_diffs[(subject, metric)][competitor] > 0).mean())
+# Statistics quoted in the prose: p-values and effects (positive = wCSET better) per competitor,
+# and the per-timepoint differences wCSET - competitor behind each test.
+vieeg_vs = {k: r.vs("wcset") for k, r in vieeg_results.items()}
+vieeg_diffs = {k: vieeg_metrics.stat.paired_differences(r) for k, r in vieeg_results.items()}
 
 def _median(subject, metric, method):
     return vieeg_wide[(subject, metric)][method].median()
@@ -1001,25 +959,27 @@ def _median(subject, metric, method):
 _r, _auc = "correlation_spatial_signed", "auc_spatial"
 
 # Subject 1: wCSET vs. the four standard methods and CSET, then Beltrami.
+_r48, _auc48 = vieeg_vs[("48", _r)], vieeg_vs[("48", _auc)]
+_win48 = (vieeg_diffs[("48", _r)] > 0).mean() * 100  # % of timepoints where wCSET is higher
 vieeg_48_r_wcset = fmt_num(_median("48", _r, "wcset"), 2)
 vieeg_48_r_std_lo = fmt_num(min(_median("48", _r, c) for c in STANDARD), 2)
 vieeg_48_r_std_hi = fmt_num(max(_median("48", _r, c) for c in STANDARD), 2)
 vieeg_48_r_chance = fmt_num(vieeg_chance("48", _r)[1], 2)
 vieeg_48_r_beltrami = fmt_num(_median("48", _r, "beltrami"), 2)
-vieeg_48_spatial_p4_max = fmt_p(max(_p("48", _r, c) for c in STANDARD))
-vieeg_48_spatial_dz4_lo = fmt_stat(min(ref_effect(vieeg_results[("48", _r)], c) for c in STANDARD))
-vieeg_48_spatial_dz4_hi = fmt_stat(max(ref_effect(vieeg_results[("48", _r)], c) for c in STANDARD))
-vieeg_48_winrate_min = f"{min(_winrate('48', _r, c) for c in STANDARD) * 100:.0f}"
-vieeg_48_winrate_max = f"{max(_winrate('48', _r, c) for c in STANDARD) * 100:.0f}"
-vieeg_48_spatial_p_beltrami = fmt_p(_p("48", _r, "beltrami"))
-vieeg_48_beltrami_winrate = f"{_winrate('48', _r, 'beltrami') * 100:.0f}"
-vieeg_48_auc_p4_max = fmt_p(max(_p("48", _auc, c) for c in STANDARD))
-vieeg_48_auc_dz4_lo = fmt_stat(min(ref_effect(vieeg_results[("48", _auc)], c) for c in STANDARD))
-vieeg_48_auc_dz4_hi = fmt_stat(max(ref_effect(vieeg_results[("48", _auc)], c) for c in STANDARD))
-vieeg_48_auc_p_beltrami = fmt_p(_p("48", _auc, "beltrami"))
+vieeg_48_spatial_p4_max = fmt_p(_r48.loc[STANDARD, "p_corrected"].max())
+vieeg_48_spatial_dz4_lo = fmt_stat(_r48.loc[STANDARD, "effect"].min())
+vieeg_48_spatial_dz4_hi = fmt_stat(_r48.loc[STANDARD, "effect"].max())
+vieeg_48_winrate_min = f"{_win48[STANDARD].min():.0f}"
+vieeg_48_winrate_max = f"{_win48[STANDARD].max():.0f}"
+vieeg_48_spatial_p_beltrami = fmt_p(_r48.loc["beltrami", "p_corrected"])
+vieeg_48_beltrami_winrate = f"{_win48['beltrami']:.0f}"
+vieeg_48_auc_p4_max = fmt_p(_auc48.loc[STANDARD, "p_corrected"].max())
+vieeg_48_auc_dz4_lo = fmt_stat(_auc48.loc[STANDARD, "effect"].min())
+vieeg_48_auc_dz4_hi = fmt_stat(_auc48.loc[STANDARD, "effect"].max())
+vieeg_48_auc_p_beltrami = fmt_p(_auc48.loc["beltrami", "p_corrected"])
 
 # Subject 2: smallest p over every competitor and both metrics.
-vieeg_34_p_min = fmt_p(min(_p("34", m, c) for m in VIEEG_METRICS for c in COMPETITORS))
+vieeg_34_p_min = fmt_p(min(vieeg_vs[("34", m)]["p_corrected"].min() for m in VIEEG_METRICS))
 vieeg_34_r_wcset = fmt_num(_median("34", _r, "wcset"), 2)
 vieeg_34_r_std_lo = fmt_num(min(_median("34", _r, c) for c in STANDARD), 2)
 vieeg_34_r_std_hi = fmt_num(max(_median("34", _r, c) for c in STANDARD), 2)
@@ -1049,27 +1009,34 @@ for col_i, subject in enumerate(MAIN_SUBJECTS):
 
     # (1) Spatial correlation per method, chance range shaded
     ax = vieeg_axes[0, col_i]
-    method_boxes(ax, vieeg_wide[(subject, _r)], VIEEG_ORDER, chance=vieeg_chance(subject, _r), chance_value=0)
+    vieeg_metrics.plot.group_comparison(
+        vieeg_results[(subject, _r)], order=VIEEG_ORDER, palette=COLORS, points=False, showfliers=False, width=0.55,
+        alpha=0, saturation=1, fill_alpha=FILL_ALPHA, chance=vieeg_chance(subject, _r), chance_value=0,
+        tick_labels=METHOD_LABELS, reference_suffix=" (ref.)", ax=ax,
+    )
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=8)
+    ax.set_xlabel("")
+    ax.set_ylabel("Spatial correlation (signed r)\nvirtual vs. recorded iEEG" if col_i == 0 else "", fontsize=8)
     ax.set_title(f"{letter}1. {SUBJECT_TITLES[subject]}: spatial correlation per method", loc="left", fontsize=9)
-    if col_i == 0:
-        ax.set_ylabel("Spatial correlation (signed r)\nvirtual vs. recorded iEEG", fontsize=8)
+    ax.spines[["top", "right"]].set_visible(False)
 
     # (2, 3) Paired differences per timepoint, positive = wCSET better
     for row_i, metric in enumerate(VIEEG_METRICS, start=1):
         dax = vieeg_axes[row_i, col_i]
-        diffs = vieeg_diffs[(subject, metric)]
-        paired_diff_panel(dax, diffs, COMPETITORS, COLORS, vs_annotations(vieeg_results[(subject, metric)], diffs, COMPETITORS))
-        dax.set_xticklabels([METHOD_LABELS[c] for c in COMPETITORS], rotation=45, ha="right", fontsize=8)
+        vieeg_metrics.plot.paired_differences(
+            vieeg_results[(subject, metric)], reference="wcset", order=COMPETITORS, palette=COLORS,
+            annotate=("stars", "effect", "winrate"), tick_labels=METHOD_LABELS, ax=dax,
+            direction_labels=("wCSET better", "other method better") if col_i == len(MAIN_SUBJECTS) - 1 else None,
+        )
+        plt.setp(dax.get_xticklabels(), rotation=45, ha="right", fontsize=8)
         dax.set_title(f"{letter}{row_i + 1}. {SUBJECT_TITLES[subject]}: {VIEEG_METRICS[metric]},\n"
                       "paired difference vs. wCSET", loc="left", fontsize=9)
         if col_i == 0:
             dax.set_ylabel(f"wCSET − method\n({VIEEG_METRICS[metric]})", fontsize=8)
-for row_i in (1, 2):
-    mark_direction(vieeg_axes[row_i, -1])
 share_ylim(vieeg_axes[0])  # per-method row comparable across subjects
 ```
 
-The spatial pattern behind these correlations is visible directly at the intracranial contacts (@fig-intra-reconstruction), at the timepoint where wCSET's own spatial correlation with the recording peaks: in Subject 1, wCSET's virtual iEEG reproduces the recorded positive cluster on the deep left temporal contacts, with the right sign on 7 of the 8 strongest contacts, while sLORETA's has the opposite sign on 6 of them; in Subject 2 the difference is subtler, in line with the closer correlations. The same fidelity shows up in the time domain (@fig-intra-channels): for each subject's single most temporally-correlated (and genuinely spike-containing, not spuriously correlated) intracranial channel, wCSET's virtual recording tracks the true channel's burst more closely than sLORETA's.
+The spatial pattern behind these correlations is visible directly at the intracranial contacts (@fig-intra-reconstruction), at the timepoint where wCSET's own spatial correlation with the recording peaks: in Subject 1, wCSET's virtual iEEG reproduces the recorded positive cluster on the deep left temporal contacts, with the right sign on 7 of the 8 strongest contacts, while sLORETA's has the opposite sign on 6 of them; in Subject 2 the difference is subtler, in line with the closer correlations.
 
 ```{python filename="results_intra_spatial_plot.py"}
 #| echo: false
