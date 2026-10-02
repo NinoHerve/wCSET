@@ -29,8 +29,21 @@ keywords:
   - Connectomics
   - Brain Graph Signal Processing
 
-bibliography: references.bib
+bibliography: ../references.bib
 ---
+
+```{python filename="setup.py"}
+# | output: false
+# Run this cell first. The code below uses paths relative to the project root
+# ("processing/*.config.yml", "./results/", `from scripts...`), but both Quarto
+# and VS Code start the kernel in this file's folder (processing/).
+import os, sys
+from pathlib import Path
+
+root = next(p for p in [Path.cwd(), *Path.cwd().parents] if (p / "index.qmd").exists())
+os.chdir(root)
+sys.path.insert(0, str(root))
+```
 
 # 1. Environment & Data Acquisition
 
@@ -102,7 +115,7 @@ from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
 # data manager
-dm = IntraManager("intra.config.yml")
+dm = IntraManager("processing/intra.config.yml")
 
 # report folder
 report_dir = Path("./reports/")
@@ -156,7 +169,7 @@ from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
 # data manager
-dm = IntraManager("intra.config.yml")
+dm = IntraManager("processing/intra.config.yml")
 
 # report folder
 report_dir = Path("./reports/")
@@ -208,7 +221,7 @@ from scripts.data_manager import IntraManager
 overwrite = False
 
 # data manager
-fconfig = "intra.config.yml"
+fconfig = "processing/intra.config.yml"
 dm = IntraManager(fconfig)
 
 @loop(subjects=dm.subjects)
@@ -247,7 +260,7 @@ file's note.
 
 ```{python filename="brain_surface_reconstruction.py"}
 %%bash
-bash scripts/fsrecon.sh intra.config.yml
+bash scripts/fsrecon.sh processing/intra.config.yml
 ```
 
 Builds each subject's cortical source space and removes the medial wall -
@@ -269,7 +282,7 @@ from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
 # data manager
-dm = IntraManager("intra.config.yml")
+dm = IntraManager("processing/intra.config.yml")
 
 @loop(subjects=dm.subjects)
 def setup_source_space(sub, overwrite):
@@ -320,7 +333,7 @@ from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
 # data manager
-dm = IntraManager("intra.config.yml")
+dm = IntraManager("processing/intra.config.yml")
 
 # segment head
 @loop(subjects=dm.subjects)
@@ -389,7 +402,7 @@ from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
 # data manager
-dm = IntraManager("intra.config.yml")
+dm = IntraManager("processing/intra.config.yml")
 
 # solver forward problem
 @loop(subjects=dm.subjects)
@@ -473,7 +486,7 @@ from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
 # data manager
-dm = IntraManager("intra.config.yml")
+dm = IntraManager("processing/intra.config.yml")
 
 # --- process atlas ---
 probcon = dm.load_ref("REF_CON")
@@ -639,7 +652,7 @@ from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
 # data manager
-dm = IntraManager("intra.config.yml")
+dm = IntraManager("processing/intra.config.yml")
 
 # apply inverse solvers
 @loop(subjects=dm.subjects)
@@ -780,7 +793,7 @@ from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
 # data manager
-dm = IntraManager("intra.config.yml")
+dm = IntraManager("processing/intra.config.yml")
 methods = ["wcset", "cset", "sloreta", "dspm", "wmne", "beltrami"]
 
 @loop(subjects=dm.subjects)
@@ -861,7 +874,7 @@ from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
 # data manager
-dm = IntraManager("intra.config.yml")
+dm = IntraManager("processing/intra.config.yml")
 methods = ["wcset", "sloreta", "cset", "dspm", "wmne", "beltrami"]
 
 @loop(subjects=dm.subjects)
@@ -976,7 +989,7 @@ from scripts.data_manager import IntraManager
 
 pv.OFF_SCREEN = True
 
-dm = IntraManager("intra.config.yml")
+dm = IntraManager("processing/intra.config.yml")
 MAIN_SUBJECTS = ["48", "34"]  # display order matches index.qmd's own MAIN_SUBJECTS ("Subject 1" = 48)
 
 glass_dir = Path("./results/intra/glass_example")
@@ -1345,7 +1358,7 @@ from scipy.stats import rankdata
 import mindmap as mm
 from scripts.data_manager import IntraManager
 
-dm = IntraManager("intra.config.yml")
+dm = IntraManager("processing/intra.config.yml")
 METHODS = ["wcset", "sloreta", "cset", "dspm", "wmne", "beltrami"]
 COMPETITORS = [m for m in METHODS if m != "wcset"]
 SUBJECTS = ["48", "34", "12", "50"]

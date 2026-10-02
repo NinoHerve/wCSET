@@ -32,7 +32,7 @@ def main():
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--config", default="simf.config.yml", help="Path to configuration YAML file.")
+    parser.add_argument("--config", default="processing/simf.config.yml", help="Path to configuration YAML file.")
     parser.add_argument("--subject", default="10", help="Subject ID.")
     parser.add_argument(
         "--desc",

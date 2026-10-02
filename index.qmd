@@ -341,7 +341,7 @@ import matplotlib.pyplot as plt
 from scripts.data_manager import SimfManager
 
 # Example run (sub-10, run 273); brain panels and correlations from processing_simf.qmd
-dm = SimfManager("simf.config.yml")
+dm = SimfManager("processing/simf.config.yml")
 ave = dm.load("10", "ave", task="spk", run=273)
 EX_DIR = "./results/simf/flagship_example"
 ex_corr = json.load(open(f"{EX_DIR}/correlations.json"))

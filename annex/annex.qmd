@@ -183,7 +183,7 @@ from scripts.data_manager import SimfManager
 # Reproduces surrogate_harmonics_investigation.ipynb's weighted-mean-IPR
 # result under the reader-facing surrogate names used throughout this
 # manuscript (Section 2.1.3) rather than the on-disk `Surrogate` tags.
-dm_ipr = SimfManager("../simf.config.yml")
+dm_ipr = SimfManager("../processing/simf.config.yml")
 sub_ipr = "10"
 
 LOWPASS_CONDS = ["original", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin"]
@@ -402,7 +402,7 @@ from scripts.data_manager import SimfManager
 # forward solutions actually used for Study I (Section 2.1.2) rather than
 # hand-computing this offline - processing_simf.qmd does not itself compute
 # this comparison, so there is no cached result to reuse here.
-dm_fwd = SimfManager("../simf.config.yml")
+dm_fwd = SimfManager("../processing/simf.config.yml")
 sub_fwd = "10"
 fwd_sim = dm_fwd.load(sub_fwd, "fwd", desc="sim")
 fwd_inv = dm_fwd.load(sub_fwd, "fwd", desc="inv")

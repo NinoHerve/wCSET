@@ -42,7 +42,7 @@ if __name__ == "__main__":
     parser.add_argument("subjects", nargs="+", help="Subject IDs, e.g. pat01 or sub-pat01")
     args = parser.parse_args()
 
-    dm = SpikeManager("spike.config.yml")
+    dm = SpikeManager("processing/spike.config.yml")
 
     for sub in args.subjects:
         review_resection(dm, sub)

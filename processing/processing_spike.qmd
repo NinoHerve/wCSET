@@ -1,3 +1,16 @@
+```{python filename="setup.py"}
+# | output: false
+# Run this cell first. The code below uses paths relative to the project root
+# ("processing/*.config.yml", "./results/", `from scripts...`), but both Quarto
+# and VS Code start the kernel in this file's folder (processing/).
+import os, sys
+from pathlib import Path
+
+root = next(p for p in [Path.cwd(), *Path.cwd().parents] if (p / "index.qmd").exists())
+os.chdir(root)
+sys.path.insert(0, str(root))
+```
+
 
 
 # 1. EEG Preprocessing
@@ -47,7 +60,7 @@ from scripts.utils import loop, check_files
 from scripts.data_manager import SpikeManager
 
 # data manager
-dm = SpikeManager("spike.config.yml")
+dm = SpikeManager("processing/spike.config.yml")
 
 # report folder
 report_dir = Path("./reports/")
@@ -142,7 +155,7 @@ from scripts.data_manager import SpikeManager
 overwrite = False
 
 # data manager
-fconfig = "spike.config.yml"
+fconfig = "processing/spike.config.yml"
 dm = SpikeManager(fconfig)
 
 @loop(subjects=dm.subjects)
@@ -184,7 +197,7 @@ custom flag was intended but never added. **FILL**
 
 ```{python filename="brain_surface_reconstruction.py"}
 %%bash
-bash scripts/fsrecon.sh spike.config.yml
+bash scripts/fsrecon.sh processing/spike.config.yml
 ```
 
 Builds each subject's cortical source space and removes the medial wall,
@@ -211,7 +224,7 @@ from scripts.utils import loop, check_files
 from scripts.data_manager import SpikeManager
 
 # data manager
-dm = SpikeManager("spike.config.yml")
+dm = SpikeManager("processing/spike.config.yml")
 
 @loop(subjects=dm.subjects)
 def setup_source_space(sub, overwrite):
@@ -264,7 +277,7 @@ from scripts.utils import loop, check_files
 from scripts.data_manager import SpikeManager
 
 # data manager
-dm = SpikeManager("spike.config.yml")
+dm = SpikeManager("processing/spike.config.yml")
 
 # segment head
 @loop(subjects=dm.subjects)
@@ -335,7 +348,7 @@ from scripts.utils import loop, check_files
 from scripts.data_manager import SpikeManager
 
 # data manager
-dm = SpikeManager("spike.config.yml")
+dm = SpikeManager("processing/spike.config.yml")
 
 # solver forward problem
 @loop(subjects=dm.subjects)
@@ -421,7 +434,7 @@ from scripts.utils import loop, check_files
 from scripts.data_manager import SpikeManager
 
 # data manager
-dm = SpikeManager("spike.config.yml")
+dm = SpikeManager("processing/spike.config.yml")
 
 # --- process atlas ---
 probcon = dm.load_ref("REF_CON")
@@ -603,7 +616,7 @@ from scripts.utils import loop, check_files
 from scripts.data_manager import SpikeManager
 
 # data manager
-dm = SpikeManager("spike.config.yml")
+dm = SpikeManager("processing/spike.config.yml")
 
 # apply inverse solvers
 @loop(subjects=dm.subjects)
@@ -730,7 +743,7 @@ from scripts.utils import loop
 from scripts.data_manager import SpikeManager
 
 # data manager
-dm = SpikeManager("spike.config.yml")
+dm = SpikeManager("processing/spike.config.yml")
 
 # hemisphere of the epileptogenic zone (ground truth, from participants.tsv)
 participants = pd.read_csv(dm.roots["raw"]/"participants.tsv", sep="\t")
@@ -892,7 +905,7 @@ from scripts.utils import loop, check_files
 from scripts.data_manager import SpikeManager
 
 # data manager
-dm = SpikeManager("spike.config.yml")
+dm = SpikeManager("processing/spike.config.yml")
 
 # output: one MetricSuite for the whole cohort, replacing the old flat CSV
 # (results/spike_resection_metrics.csv) - index.qmd's Study II section now
@@ -1036,7 +1049,7 @@ from scripts.utils import loop
 from scripts.data_manager import SpikeManager
 
 # data manager
-dm = SpikeManager("spike.config.yml")
+dm = SpikeManager("processing/spike.config.yml")
 
 # output file
 fchance = Path("./results/spike/intermediate/chance_cluster_threshold.csv")
@@ -1134,7 +1147,7 @@ from scripts.data_manager import SpikeManager
 
 pv.OFF_SCREEN = True
 
-dm = SpikeManager("spike.config.yml")
+dm = SpikeManager("processing/spike.config.yml")
 
 fpng = Path("./results/spike/resection_reconstruction_grid.png")
 

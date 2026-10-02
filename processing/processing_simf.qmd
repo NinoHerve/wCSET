@@ -29,9 +29,21 @@ keywords:
   - Connectomics
   - Brain Graph Signal Processing
 
-bibliography: references.bib
+bibliography: ../references.bib
 ---
 
+```{python filename="setup.py"}
+# | output: false
+# Run this cell first. The code below uses paths relative to the project root
+# ("processing/*.config.yml", "./results/", `from scripts...`), but both Quarto
+# and VS Code start the kernel in this file's folder (processing/).
+import os, sys
+from pathlib import Path
+
+root = next(p for p in [Path.cwd(), *Path.cwd().parents] if (p / "index.qmd").exists())
+os.chdir(root)
+sys.path.insert(0, str(root))
+```
 
 # 1. Environment & Data Acquisition
 
@@ -75,7 +87,7 @@ from scripts.utils import check_files
 from scripts.data_manager import SimfManager
 
 # data manager
-fconfig = "simf.config.yml"
+fconfig = "processing/simf.config.yml"
 dm = SimfManager(fconfig)
 
 def run_multiconn_parcellation(overwrite=False):
@@ -136,7 +148,7 @@ from scripts.data_manager import SimfManager
 sub = "10"
 
 # data manager
-dm = SimfManager("simf.config.yml")
+dm = SimfManager("processing/simf.config.yml")
 
 def run_setup_source_space(overwrite=True):
   # output files
@@ -187,7 +199,7 @@ from scripts.utils import check_files
 from scripts.data_manager import SimfManager
 
 # data manager
-dm = SimfManager("simf.config.yml")
+dm = SimfManager("processing/simf.config.yml")
 sub = "10"
 
 # segment head
@@ -259,7 +271,7 @@ from scripts.utils import check_files
 from scripts.data_manager import SimfManager
 
 # data manager
-dm = SimfManager("simf.config.yml")
+dm = SimfManager("processing/simf.config.yml")
 sub = "10"
 
 def run_eeg_template_coregistration(overwrite=True):
@@ -321,7 +333,7 @@ from scripts.utils import check_files
 from scripts.data_manager import SimfManager
 
 # data manager
-dm = SimfManager("simf.config.yml")
+dm = SimfManager("processing/simf.config.yml")
 sub = "10"
 
 def run_forward_problem(overwrite=True):
@@ -462,7 +474,7 @@ from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("simf.config.yml")
+dm = SimfManager("processing/simf.config.yml")
 sub = "10"
 
 n_regions = 100
@@ -592,7 +604,7 @@ from scripts.utils import check_files
 from scripts.data_manager import SimfManager
 
 # data manager
-dm = SimfManager("simf.config.yml")
+dm = SimfManager("processing/simf.config.yml")
 sub = "10"
 
 def run_connectivity(overwrite=True):
@@ -792,7 +804,7 @@ from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("simf.config.yml")
+dm = SimfManager("processing/simf.config.yml")
 sub = "10"
 
 def run_surrogate_connectivity(overwrite=False):
@@ -1115,7 +1127,7 @@ from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("simf.config.yml")
+dm = SimfManager("processing/simf.config.yml")
 sub = "10"
 
 def run_simulation(overwrite=False):
@@ -1259,7 +1271,7 @@ from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("simf.config.yml")
+dm = SimfManager("processing/simf.config.yml")
 sub = "10"
 
 n_regions = 50
@@ -1385,7 +1397,7 @@ from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("simf.config.yml")
+dm = SimfManager("processing/simf.config.yml")
 sub = "10"
 
 snr_levels = [1, 1.5, 2, 3, 5, 7, 10, 14, 20]
@@ -1604,7 +1616,7 @@ from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("simf.config.yml")
+dm = SimfManager("processing/simf.config.yml")
 sub = "10"
 
 methods = ["wcset", "cset", "sloreta", "dspm", "wmne"]
@@ -1784,7 +1796,7 @@ from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("simf.config.yml")
+dm = SimfManager("processing/simf.config.yml")
 sub = "10"
 
 methods = ["wcset", "cset", "sloreta", "dspm", "wmne"]
@@ -2018,7 +2030,7 @@ from scripts.data_manager import SimfManager
 
 pv.OFF_SCREEN = True
 
-dm = SimfManager("simf.config.yml")
+dm = SimfManager("processing/simf.config.yml")
 sub, run = "10", 273
 
 PHASES = [
@@ -2246,7 +2258,7 @@ from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("simf.config.yml")
+dm = SimfManager("processing/simf.config.yml")
 sub = "10"
 noisesweep_subject = f"{sub}-noisesweep-v2"   # distinct bids subject - see noise_sweep_simulation.py
 
@@ -2431,7 +2443,7 @@ from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("simf.config.yml")
+dm = SimfManager("processing/simf.config.yml")
 sub = "10"
 noisesweep_subject = f"{sub}-noisesweep-v2"
 
@@ -2710,7 +2722,7 @@ from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("simf.config.yml")
+dm = SimfManager("processing/simf.config.yml")
 sub = "10"
 
 operator = "permutation"   # deletion/addition dropped - see prose above
@@ -3038,7 +3050,7 @@ from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("simf.config.yml")
+dm = SimfManager("processing/simf.config.yml")
 sub = "10"
 
 surrogates = ["beltrami", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin"]
