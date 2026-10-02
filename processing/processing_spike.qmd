@@ -138,7 +138,7 @@ here via `@loop` instead of to a single subject.
 import mindmap as mm
 import sys
 sys.path.insert(0, "..")
-from scripts.utils import check_files
+from scripts.utils import loop, check_files
 from scripts.data_manager import SpikeManager
 
 overwrite = False
