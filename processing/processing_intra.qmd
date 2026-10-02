@@ -32,19 +32,6 @@ keywords:
 bibliography: ../references.bib
 ---
 
-```{python filename="setup.py"}
-# | output: false
-# Run this cell first. The code below uses paths relative to the project root
-# ("processing/*.config.yml", "./results/", `from scripts...`), but both Quarto
-# and VS Code start the kernel in this file's folder (processing/).
-import os, sys
-from pathlib import Path
-
-root = next(p for p in [Path.cwd(), *Path.cwd().parents] if (p / "index.qmd").exists())
-os.chdir(root)
-sys.path.insert(0, str(root))
-```
-
 # 1. Environment & Data Acquisition
 
 ## Data Procurement
@@ -111,14 +98,16 @@ pre-averaged).
 # | output: false
 
 from pathlib import Path
+import sys
+sys.path.insert(0, "..")
 from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
 # data manager
-dm = IntraManager("processing/intra.config.yml")
+dm = IntraManager("intra.config.yml")
 
 # report folder
-report_dir = Path("./reports/")
+report_dir = Path("../reports/")
 report_dir.mkdir(exist_ok=True)
 
 @loop(subjects=dm.subjects)
@@ -165,14 +154,16 @@ before this point)
 # | output: false
 
 from pathlib import Path
+import sys
+sys.path.insert(0, "..")
 from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
 # data manager
-dm = IntraManager("processing/intra.config.yml")
+dm = IntraManager("intra.config.yml")
 
 # report folder
-report_dir = Path("./reports/")
+report_dir = Path("../reports/")
 report_dir.mkdir(exist_ok=True)
 
 @loop(subjects=dm.subjects)
@@ -215,13 +206,15 @@ parameter values as the other two files' `MultiConn_parcellation.py`.
 # | output: false
 
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
 overwrite = False
 
 # data manager
-fconfig = "processing/intra.config.yml"
+fconfig = "intra.config.yml"
 dm = IntraManager(fconfig)
 
 @loop(subjects=dm.subjects)
@@ -260,7 +253,7 @@ file's note.
 
 ```{python filename="brain_surface_reconstruction.py"}
 %%bash
-bash scripts/fsrecon.sh processing/intra.config.yml
+bash ../scripts/fsrecon.sh intra.config.yml
 ```
 
 Builds each subject's cortical source space and removes the medial wall -
@@ -278,11 +271,13 @@ identical cell (same filename, same code) to `processing_spike.qmd`'s
 
 import mne
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
 # data manager
-dm = IntraManager("processing/intra.config.yml")
+dm = IntraManager("intra.config.yml")
 
 @loop(subjects=dm.subjects)
 def setup_source_space(sub, overwrite):
@@ -329,11 +324,13 @@ Same CHARM segmentation + BEM layer construction as
 # | output: false
 
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
 # data manager
-dm = IntraManager("processing/intra.config.yml")
+dm = IntraManager("intra.config.yml")
 
 # segment head
 @loop(subjects=dm.subjects)
@@ -398,11 +395,13 @@ and same `ico=None` constraint as `processing_spike.qmd`'s
 
 import mne
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
 # data manager
-dm = IntraManager("processing/intra.config.yml")
+dm = IntraManager("intra.config.yml")
 
 # solver forward problem
 @loop(subjects=dm.subjects)
@@ -482,11 +481,13 @@ construction rationale.
 
 import numpy as np
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
 # data manager
-dm = IntraManager("processing/intra.config.yml")
+dm = IntraManager("intra.config.yml")
 
 # --- process atlas ---
 probcon = dm.load_ref("REF_CON")
@@ -648,11 +649,13 @@ sharing sLORETA/dSPM's `depth=None` one.
 
 import mne
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
 # data manager
-dm = IntraManager("processing/intra.config.yml")
+dm = IntraManager("intra.config.yml")
 
 # apply inverse solvers
 @loop(subjects=dm.subjects)
@@ -789,11 +792,13 @@ previously only 4 of them were projected here.
 
 import mne
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
 # data manager
-dm = IntraManager("processing/intra.config.yml")
+dm = IntraManager("intra.config.yml")
 methods = ["wcset", "cset", "sloreta", "dspm", "wmne", "beltrami"]
 
 @loop(subjects=dm.subjects)
@@ -870,11 +875,13 @@ there in `index.qmd`.
 from pathlib import Path
 
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
 
 # data manager
-dm = IntraManager("processing/intra.config.yml")
+dm = IntraManager("intra.config.yml")
 methods = ["wcset", "sloreta", "cset", "dspm", "wmne", "beltrami"]
 
 @loop(subjects=dm.subjects)
@@ -883,7 +890,7 @@ def evaluate_vieeg_fidelity(sub, overwrite):
     # intra_statistics.py concatenates all of these into results/intra/combined
     # at the end and deletes this whole _checkpoint/ folder, since its
     # contents become fully redundant with the combined suite.
-    fmetrics = Path(f"./results/intra/_checkpoint/sub-{sub}")
+    fmetrics = Path(f"../results/intra/_checkpoint/sub-{sub}")
 
     if check_files([fmetrics/"meta.json"]) and not overwrite:
         return
@@ -985,16 +992,18 @@ import matplotlib.pyplot as plt
 import pyvista as pv
 
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.data_manager import IntraManager
 
 pv.OFF_SCREEN = True
 
-dm = IntraManager("processing/intra.config.yml")
+dm = IntraManager("intra.config.yml")
 MAIN_SUBJECTS = ["48", "34"]  # display order matches index.qmd's own MAIN_SUBJECTS ("Subject 1" = 48)
 
-glass_dir = Path("./results/intra/glass_example")
+glass_dir = Path("../results/intra/glass_example")
 GLASS_METHODS = ["wcset", "sloreta"]
-fpng_channels = Path("./results/intra/reconstruction_channels.png")
+fpng_channels = Path("../results/intra/reconstruction_channels.png")
 
 def best_correlation_time(suite_df, sub):
     df = suite_df[
@@ -1091,7 +1100,7 @@ def render_channel_panel(overwrite=False):
         print("Already exists, skipping.")
         return
 
-    suite_df = mm.metric.MetricSuite.load("./results/intra/combined").to_df()
+    suite_df = mm.metric.MetricSuite.load("../results/intra/combined").to_df()
 
     fig, axes = plt.subplots(1, len(MAIN_SUBJECTS), figsize=(11, 3.5))
     for ax, sub in zip(axes, MAIN_SUBJECTS):
@@ -1135,7 +1144,7 @@ narrower than the `(0, 1.0)` s convention used for the metrics above).
 ```{python filename="intra_reconstruction_all_channels.py"}
 # | output: true
 
-fpng_channels_all_sub48 = Path("./results/intra/reconstruction_channels_all_sub-48.png")
+fpng_channels_all_sub48 = Path("../results/intra/reconstruction_channels_all_sub-48.png")
 
 def render_all_channels_panel(sub="48", overwrite=False):
     if fpng_channels_all_sub48.exists() and not overwrite:
@@ -1185,7 +1194,7 @@ def render_all_channels_panel(sub="48", overwrite=False):
 render_all_channels_panel(overwrite=True)
 ```
 
-![All channels, sub-48](results/intra/reconstruction_channels_all_sub-48.png)
+![All channels, sub-48](../results/intra/reconstruction_channels_all_sub-48.png)
 
 # Statistics
 
@@ -1237,8 +1246,8 @@ def natural_channel_order(channels):
     return sorted(channels, key=key)
 
 
-fcombined = Path("./results/intra/combined")
-checkpoint_dir = Path("./results/intra/_checkpoint")
+fcombined = Path("../results/intra/combined")
+checkpoint_dir = Path("../results/intra/_checkpoint")
 
 def compute_intra_statistics(overwrite=False):
     if fcombined.exists() and not overwrite:
@@ -1356,9 +1365,11 @@ import pandas as pd
 from scipy.stats import rankdata
 
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.data_manager import IntraManager
 
-dm = IntraManager("processing/intra.config.yml")
+dm = IntraManager("intra.config.yml")
 METHODS = ["wcset", "sloreta", "cset", "dspm", "wmne", "beltrami"]
 COMPETITORS = [m for m in METHODS if m != "wcset"]
 SUBJECTS = ["48", "34", "12", "50"]
@@ -1366,7 +1377,7 @@ BASELINE = (0, 1.0)
 AUC_THRESHOLD = 0.3
 N_PERM = 1000
 
-fspatial = Path("./results/intra/spatial_metrics")
+fspatial = Path("../results/intra/spatial_metrics")
 
 
 def spatial_r(x, y):
@@ -1456,6 +1467,8 @@ the spike window and the paired comparison with wCSET (dz > 0: wCSET better).
 ```{python filename="intra_spatial_metrics_plot.py"}
 # | output: true
 import matplotlib.pyplot as plt
+import sys
+sys.path.insert(0, "..")
 from scripts.figures import COLORS
 
 SPATIAL_METRICS = [("correlation_spatial_signed", "Signed spatial r", 0.0),

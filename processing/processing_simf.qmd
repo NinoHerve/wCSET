@@ -32,19 +32,6 @@ keywords:
 bibliography: ../references.bib
 ---
 
-```{python filename="setup.py"}
-# | output: false
-# Run this cell first. The code below uses paths relative to the project root
-# ("processing/*.config.yml", "./results/", `from scripts...`), but both Quarto
-# and VS Code start the kernel in this file's folder (processing/).
-import os, sys
-from pathlib import Path
-
-root = next(p for p in [Path.cwd(), *Path.cwd().parents] if (p / "index.qmd").exists())
-os.chdir(root)
-sys.path.insert(0, str(root))
-```
-
 # 1. Environment & Data Acquisition
 
 This file runs the full simulation-validation pipeline for a single subject
@@ -83,11 +70,13 @@ build the tractography-based connectome.
 # | output: false
 
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.utils import check_files
 from scripts.data_manager import SimfManager
 
 # data manager
-fconfig = "processing/simf.config.yml"
+fconfig = "simf.config.yml"
 dm = SimfManager(fconfig)
 
 def run_multiconn_parcellation(overwrite=False):
@@ -142,13 +131,15 @@ so simulated and reconstructed activity live on identical dipoles.
 
 import mne
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.utils import check_files
 from scripts.data_manager import SimfManager
 
 sub = "10"
 
 # data manager
-dm = SimfManager("processing/simf.config.yml")
+dm = SimfManager("simf.config.yml")
 
 def run_setup_source_space(overwrite=True):
   # output files
@@ -195,11 +186,13 @@ surfaces from the CHARM labels for the forward model.
 # | output: false
 
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.utils import check_files
 from scripts.data_manager import SimfManager
 
 # data manager
-dm = SimfManager("processing/simf.config.yml")
+dm = SimfManager("simf.config.yml")
 sub = "10"
 
 # segment head
@@ -267,11 +260,13 @@ sensor layout to be projected onto.
 # | output: false
 
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.utils import check_files
 from scripts.data_manager import SimfManager
 
 # data manager
-dm = SimfManager("processing/simf.config.yml")
+dm = SimfManager("simf.config.yml")
 sub = "10"
 
 def run_eeg_template_coregistration(overwrite=True):
@@ -329,11 +324,13 @@ would artificially inflate every method's accuracy).
 
 import mne
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.utils import check_files
 from scripts.data_manager import SimfManager
 
 # data manager
-dm = SimfManager("processing/simf.config.yml")
+dm = SimfManager("simf.config.yml")
 sub = "10"
 
 def run_forward_problem(overwrite=True):
@@ -470,11 +467,13 @@ from pathlib import Path
 import pandas as pd
 
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("processing/simf.config.yml")
+dm = SimfManager("simf.config.yml")
 sub = "10"
 
 n_regions = 100
@@ -482,7 +481,7 @@ base_seed = 42
 
 def run_probe_set_selection(overwrite=False):
   # output file
-  fprobe = Path("./results/simf/intermediate/probe-set.csv")
+  fprobe = Path("../results/simf/intermediate/probe-set.csv")
 
   if check_files([fprobe]) and not overwrite:
     print("Already exists, skipping.")
@@ -600,11 +599,13 @@ out of that comparison, not just a style refresh:
 
 import numpy as np
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.utils import check_files
 from scripts.data_manager import SimfManager
 
 # data manager
-dm = SimfManager("processing/simf.config.yml")
+dm = SimfManager("simf.config.yml")
 sub = "10"
 
 def run_connectivity(overwrite=True):
@@ -800,11 +801,13 @@ a second file to keep in sync, was already stale before this edit.)
 import numpy as np
 
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("processing/simf.config.yml")
+dm = SimfManager("simf.config.yml")
 sub = "10"
 
 def run_surrogate_connectivity(overwrite=False):
@@ -1123,11 +1126,13 @@ changed, not its units.
 import pandas as pd
 
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("processing/simf.config.yml")
+dm = SimfManager("simf.config.yml")
 sub = "10"
 
 def run_simulation(overwrite=False):
@@ -1193,7 +1198,7 @@ def run_simulation(overwrite=False):
   # 8 repetitions per region, over the shared 100-region probe set (spatially
   # uniform sample, see probe_set_selection.py) rather than all ~473
   # parcellation regions - see the power-analysis rationale in the prose above
-  probe_set = pd.read_csv("./results/simf/intermediate/probe-set.csv")
+  probe_set = pd.read_csv("../results/simf/intermediate/probe-set.csv")
   brain_regions = probe_set["region"].tolist()
   sources = [mm.analysis.simulation.Source([br], spike) for br in brain_regions]
 
@@ -1267,11 +1272,13 @@ from pathlib import Path
 import pandas as pd
 
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("processing/simf.config.yml")
+dm = SimfManager("simf.config.yml")
 sub = "10"
 
 n_regions = 50
@@ -1279,7 +1286,7 @@ base_seed = 42
 
 def run_noise_sweep_probe_set_selection(overwrite=False):
   # output file
-  fprobe = Path("./results/simf/intermediate/probe-set_noisesweep.csv")
+  fprobe = Path("../results/simf/intermediate/probe-set_noisesweep.csv")
 
   if check_files([fprobe]) and not overwrite:
     print("Already exists, skipping.")
@@ -1393,11 +1400,13 @@ from pathlib import Path
 
 import mindmap as mm
 import pandas as pd
+import sys
+sys.path.insert(0, "..")
 from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("processing/simf.config.yml")
+dm = SimfManager("simf.config.yml")
 sub = "10"
 
 snr_levels = [1, 1.5, 2, 3, 5, 7, 10, 14, 20]
@@ -1409,7 +1418,7 @@ n_jobs = 25   # compute resource setting, not a modeling choice - see prose abov
 def run_noise_sweep_simulation(overwrite=False):
   # output: convenience copy of the sweep's simulation_index.tsv under
   # results/, so downstream cells don't need to know the noisesweep subject id.
-  findex = Path("./results/simf/intermediate/noise-sweep_index_v2.tsv")
+  findex = Path("../results/simf/intermediate/noise-sweep_index_v2.tsv")
   fsim_index = dm.roots["sim"]/f"sub-{noisesweep_subject}"/"simulation_index.tsv"
 
   if check_files([findex]) and not overwrite:
@@ -1418,7 +1427,7 @@ def run_noise_sweep_simulation(overwrite=False):
 
   # 0. Probe-set regions - dedicated to this experiment, not the shared one
   # (see "Noise-Sweep Probe Set" above)
-  probe_set = pd.read_csv("./results/simf/intermediate/probe-set_noisesweep.csv")
+  probe_set = pd.read_csv("../results/simf/intermediate/probe-set_noisesweep.csv")
   probe_regions = probe_set["region"].tolist()
 
   # 1. Load shared simulation inputs - same original connectome/forward as
@@ -1612,11 +1621,13 @@ import pandas as pd
 
 import mindmap as mm
 from mindmap.analysis.functional.inverse import InverseSimTask, run_parallel_pipeline
+import sys
+sys.path.insert(0, "..")
 from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("processing/simf.config.yml")
+dm = SimfManager("simf.config.yml")
 sub = "10"
 
 methods = ["wcset", "cset", "sloreta", "dspm", "wmne"]
@@ -1792,11 +1803,13 @@ import mindmap as mm
 from mindmap.analysis.functional.common.metric import find_peak_localization_error
 from mindmap.analysis.functional.inverse import MeasureTask, run_parallel_pipeline
 from mindmap.analysis.simulation.components import Source
+import sys
+sys.path.insert(0, "..")
 from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("processing/simf.config.yml")
+dm = SimfManager("simf.config.yml")
 sub = "10"
 
 methods = ["wcset", "cset", "sloreta", "dspm", "wmne"]
@@ -1870,7 +1883,7 @@ def make_postprocess_score(dipole_positions):
 def run_comparison(overwrite=False):
   # one MetricSuite folder regroups every metric of this study (raw per-run
   # curves + context) and is reloaded in a single call from comparison_plots.py
-  results_dir = Path("./results")
+  results_dir = Path("../results")
   fmetrics = results_dir/"simf/flagship"
 
   if check_files([fmetrics/"meta.json"]) and not overwrite:
@@ -2026,16 +2039,18 @@ import numpy as np
 import pyvista as pv
 
 import mindmap as mm
+import sys
+sys.path.insert(0, "..")
 from scripts.data_manager import SimfManager
 
 pv.OFF_SCREEN = True
 
-dm = SimfManager("processing/simf.config.yml")
+dm = SimfManager("simf.config.yml")
 sub, run = "10", 273
 
 PHASES = [
-  ("qrp", 0.25, Path("./results/simf/flagship_reconstruction_grid_qrp.png")),
-  ("pp", 1.0, Path("./results/simf/flagship_reconstruction_grid_pp.png")),
+  ("qrp", 0.25, Path("../results/simf/flagship_reconstruction_grid_qrp.png")),
+  ("pp", 1.0, Path("../results/simf/flagship_reconstruction_grid_pp.png")),
 ]
 
 def render_flagship_reconstruction_grid(overwrite=False):
@@ -2100,7 +2115,7 @@ plus each reconstruction's whole-cortex spatial correlation with gold.
 
 import json
 
-PANEL_DIR = Path("./results/simf/flagship_example")
+PANEL_DIR = Path("../results/simf/flagship_example")
 LH_VIEWS = ["lateral", "medial"]
 
 def render_flagship_example_panels(overwrite=False):
@@ -2254,11 +2269,13 @@ import pandas as pd
 
 import mindmap as mm
 from mindmap.analysis.functional.inverse import InverseSimTask, run_parallel_pipeline
+import sys
+sys.path.insert(0, "..")
 from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("processing/simf.config.yml")
+dm = SimfManager("simf.config.yml")
 sub = "10"
 noisesweep_subject = f"{sub}-noisesweep-v2"   # distinct bids subject - see noise_sweep_simulation.py
 
@@ -2341,7 +2358,7 @@ def postprocess_save(ctx):
 
 def run_noise_sweep_reconstruction(overwrite=False):
   # always the full sweep - QUICK_TEST lives in noise_sweep_comparison.py now
-  findex = Path("./results/simf/intermediate/noise-sweep_index_v2.tsv")
+  findex = Path("../results/simf/intermediate/noise-sweep_index_v2.tsv")
   df_sweep = pd.read_csv(findex, sep="\t")
 
   simulator_dir = dm.roots["sim"]/f"sub-{noisesweep_subject}"/"simulator"
@@ -2439,11 +2456,13 @@ import mindmap as mm
 from mindmap.analysis.functional.common.metric import find_peak_localization_error
 from mindmap.analysis.functional.inverse import MeasureTask, run_parallel_pipeline
 from mindmap.analysis.simulation.components import Source
+import sys
+sys.path.insert(0, "..")
 from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("processing/simf.config.yml")
+dm = SimfManager("simf.config.yml")
 sub = "10"
 noisesweep_subject = f"{sub}-noisesweep-v2"
 
@@ -2503,7 +2522,7 @@ def make_score(dipole_positions):
 
 def run_noise_sweep_comparison(overwrite=QUICK_TEST):
   # output: one MetricSuite for the whole sweep (all methods x SNR levels)
-  fmetrics = Path(f"./results/simf/noise_sweep{suffix}")
+  fmetrics = Path(f"../results/simf/noise_sweep{suffix}")
 
   if check_files([fmetrics/"meta.json"]) and not overwrite:
     print("Already exists, skipping.")
@@ -2521,7 +2540,7 @@ def run_noise_sweep_comparison(overwrite=QUICK_TEST):
   # convenience copy rather than the raw per-subject simulation_index.tsv) -
   # always the full sweep's index; QUICK_TEST subsamples it below rather
   # than pointing at a separate dataset
-  findex = Path("./results/simf/intermediate/noise-sweep_index_v2.tsv")
+  findex = Path("../results/simf/intermediate/noise-sweep_index_v2.tsv")
   df_sweep = pd.read_csv(findex, sep="\t")
 
   if QUICK_TEST:
@@ -2718,11 +2737,13 @@ import mindmap as mm
 from mindmap.analysis.connectivity import ConnectomeCacheTask, cache_cst_batch
 from mindmap.analysis.functional.common.metric import find_peak_localization_error
 from mindmap.analysis.functional.inverse import InverseSimTask, run_parallel_pipeline
+import sys
+sys.path.insert(0, "..")
 from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("processing/simf.config.yml")
+dm = SimfManager("simf.config.yml")
 sub = "10"
 
 operator = "permutation"   # deletion/addition dropped - see prose above
@@ -2734,7 +2755,7 @@ n_jobs_cache = 4
 n_jobs_solve = 25   # Stage 2: reconstruct+score, parallelized across probe-set runs
 
 def run_degradation_reconstruction(overwrite=False):
-  fmetrics = Path("./results/simf/degradation")
+  fmetrics = Path("../results/simf/degradation")
   if check_files([fmetrics/"meta.json"]) and not overwrite:
     print("Already exists, skipping.")
     return
@@ -2803,7 +2824,7 @@ def run_degradation_reconstruction(overwrite=False):
   cache_paths = cache_cst_batch(cache_tasks, corrupt, cache_dir, n_jobs=n_jobs_cache, n_threads_per_job=2, overwrite=overwrite)
 
   # 3. Probe-set runs (same selection as surrogate_reconstruction.py)
-  probe_set = pd.read_csv("./results/simf/intermediate/probe-set.csv")
+  probe_set = pd.read_csv("../results/simf/intermediate/probe-set.csv")
   index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
   index["region"] = index["source_index_list"].apply(lambda s: ast.literal_eval(s)[0])
   probe_runs = index[
@@ -3046,11 +3067,13 @@ import pandas as pd
 import mindmap as mm
 from mindmap.analysis.functional.common.metric import find_peak_localization_error
 from mindmap.analysis.functional.inverse import InverseSimTask, run_parallel_pipeline
+import sys
+sys.path.insert(0, "..")
 from scripts.data_manager import SimfManager
 from scripts.utils import check_files
 
 # data manager
-dm = SimfManager("processing/simf.config.yml")
+dm = SimfManager("simf.config.yml")
 sub = "10"
 
 surrogates = ["beltrami", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin"]
@@ -3062,7 +3085,7 @@ def run_surrogate_reconstruction(overwrite=False):
   # checkpoint folder - transient, see prose above. Not the final suite
   # (results/simf/surrogates), which simf_statistics_surrogate.py builds by
   # concatenating these 5 plus the flagship's "original" values.
-  checkpoint_dir = Path("./results/simf/surrogates/_checkpoint")
+  checkpoint_dir = Path("../results/simf/surrogates/_checkpoint")
   fmetrics = {s: checkpoint_dir/s for s in surrogates}
   if all(check_files([f/"meta.json"]) for f in fmetrics.values()) and not overwrite:
     print("Already exists, skipping.")
@@ -3075,7 +3098,7 @@ def run_surrogate_reconstruction(overwrite=False):
   sources_dir = dm.roots["sim"]/f"sub-{sub}"/"sources"
 
   # 1. Probe-set runs (same selection as degradation_reconstruction.py)
-  probe_set = pd.read_csv("./results/simf/intermediate/probe-set.csv")
+  probe_set = pd.read_csv("../results/simf/intermediate/probe-set.csv")
   index = pd.read_csv(dm.roots["sim"]/f"sub-{sub}"/"simulation_index.tsv", sep="\t")
   index["region"] = index["source_index_list"].apply(lambda s: ast.literal_eval(s)[0])
   probe_runs = index[
@@ -3222,7 +3245,7 @@ import mindmap as mm
 METHODS = ["wcset", "cset", "sloreta", "dspm", "wmne"]
 COMPETITORS = [m for m in METHODS if m != "wcset"]
 
-fmetrics = Path("./results/simf/flagship")
+fmetrics = Path("../results/simf/flagship")
 flag_metrics = mm.metric.MetricSuite.load(fmetrics)
 
 comparisons = flag_metrics.stat.build_comparisons(["wcset"], COMPETITORS)
@@ -3262,7 +3285,7 @@ import mindmap as mm
 METHODS = ["wcset", "cset", "sloreta", "dspm", "wmne"]
 COMPETITORS = [m for m in METHODS if m != "wcset"]
 
-fnoise = Path("./results/simf/noise_sweep")
+fnoise = Path("../results/simf/noise_sweep")
 noise_metrics = mm.metric.MetricSuite.load(fnoise)
 comparisons = noise_metrics.stat.build_comparisons(["wcset"], COMPETITORS)
 
@@ -3322,7 +3345,7 @@ import mindmap as mm
 # longer produced by degradation_reconstruction.py either.
 operator = "permutation"
 
-flag_metrics = mm.metric.MetricSuite.load("./results/simf/flagship")
+flag_metrics = mm.metric.MetricSuite.load("../results/simf/flagship")
 
 # dSPM/sLORETA are connectome-agnostic (not recomputed per degradation
 # level), so their flagship (undegraded) values are reused as flat
@@ -3348,7 +3371,7 @@ def _median_range(df, method, pct_min, pct_max):
     by_pct = sub.groupby("percentage")["Value"].median()
     return float(by_pct.min()), float(by_pct.max())
 
-fdeg = Path("./results/simf/degradation")
+fdeg = Path("../results/simf/degradation")
 deg_metrics = mm.metric.MetricSuite.load(fdeg)
 
 # sLORETA reference, injected into deg_metrics itself: sLORETA is
@@ -3466,7 +3489,7 @@ import mindmap as mm
 surrogates = ["beltrami", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin"]
 methods2 = ["cset", "wcset"]
 
-flag_metrics = mm.metric.MetricSuite.load("./results/simf/flagship")
+flag_metrics = mm.metric.MetricSuite.load("../results/simf/flagship")
 flag_loc = flag_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})
 ref_loc = {m: float(flag_loc[flag_loc["Method"] == m]["Value"].median()) for m in ["dspm", "sloreta"]}
 
@@ -3512,7 +3535,7 @@ for method in methods2:
         )
 
 # -- load the 5 per-surrogate checkpoints and concatenate everything ------
-checkpoint_dir = Path("./results/simf/surrogates/_checkpoint")
+checkpoint_dir = Path("../results/simf/surrogates/_checkpoint")
 checkpoints = [mm.metric.MetricSuite.load(checkpoint_dir/s) for s in surrogates]
 combined = mm.metric.MetricSuite.concat([original] + checkpoints, name="sub-10 simulation validation - surrogates")
 
@@ -3542,7 +3565,7 @@ combined.metadata["derived"] = {
 }
 combined.metadata["units"] = {"correlation": "r", "localization_error": "mm"}
 
-fsurrogates = Path("./results/simf/surrogates")
+fsurrogates = Path("../results/simf/surrogates")
 combined.save(fsurrogates, overwrite=True)
 
 # checkpoint contents are now fully redundant with the combined suite

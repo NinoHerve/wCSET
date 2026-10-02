@@ -48,7 +48,7 @@ The output goes to `_manuscript/`. A plain `quarto render` never runs the proces
 The files in `processing/` are long pipelines (source spaces, forward models, connectomes, inverse solutions, statistics). They write to `results/`, which the manuscript then reads. Run them cell by cell in VS Code or Jupyter:
 
 1. Set the data paths (`DIR_*`, `REF_*`, `FS_HOME`) in `processing/*.config.yml`. The datasets are not part of this repository.
-2. Run the `setup.py` cell at the top of each file first. It moves the kernel to the project root, so the paths in the following cells (`processing/*.config.yml`, `results/`, `scripts`) resolve from there.
+2. Start the kernel in `processing/` (the default in VS Code, Jupyter and Quarto). Paths are relative to that folder (`../results/`, `spike.config.yml`), and each cell adds `..` to `sys.path` to import `scripts`, so any cell can be run on its own once the steps it depends on have produced their outputs.
 
 Python dependencies: [`mindmap`](https://github.com/NinoHerve/mindmap), MNE-Python, NumPy, SciPy, Matplotlib. FreeSurfer is needed for surface reconstruction.
 
