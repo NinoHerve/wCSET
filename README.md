@@ -29,7 +29,7 @@ wCSET/
 ├── results/                  Saved figures and statistics loaded by index.qmd and the annex
 ├── _freeze/                  Saved execution results of index.qmd (do not edit)
 │
-├── *.ipynb                   Exploratory notebooks (lambda2 tuning, surrogate harmonics)
+├── notebooks/                Exploratory notebooks (lambda2 tuning, surrogate harmonics), run from notebooks/
 └── archive/                  Past material (OHBM 2026 abstract, Radiology Day slides)
 ```
 
