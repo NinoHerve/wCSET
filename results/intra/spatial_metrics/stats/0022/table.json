@@ -2,14 +2,14 @@
   {
     "group_a": "wcset",
     "group_b": "dspm",
-    "n_pairs": 124,
-    "n_a": 124,
-    "n_b": 124,
-    "statistic": 1.6668729046790618,
-    "p_value": 0.1326942232800039,
-    "effect_size": 0.5463369102420348,
+    "n_pairs": 109,
+    "n_a": 109,
+    "n_b": 109,
+    "statistic": -1.4957080590739513,
+    "p_value": 0.14525663235093936,
+    "effect_size": -0.26964113270724605,
     "effect_size_type": "cohens_dz",
-    "n_eff": 9.308589736477035,
+    "n_eff": 30.769566783376415,
     "p_corrected": NaN,
     "significant": null
   }

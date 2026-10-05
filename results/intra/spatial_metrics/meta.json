@@ -1,9 +1,19 @@
 {
   "name": "Intra vIEEG spatial pattern metrics",
   "metadata": {},
-  "saved_at": "2026-10-01T12:24:11.559680",
+  "saved_at": "2026-10-05T11:17:54.517263",
   "entries": [
     {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
       "metric": "correlation_spatial_signed",
       "scalar_coords": {
         "Method": "wcset",
@@ -17,6 +27,16 @@
       "metric": "auc_spatial",
       "scalar_coords": {
         "Method": "wcset",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "sloreta",
         "Subject": "48"
       },
       "array_coord_names": [
@@ -44,6 +64,16 @@
       ]
     },
     {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
       "metric": "correlation_spatial_signed",
       "scalar_coords": {
         "Method": "cset",
@@ -57,6 +87,16 @@
       "metric": "auc_spatial",
       "scalar_coords": {
         "Method": "cset",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "dspm",
         "Subject": "48"
       },
       "array_coord_names": [
@@ -84,6 +124,16 @@
       ]
     },
     {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
       "metric": "correlation_spatial_signed",
       "scalar_coords": {
         "Method": "wmne",
@@ -97,6 +147,16 @@
       "metric": "auc_spatial",
       "scalar_coords": {
         "Method": "wmne",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "beltrami",
         "Subject": "48"
       },
       "array_coord_names": [
@@ -124,6 +184,16 @@
       ]
     },
     {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
       "metric": "correlation_spatial_signed",
       "scalar_coords": {
         "Method": "wcset",
@@ -137,6 +207,16 @@
       "metric": "auc_spatial",
       "scalar_coords": {
         "Method": "wcset",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "sloreta",
         "Subject": "34"
       },
       "array_coord_names": [
@@ -164,6 +244,16 @@
       ]
     },
     {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
       "metric": "correlation_spatial_signed",
       "scalar_coords": {
         "Method": "cset",
@@ -177,6 +267,16 @@
       "metric": "auc_spatial",
       "scalar_coords": {
         "Method": "cset",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "dspm",
         "Subject": "34"
       },
       "array_coord_names": [
@@ -204,6 +304,16 @@
       ]
     },
     {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
       "metric": "correlation_spatial_signed",
       "scalar_coords": {
         "Method": "wmne",
@@ -217,6 +327,16 @@
       "metric": "auc_spatial",
       "scalar_coords": {
         "Method": "wmne",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "beltrami",
         "Subject": "34"
       },
       "array_coord_names": [
@@ -244,6 +364,16 @@
       ]
     },
     {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
       "metric": "correlation_spatial_signed",
       "scalar_coords": {
         "Method": "wcset",
@@ -257,6 +387,16 @@
       "metric": "auc_spatial",
       "scalar_coords": {
         "Method": "wcset",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "sloreta",
         "Subject": "12"
       },
       "array_coord_names": [
@@ -284,6 +424,16 @@
       ]
     },
     {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
       "metric": "correlation_spatial_signed",
       "scalar_coords": {
         "Method": "cset",
@@ -297,6 +447,16 @@
       "metric": "auc_spatial",
       "scalar_coords": {
         "Method": "cset",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "dspm",
         "Subject": "12"
       },
       "array_coord_names": [
@@ -324,6 +484,16 @@
       ]
     },
     {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
       "metric": "correlation_spatial_signed",
       "scalar_coords": {
         "Method": "wmne",
@@ -337,6 +507,16 @@
       "metric": "auc_spatial",
       "scalar_coords": {
         "Method": "wmne",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "beltrami",
         "Subject": "12"
       },
       "array_coord_names": [
@@ -364,6 +544,16 @@
       ]
     },
     {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
       "metric": "correlation_spatial_signed",
       "scalar_coords": {
         "Method": "wcset",
@@ -377,6 +567,16 @@
       "metric": "auc_spatial",
       "scalar_coords": {
         "Method": "wcset",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "sloreta",
         "Subject": "50"
       },
       "array_coord_names": [
@@ -404,6 +604,16 @@
       ]
     },
     {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
       "metric": "correlation_spatial_signed",
       "scalar_coords": {
         "Method": "cset",
@@ -417,6 +627,16 @@
       "metric": "auc_spatial",
       "scalar_coords": {
         "Method": "cset",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "dspm",
         "Subject": "50"
       },
       "array_coord_names": [
@@ -444,6 +664,16 @@
       ]
     },
     {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
       "metric": "correlation_spatial_signed",
       "scalar_coords": {
         "Method": "wmne",
@@ -457,6 +687,16 @@
       "metric": "auc_spatial",
       "scalar_coords": {
         "Method": "wmne",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "times"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank",
+      "scalar_coords": {
+        "Method": "beltrami",
         "Subject": "50"
       },
       "array_coord_names": [

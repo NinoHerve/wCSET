@@ -1,17 +1,11 @@
 {
   "kind": "pairwise",
-  "metric": "auc_spatial",
+  "metric": "correlation_spatial_signed",
   "group_by": "Method",
   "test": "ttest_ess",
   "unit_col": null,
   "pairing_col": "times",
   "subject_order": [
-    1.705,
-    1.71,
-    1.715,
-    1.72,
-    1.725,
-    1.73,
     1.735,
     1.74,
     1.745,
@@ -135,19 +129,15 @@
     2.335,
     2.34,
     2.345,
-    2.35,
-    2.355,
-    2.36,
-    2.365,
-    2.37
+    2.35
   ],
   "filters": [
     [
       "Subject",
       [
-        "50"
+        "12"
       ]
     ]
   ],
-  "computed_at": "2026-10-01T12:24:11.531609"
+  "computed_at": "2026-10-05T11:17:54.374862"
 }

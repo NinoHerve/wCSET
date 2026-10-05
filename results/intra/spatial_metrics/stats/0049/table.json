@@ -1,0 +1,16 @@
+[
+  {
+    "group_a": "wcset",
+    "group_b": "beltrami",
+    "n_pairs": 134,
+    "n_a": 134,
+    "n_b": 134,
+    "statistic": -0.021407648968377362,
+    "p_value": 0.9829888756436989,
+    "effect_size": -0.002690433111061841,
+    "effect_size_type": "cohens_dz",
+    "n_eff": 63.31309604020679,
+    "p_corrected": NaN,
+    "significant": null
+  }
+]

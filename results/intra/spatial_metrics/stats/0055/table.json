@@ -1,0 +1,16 @@
+[
+  {
+    "group_a": "wcset",
+    "group_b": "sloreta",
+    "n_pairs": 134,
+    "n_a": 134,
+    "n_b": 134,
+    "statistic": 0.4280165280667905,
+    "p_value": 0.6706743154503719,
+    "effect_size": 0.06301096021858871,
+    "effect_size_type": "cohens_dz",
+    "n_eff": 46.141199882427586,
+    "p_corrected": NaN,
+    "significant": null
+  }
+]

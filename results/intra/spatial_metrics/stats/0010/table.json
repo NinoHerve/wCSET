@@ -2,14 +2,14 @@
   {
     "group_a": "wcset",
     "group_b": "sloreta",
-    "n_pairs": 109,
-    "n_a": 109,
-    "n_b": 109,
-    "statistic": -1.3454543577335185,
-    "p_value": 0.18981202469121358,
-    "effect_size": -0.2558331040447219,
+    "n_pairs": 164,
+    "n_a": 164,
+    "n_b": 164,
+    "statistic": 3.9730044319592177,
+    "p_value": 0.00023217556135994463,
+    "effect_size": 0.5613731815001288,
     "effect_size_type": "cohens_dz",
-    "n_eff": 27.658234781986394,
+    "n_eff": 50.088125227847335,
     "p_corrected": NaN,
     "significant": null
   }

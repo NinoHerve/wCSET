@@ -1,6 +1,6 @@
 {
   "kind": "pairwise",
-  "metric": "auc_spatial",
+  "metric": "correlation_spatial_absrank",
   "group_by": "Method",
   "test": "ttest_ess",
   "unit_col": null,
@@ -124,5 +124,5 @@
       ]
     ]
   ],
-  "computed_at": "2026-10-01T12:24:11.377170"
+  "computed_at": "2026-10-05T11:17:54.275550"
 }
