@@ -692,7 +692,22 @@ loc_wcset_r_lo = fmt_stat(_loc_wcset.loc[surrogates, "effect"].abs().min())
 loc_wcset_r_hi = fmt_stat(_loc_wcset.loc[surrogates, "effect"].abs().max())
 
 # Spatial correlation at qrp and peak, paired by region.
-surr_ref_corr = surr_metrics.metadata["derived"]["ref_corr"]
+# dSPM's and sLORETA's true-connectome reference lines, taken from the Study I results above and
+# summarized like the boxes they are drawn over: mean over repetitions per region, median across
+# regions. Correlation: the per-region curves of the Study I figure (corr_collapsed) read at the
+# population median qrp/peak time, which fall on the 4 ms time grid.
+_ref_methods = ["dspm", "sloreta"]
+surr_ref_loc = (simf_metrics.to_df(metrics="localization_error", filters={"phase": "qrp", "Method": _ref_methods})
+                .groupby(["Method", "region"])["Value"].mean().groupby("Method").median().to_dict())
+
+_grid = np.sort(corr_collapsed["times"].unique())
+surr_ref_corr = {}
+for _phase, _key in [("qrp", "qrp_time_median"), ("pp", "pp_time_median")]:
+    _t = simf_metrics.metadata["derived"][_key]
+    _tg = _grid[np.argmin(np.abs(_grid - _t))]
+    assert abs(_tg - _t) < 1e-4  # on the grid, so no interpolation is needed
+    _at_t = corr_collapsed[(corr_collapsed["times"] == _tg) & corr_collapsed["Method"].isin(_ref_methods)]
+    surr_ref_corr[_phase] = _at_t.groupby("Method")["Value"].median().to_dict()
 
 surr_corr_results = {}
 for phase in ["qrp", "pp"]:
@@ -745,6 +760,12 @@ _corr_wcset_pp_abs = [
 corr_wcset_r_lo_pp = fmt_stat(min(_corr_wcset_pp_abs))
 corr_wcset_r_hi_pp = fmt_stat(max(_corr_wcset_pp_abs))
 
+# wCSET's correlation at the peak with each surrogate, relative to dSPM's and sLORETA's references.
+_wcset_pp = (surr_metrics.to_df(metrics="correlation", filters={"Method": "wcset", "phase": "pp"})
+             .groupby(["Surrogate", "region"])["Value"].mean().groupby("Surrogate").median())
+_ratios = [_wcset_pp[s] / surr_ref_corr["pp"][m] for s in surrogates for m in _ref_methods]
+corr_wcset_ref_ratio_lo, corr_wcset_ref_ratio_hi = fmt_num(min(_ratios), 1), fmt_num(max(_ratios), 1)
+
 # p-values quoted in the prose.
 loc_wcset_p_max = f'{_loc_wcset.loc[surrogates, "p_corrected"].max():.3f}'
 corr_wcset_p_max_pp = fmt_p(max(_corr_row("wcset", "pp", s)["p_corrected"] for s in surrogates))
@@ -766,14 +787,14 @@ assert all(r < 0 for r in _cset_other)
 cset_other_r_lo, cset_other_r_hi = fmt_stat(min(_cset_other)), fmt_stat(max(_cset_other))
 ```
 
-We replaced the true connectome with the dMRI-free surrogates of @sec-connectome, keeping wCSET's hyperparameters unchanged (@fig-surrogate; Wilcoxon signed-rank vs. the true connectome, region-paired, FDR-corrected; rank-biserial r, positive = surrogate better). wCSET performed better with every surrogate than with the true connectome, and no surrogate stood out from the others. Its localization error was lower with all five surrogates (r = `{python} loc_wcset_r_lo`–`{python} loc_wcset_r_hi`, all p_corrected ≤ `{python} loc_wcset_p_max`). Its spatial correlation was higher with all five at the peak (r = `{python} corr_wcset_r_lo_pp`–`{python} corr_wcset_r_hi_pp`, all p_corrected `{python} corr_wcset_p_max_pp`), and with `{python} corr_wcset_n_sig_qrp` of five at the quarter rising phase, where the effects were small (r = `{python} corr_wcset_r_lo_qrp`–`{python} corr_wcset_r_hi_qrp`). With any surrogate, wCSET's correlation stayed roughly 3–4 times that of dSPM and sLORETA.
+We replaced the true connectome with the dMRI-free surrogates of @sec-connectome, keeping wCSET's hyperparameters unchanged (@fig-surrogate; Wilcoxon signed-rank vs. the true connectome, region-paired, FDR-corrected; rank-biserial r, positive = surrogate better). wCSET performed better with every surrogate than with the true connectome, and no surrogate stood out from the others. Its localization error was lower with all five surrogates (r = `{python} loc_wcset_r_lo`–`{python} loc_wcset_r_hi`, all p_corrected ≤ `{python} loc_wcset_p_max`). Its spatial correlation at the peak was higher with all five (r = `{python} corr_wcset_r_lo_pp`–`{python} corr_wcset_r_hi_pp`, all p_corrected `{python} corr_wcset_p_max_pp`), and `{python} corr_wcset_ref_ratio_lo`–`{python} corr_wcset_ref_ratio_hi` times that of dSPM and sLORETA. At the quarter rising phase, before activity spreads, the surrogates' effects on spatial correlation were small (r = `{python} corr_wcset_r_lo_qrp`–`{python} corr_wcset_r_hi_qrp`; Annex Figure 10).
 
 CSET changed little: with most surrogates, differences were either not significant or small deficits (r = `{python} cset_other_r_lo` to `{python} cset_other_r_hi`). The exception was the Beltrami surrogate, which markedly worsened its localization (r = `{python} cset_beltrami_loc_r`; full CSET results in Annex Figure 9).
 
 ```{python filename="simf_surrogate_plot.py"}
 #| echo: false
 #| label: fig-surrogate
-#| fig-cap: "wCSET accuracy using the true structural connectome versus five dMRI-free connectome surrogates (subject sub-10). Column a: localization error at the quarter rising phase; column b: spatial correlation with ground truth at the quarter rising phase; column c: spatial correlation with ground truth at the peak phase. Row 1 (a1, b1, c1): values per connectome condition; row 2 (a2, b2, c2): paired differences vs. the original connectome. (a1, b1, c1) Per condition (box = IQR, line = median); dashed lines mark dSPM's and sLORETA's true-connectome medians as reference. (a2, b2, c2) Paired difference vs. the original connectome for the panel above, one value per region (mean over repetitions; violin = distribution, thick line = median, thin line = IQR), oriented so positive = surrogate better. Above each violin: significance vs. the original connectome (Wilcoxon signed-rank, region-paired, FDR-corrected), rank-biserial r (positive = surrogate better), and the number of regions where the surrogate is better/tied/worse. CSET's equivalent comparisons are reported in Annex Figure 9."
+#| fig-cap: "wCSET accuracy using the true structural connectome versus five dMRI-free connectome surrogates (subject sub-10). Column a: localization error at the quarter rising phase; column b: spatial correlation with ground truth at the peak phase (quarter rising phase in Annex Figure 10). Row 1 (a1, b1): values per connectome condition; row 2 (a2, b2): paired differences vs. the original connectome. (a1, b1) Per condition (box = IQR, line = median); dashed lines mark dSPM's and sLORETA's values with the true connectome as reference, summarized like the boxes (mean over repetitions per region, median across regions). (a2, b2) Paired difference vs. the original connectome for the panel above, one value per region (mean over repetitions; violin = distribution, thick line = median, thin line = IQR), oriented so positive = surrogate better. Above each violin: significance vs. the original connectome (Wilcoxon signed-rank, region-paired, FDR-corrected), rank-biserial r (positive = surrogate better), and the number of regions where the surrogate is better/tied/worse. CSET's equivalent comparisons are reported in Annex Figure 9."
 import matplotlib.pyplot as plt
 
 # Colors per connectome condition (original = gray).
@@ -786,57 +807,41 @@ CONDITION_COLORS = {
     "geom-atlas-bin": "#e87ba4",
 }
 
-surr_ref_loc = surr_metrics.metadata["derived"]["ref_loc"]
 ref_methods = ["dspm", "sloreta"]
-panel_letters = {"loc": "a1", "qrp": "b1", "pp": "c1"}
 
 def surr_ref_lines(medians):
-    """dSPM's and sLORETA's true-connectome medians, drawn as dashed reference lines."""
+    """dSPM's and sLORETA's true-connectome values, drawn as dashed reference lines."""
     return {f"{METHOD_LABELS[m]} (original connectome)": (medians[m], COLORS[m]) for m in ref_methods}
 
-# wCSET only; CSET is in the Annex.
+# wCSET only; CSET and wCSET's quarter-rising-phase correlation are in the Annex.
 surr_fig, _surr_grid = plt.subplots(
-    2, 3, figsize=(len(conditions) * 1.3 * 2.4, 11), gridspec_kw={"hspace": 0.55},
+    2, 2, figsize=(len(conditions) * 1.3 * 1.8, 11), gridspec_kw={"hspace": 0.55, "wspace": 0.3},
 )
 surr_axes, surr_daxes = _surr_grid[0], _surr_grid[1]
 
-# (a) Localization error at qrp
-ax_loc = surr_axes[0]
-surr_metrics.plot.group_comparison(
-    surr_loc_results["wcset"], order=conditions, palette=CONDITION_COLORS, points=False, showfliers=False,
-    width=0.6, alpha=0, saturation=1, fill_alpha=FILL_ALPHA, tick_labels=SURROGATE_LABELS,
-    reference_suffix=" (ref.)", reference_lines=surr_ref_lines(surr_ref_loc), ax=ax_loc,
-)
-plt.setp(ax_loc.get_xticklabels(), rotation=45, ha="right")
-ax_loc.set_xlabel("")
-ax_loc.set_ylabel("Localization error (mm)")
-ax_loc.set_title(f"{panel_letters['loc']}. Localization error per condition", loc="left", fontsize=10)
-ax_loc.spines[["top", "right"]].set_visible(False)
-
-# (b, c) Spatial correlation at qrp and peak, shared y-scale
-corr_axes = {}
-for phase in ["qrp", "pp"]:
-    ax = surr_axes[1 if phase == "qrp" else 2]
-    corr_axes[phase] = ax
+# (a1) Localization error at qrp, (b1) spatial correlation at the peak
+_surr_top = [
+    ("a1", "Localization error per condition", surr_loc_results["wcset"], surr_ref_loc, "Localization error (mm)"),
+    ("b1", "Spatial correlation per condition", surr_corr_results[("wcset", "pp")], surr_ref_corr["pp"], "Spatial correlation"),
+]
+for ax, (letter, title, res, ref, ylabel) in zip(surr_axes, _surr_top):
     surr_metrics.plot.group_comparison(
-        surr_corr_results[("wcset", phase)], order=conditions, palette=CONDITION_COLORS, points=False,
-        showfliers=False, width=0.6, alpha=0, saturation=1, fill_alpha=FILL_ALPHA, tick_labels=SURROGATE_LABELS,
-        reference_suffix=" (ref.)", reference_lines=surr_ref_lines(surr_ref_corr[phase]), ax=ax,
+        res, order=conditions, palette=CONDITION_COLORS, points=False, showfliers=False,
+        width=0.6, alpha=0, saturation=1, fill_alpha=FILL_ALPHA, tick_labels=SURROGATE_LABELS,
+        reference_suffix=" (ref.)", reference_lines=surr_ref_lines(ref), ax=ax,
     )
     plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
     ax.set_xlabel("")
-    ax.set_ylabel("Spatial correlation")
-    ax.set_title(f"{panel_letters[phase]}. Spatial correlation per condition", loc="left", fontsize=10)
+    ax.set_ylabel(ylabel)
+    ax.set_title(f"{letter}. {title}", loc="left", fontsize=10)
     ax.spines[["top", "right"]].set_visible(False)
-for ax in corr_axes.values():
-    ax.set_ylim(0, 0.9)
+surr_axes[1].set_ylim(0, 0.9)
 
-# (d–f) Paired differences per region, positive = surrogate better: "original" is the reference,
+# (a2, b2) Paired differences per region, positive = surrogate better: "original" is the reference,
 # so the metric's direction is flipped (higher_is_better=not ...) to orient differences toward the surrogate.
 _surr_panels = [
     ("a2", "Localization error", surr_loc_results["wcset"], False, "Original − surrogate\n(localization error, mm)"),
-    ("b2", "Spatial correlation", surr_corr_results[("wcset", "qrp")], True, "Surrogate − original\n(spatial correlation)"),
-    ("c2", "Spatial correlation", surr_corr_results[("wcset", "pp")], True, "Surrogate − original\n(spatial correlation)"),
+    ("b2", "Spatial correlation", surr_corr_results[("wcset", "pp")], True, "Surrogate − original\n(spatial correlation)"),
 ]
 for i, (dax, (letter, metric_label, res, hib, ylabel)) in enumerate(zip(surr_daxes, _surr_panels)):
     surr_metrics.plot.paired_differences(
@@ -848,14 +853,11 @@ for i, (dax, (letter, metric_label, res, hib, ylabel)) in enumerate(zip(surr_dax
     dax.set_ylabel(ylabel)
     dax.set_title(f"{letter}. {metric_label}:\npaired difference vs. original", loc="left", fontsize=10)
 
-surr_fig.legend(*ax_loc.get_legend_handles_labels(), loc="lower center", ncol=2, bbox_to_anchor=(0.5, -0.04))
-
-plt.tight_layout()
+surr_fig.legend(*surr_axes[0].get_legend_handles_labels(), loc="lower center", ncol=2, bbox_to_anchor=(0.5, -0.04))
 
 # Column headers: each column is one metric/phase, per-condition values on top, paired differences below
-surr_fig.subplots_adjust(top=0.88)
+surr_fig.subplots_adjust(top=0.88, bottom=0.12)
 column_headers(surr_fig, zip(surr_axes, ["LOCALIZATION ERROR\n(quarter rising phase)",
-                                        "SPATIAL CORRELATION\n(quarter rising phase)",
                                         "SPATIAL CORRELATION\n(peak phase)"]), y=0.94)
 ```
 
@@ -1105,7 +1107,7 @@ vieeg_34_r_wcset = fmt_num(_median("34", _r, "wcset"), 2)
 vieeg_34_r_std_lo = fmt_num(min(_median("34", _r, c) for c in STANDARD), 2)
 vieeg_34_r_std_hi = fmt_num(max(_median("34", _r, c) for c in STANDARD), 2)
 
-# Signed Pearson correlation (Annex Figure 11), for comparison with Grova et al. 2016 and Afnan et al. 2026.
+# Signed Pearson correlation (Annex Figure 12), for comparison with Grova et al. 2016 and Afnan et al. 2026.
 _signed = "correlation_spatial_signed"
 _signed_vs, _signed_wide = {}, {}
 for _s in MAIN_SUBJECTS:
@@ -1137,13 +1139,13 @@ In Subject 1 (@fig-intracranial-diff), wCSET's amplitude rank correlation with t
 
 Subject 2 did not reproduce this pattern: wCSET did not differ significantly from any other method on either metric (smallest p_corrected `{python} vieeg_34_p_min`; median ρ = `{python} vieeg_34_r_wcset` for wCSET, `{python} vieeg_34_r_std_lo` to `{python} vieeg_34_r_std_hi` for the four other methods).
 
-For comparison with @grova_intracranial_2016 and @afnan_assessing_2026, who report the signed Pearson correlation across contacts, we also computed that measure (Annex Figure 11). In Subject 1, it separated wCSET from sLORETA, dSPM, wMNE, and CSET more clearly than the polarity-invariant measures did (median r = `{python} signed_48_wcset`, against `{python} signed_48_std_lo` to `{python} signed_48_std_hi`; dz = `{python} signed_48_dz_lo`–`{python} signed_48_dz_hi`, largest p_corrected `{python} signed_48_p_max`). In Subject 2, it again showed no significant difference (smallest p_corrected `{python} signed_34_p_min`).
+For comparison with @grova_intracranial_2016 and @afnan_assessing_2026, who report the signed Pearson correlation across contacts, we also computed that measure (Annex Figure 12). In Subject 1, it separated wCSET from sLORETA, dSPM, wMNE, and CSET more clearly than the polarity-invariant measures did (median r = `{python} signed_48_wcset`, against `{python} signed_48_std_lo` to `{python} signed_48_std_hi`; dz = `{python} signed_48_dz_lo`–`{python} signed_48_dz_hi`, largest p_corrected `{python} signed_48_p_max`). In Subject 2, it again showed no significant difference (smallest p_corrected `{python} signed_34_p_min`).
 
 
 ```{python filename="results_intra_vieeg_significance_plot.py"}
 #| echo: false
 #| label: fig-intracranial-diff
-#| fig-cap: "Spatial agreement between virtual and recorded iEEG, for the two subjects with superficial sources (sub-12/sub-50, with deep sources, are reported in Annex Figure 10). One column per subject (a, b). (a1, b1) Amplitude rank correlation per method at each timepoint of the comparison window: Spearman ρ across contacts between the recorded and the virtual absolute amplitude (box = IQR, line = median, outliers hidden); dotted line = 0. (a2, b2) Paired difference in amplitude rank correlation, wCSET minus each other method, one value per timepoint (violin = distribution, thick line = median, thin line = IQR); positive = wCSET better. (a3, b3) Same paired difference for the AUC on |amplitude|, whether the virtual iEEG places its largest amplitudes on the contacts most active in the recording (active = at least 30% of the recorded maximum; 0.5 = chance). Both measures ignore the sign of the contacts. Above each violin: significance from a paired t-test with an autocorrelation-corrected effective sample size (FDR-corrected; *p<0.05, **p<0.01, ***p<0.001), Cohen's dz (positive = wCSET better; unbounded, unlike the rank-biserial r of the other figures), and the percentage of timepoints at which wCSET's value exceeds the other method's, relative to 50% chance (e.g. +17%: wCSET higher at 67% of timepoints)."
+#| fig-cap: "Spatial agreement between virtual and recorded iEEG, for the two subjects with superficial sources (sub-12/sub-50, with deep sources, are reported in Annex Figure 11). One column per subject (a, b). (a1, b1) Amplitude rank correlation per method at each timepoint of the comparison window: Spearman ρ across contacts between the recorded and the virtual absolute amplitude (box = IQR, line = median, outliers hidden); dotted line = 0. (a2, b2) Paired difference in amplitude rank correlation, wCSET minus each other method, one value per timepoint (violin = distribution, thick line = median, thin line = IQR); positive = wCSET better. (a3, b3) Same paired difference for the AUC on |amplitude|, whether the virtual iEEG places its largest amplitudes on the contacts most active in the recording (active = at least 30% of the recorded maximum; 0.5 = chance). Both measures ignore the sign of the contacts. Above each violin: significance from a paired t-test with an autocorrelation-corrected effective sample size (FDR-corrected; *p<0.05, **p<0.01, ***p<0.001), Cohen's dz (positive = wCSET better; unbounded, unlike the rank-biserial r of the other figures), and the percentage of timepoints at which wCSET's value exceeds the other method's, relative to 50% chance (e.g. +17%: wCSET higher at 67% of timepoints)."
 import matplotlib.pyplot as plt
 
 VIEEG_ORDER = ["wcset"] + COMPETITORS
@@ -1264,7 +1266,7 @@ Localization errors were larger here than in simulation (median 14.1 mm, against
 
 ## Validation Against Intracranial Recordings
 
-Simultaneous intracranial recordings offer the most direct test of the co-activation half of the hypothesis. We compared virtual and recorded iEEG with two polarity-invariant measures, the amplitude rank correlation and the AUC on |amplitude|. The polarity of an intracranial contact depends on its position relative to the generator and on the reference, which makes signed comparisons hard to interpret. For comparison with @grova_intracranial_2016 and @afnan_assessing_2026, the signed correlation (Annex Figure 11) led to the same conclusions, with larger effects.
+Simultaneous intracranial recordings offer the most direct test of the co-activation half of the hypothesis. We compared virtual and recorded iEEG with two polarity-invariant measures, the amplitude rank correlation and the AUC on |amplitude|. The polarity of an intracranial contact depends on its position relative to the generator and on the reference, which makes signed comparisons hard to interpret. For comparison with @grova_intracranial_2016 and @afnan_assessing_2026, the signed correlation (Annex Figure 12) led to the same conclusions, with larger effects.
 
 Over the whole comparison window, wCSET outperformed sLORETA, dSPM, wMNE, and CSET on both measures in Subject 1, and did not differ from any of them in Subject 2. In neither subject was wCSET significantly worse than another method. The example of @fig-intra-reconstruction shows a single timepoint, the peak of the virtual GFP, at which wCSET agreed better with the recording than sLORETA in both subjects. In Subject 1, both methods placed their largest amplitudes on the right electrode shafts, but mostly not on the right contacts. In Subject 2, wCSET's largest amplitudes fell on the shaft that dominated the recording; this agreement did not persist over the rest of the window, hence no overall difference in that subject.
 

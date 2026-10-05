@@ -899,6 +899,33 @@ loc_cset_p = {s: fmt_p(_loc_cset.loc[s, "p_corrected"]) for s in surrogates_full
 loc_cset_r = {s: fmt_stat(_loc_cset.loc[s, "effect"]) for s in surrogates_full}
 corr_cset_p = {(s, ph): fmt_p(_corr_cset[ph].loc[s, "p_corrected"]) for ph in _corr_cset for s in surrogates_full}
 corr_cset_r = {(s, ph): fmt_stat(_corr_cset[ph].loc[s, "effect"]) for ph in _corr_cset for s in surrogates_full}
+
+# wCSET's spatial correlation at the quarter rising phase (the main text shows the peak only).
+surr_corr_wcset_qrp = surr_metrics_full.stat.wilcoxon(
+    "correlation", group_by="Surrogate",
+    comparisons=surr_comparisons_full, pairing_col="region",
+    filters={"Method": "wcset", "phase": "qrp"},
+)
+
+# dSPM's and sLORETA's true-connectome reference lines, summarized like the boxes (as in the main text):
+# one value per run, mean over repetitions per region, median across regions. Correlation: each run's
+# curve read at the population median qrp/peak time.
+# Correlation: per-region curves (mean over repetitions) read at the population median qrp/peak time,
+# which fall on the 4 ms time grid.
+import numpy as np
+_flag_full = mm.metric.MetricSuite.load("../results/simf/flagship")
+_ref_methods_full = ["dspm", "sloreta"]
+surr_ref_loc_full = (_flag_full.to_df(metrics="localization_error", filters={"phase": "qrp", "Method": _ref_methods_full})
+                     .groupby(["Method", "region"])["Value"].mean().groupby("Method").median().to_dict())
+_curves_full = (_flag_full.to_df(metrics="correlation", filters={"Method": _ref_methods_full})
+                .groupby(["Method", "region", "times"], as_index=False)["Value"].mean())
+_grid_full = np.sort(_curves_full["times"].unique())
+surr_ref_corr_full = {}
+for _phase, _key in [("qrp", "qrp_time_median"), ("pp", "pp_time_median")]:
+    _t = _flag_full.metadata["derived"][_key]
+    _tg = _grid_full[np.argmin(np.abs(_grid_full - _t))]
+    assert abs(_tg - _t) < 1e-4  # on the grid, so no interpolation is needed
+    surr_ref_corr_full[_phase] = _curves_full[_curves_full["times"] == _tg].groupby("Method")["Value"].median().to_dict()
 ```
 
 This section reports CSET's full surrogate-connectome breakdown (@fig-surrogate-cset), summarized qualitatively in the main text alongside wCSET's own (Section 3.1.4), which is reported there in full.
@@ -910,7 +937,7 @@ For spatial correlation, CSET was significantly lower than the original connecto
 ```{python filename="simf_surrogate_cset_plot.py"}
 #| echo: false
 #| label: fig-surrogate-cset
-#| fig-cap: "CSET accuracy using the true structural connectome versus five dMRI-free connectome surrogates (subject sub-10; box = IQR, line = median). (a) Localization error (mm) at the quarter rising phase. (b, c) Spatial correlation with ground truth at the quarter rising phase (b) and peak phase (c). Dashed lines mark dSPM's and sLORETA's true-connectome medians as reference. Stars mark significance vs. the original (true) connectome (Wilcoxon signed-rank, region-paired, FDR-corrected). wCSET's equivalent comparisons are reported in Figure 4 of the main text."
+#| fig-cap: "CSET accuracy using the true structural connectome versus five dMRI-free connectome surrogates (subject sub-10; box = IQR, line = median). (a) Localization error (mm) at the quarter rising phase. (b, c) Spatial correlation with ground truth at the quarter rising phase (b) and peak phase (c). Dashed lines mark dSPM's and sLORETA's values with the true connectome as reference, summarized like the boxes (mean over repetitions per region, median across regions). Stars mark significance vs. the original (true) connectome (Wilcoxon signed-rank, region-paired, FDR-corrected). wCSET's equivalent comparisons are reported in Figure 4 of the main text."
 import matplotlib.pyplot as plt
 
 CONDITION_COLORS_FULL = {
@@ -922,8 +949,6 @@ CONDITION_COLORS_FULL = {
     "geom-atlas-bin": "#e87ba4",
 }
 
-surr_ref_loc_full = surr_metrics_full.metadata["derived"]["ref_loc"]
-surr_ref_corr_full = surr_metrics_full.metadata["derived"]["ref_corr"]
 ref_methods_full = ["dspm", "sloreta"]
 phase_titles_full = {"qrp": "Quarter rising phase", "pp": "Peak phase"}
 panel_letters_full = {"loc": "a", "qrp": "b", "pp": "c"}
@@ -960,6 +985,38 @@ for ax in corr_axes_cset.values():
 
 surr_cset_fig.legend(*ax_loc_cset.get_legend_handles_labels(), loc="lower center", ncol=2, bbox_to_anchor=(0.5, -0.04))
 
+plt.tight_layout()
+```
+
+**wCSET at the quarter rising phase.** The main text reports wCSET's spatial correlation at the peak (Figure 4 of the main text). At the quarter rising phase, before activity spreads, the surrogates' effects were small (@fig-surrogate-wcset-qrp).
+
+```{python filename="simf_surrogate_wcset_qrp_plot.py"}
+#| echo: false
+#| label: fig-surrogate-wcset-qrp
+#| fig-cap: "wCSET's spatial correlation with ground truth at the quarter rising phase, using the true structural connectome versus five dMRI-free connectome surrogates (subject sub-10); the peak phase is shown in Figure 4 of the main text. (a) Per condition (box = IQR, line = median); dashed lines mark dSPM's and sLORETA's values with the true connectome, summarized like the boxes (mean over repetitions per region, median across regions). (b) Paired difference vs. the original connectome, one value per region (mean over repetitions; violin = distribution, thick line = median, thin line = IQR), positive = surrogate better. Above each violin: significance (Wilcoxon signed-rank, region-paired, FDR-corrected), rank-biserial r (positive = surrogate better), and the number of regions where the surrogate is better/tied/worse."
+surr_qrp_fig, (surr_qrp_ax, surr_qrp_dax) = plt.subplots(1, 2, figsize=(len(conditions_full) * 1.3 * 1.8, 5.5))
+surr_metrics_full.plot.group_comparison(
+    surr_corr_wcset_qrp, order=conditions_full, palette=CONDITION_COLORS_FULL, points=False, showfliers=False,
+    width=0.6, tick_labels=SURROGATE_LABELS_FULL, reference_suffix=" (ref.)", ax=surr_qrp_ax,
+    reference_lines={f"{METHOD_LABELS[m]} (original connectome)": (surr_ref_corr_full["qrp"][m], COLORS[m]) for m in ref_methods_full},
+)
+plt.setp(surr_qrp_ax.get_xticklabels(), rotation=45, ha="right")
+surr_qrp_ax.set_xlabel("")
+surr_qrp_ax.set_ylabel("Spatial correlation")
+surr_qrp_ax.set_ylim(0, 0.9)
+surr_qrp_ax.set_title("a. Spatial correlation per condition", loc="left", fontsize=10)
+surr_qrp_ax.spines[["top", "right"]].set_visible(False)
+
+surr_metrics_full.plot.paired_differences(
+    surr_corr_wcset_qrp, reference="original", higher_is_better=False, order=surrogates_full,
+    palette=CONDITION_COLORS_FULL, annotate=("stars", "effect", "counts"), tick_labels=SURROGATE_LABELS_FULL,
+    direction_labels=("surrogate better", "original better"), ax=surr_qrp_dax,
+)
+plt.setp(surr_qrp_dax.get_xticklabels(), rotation=45, ha="right")
+surr_qrp_dax.set_ylabel("Surrogate − original\n(spatial correlation)")
+surr_qrp_dax.set_title("b. Paired difference vs. original", loc="left", fontsize=10)
+
+surr_qrp_fig.legend(*surr_qrp_ax.get_legend_handles_labels(), loc="lower center", ncol=2, bbox_to_anchor=(0.5, -0.06))
 plt.tight_layout()
 ```
 
