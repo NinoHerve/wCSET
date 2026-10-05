@@ -1283,6 +1283,14 @@ import json
 
 PANEL_DIR = Path("../results/spike/resection_example")
 
+# Fixed main-text example: both wCSET's and sLORETA's peaks fall inside the resection (as in 4 of
+# the 26 patients; each method alone is inside in 4 others), while CSET's and dSPM's do not. An
+# example where only one method is inside would suggest a difference the cohort statistics do not show.
+EXAMPLE_SUBJECT = "pat17"
+# mindmap draws meshes without a colormap at opacity 0.5 by default; the outline and the peak marker
+# are set fully opaque so their colors don't mix with the activity map underneath.
+PEAK_COLOR = "black"
+
 def render_resection_example_panels(overwrite=False):
     fjson = PANEL_DIR / "example.json"
     if fjson.exists() and not overwrite:
@@ -1290,7 +1298,7 @@ def render_resection_example_panels(overwrite=False):
         return
     PANEL_DIR.mkdir(parents=True, exist_ok=True)
 
-    sub = select_example_subject()
+    sub = EXAMPLE_SUBJECT
     src = dm.load(sub, "fwd")["src"]
     ave = dm.load(sub, "ave", task="spike")
     resec = dm.load(sub, "resec-ramp", space="pre")
@@ -1338,12 +1346,12 @@ def render_resection_example_panels(overwrite=False):
                 if hemi in outlines:
                     panel = panel + mm.viz.SurfacePlot(
                         mesh=outlines[hemi], scalar_name="resection_outline",
-                        mesh_params={"color": "black", "point_size": 5, "render_points_as_spheres": True},
+                        mesh_params={"color": "#00a2ff", "point_size": 11, "render_points_as_spheres": True, "opacity": 1.0},
                     )
                 if hemi == peak_hemi:
                     panel = panel + mm.viz.SurfacePlot(
                         mesh=peak_mesh, scalar_name=f"{method}_peak",
-                        mesh_params={"color": "lime", "point_size": 36, "render_points_as_spheres": True},
+                        mesh_params={"color": PEAK_COLOR, "point_size": 52, "render_points_as_spheres": True, "opacity": 1.0},
                     )
                 panel.screenshot(PANEL_DIR / f"{method}_{hemi}-{view}.png", window_size=(800, 600))
 

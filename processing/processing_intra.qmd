@@ -961,14 +961,18 @@ two main-text subjects (34/48 - the ones with a visible scalp EEG spike; see
 `index.qmd`'s note on why 12/50 are Annex-only).
 
 **Glass-brain panel:** recorded iEEG vs. wCSET's and sLORETA's virtual iEEG
-on a translucent cortex, every contact colored by its amplitude at one
-timepoint - the one within the spike window that maximizes wCSET's signed
-spatial correlation with the recording (computed here directly, the same
-quantity as `correlation_spatial_signed` in the spatial-metrics section
-below), sLORETA shown at that *same* timepoint. Each map is z-scored across
-contacts (the correlation is scale-free) and shown with its own sign, so what
-is displayed is exactly what the signed spatial correlation scores. Only the PNGs and the small `sub-*.json` files
-(intracranial GFP curves, spike window, timepoint, r) are produced here;
+on a translucent cortex, every contact colored by its absolute amplitude at
+one timepoint - the peak of the two virtual iEEGs' GFP within the spike
+window (each scaled to its own maximum, then averaged), i.e. when both
+reconstructions are strongest, a choice that favors neither method - with
+both methods shown at that same timepoint. (wCSET's rho exceeds sLORETA's at
+every candidate timepoint checked: the recorded GFP peak and each method's own
+GFP peak.) Signs are not shown: the polarity of intracranial contacts is not
+interpreted. Each contact is colored by the rank of its absolute amplitude
+across contacts (0 = weakest, 1 = strongest), and rho is the rank correlation of absolute amplitudes across
+contacts at that timepoint, the same quantity as `correlation_spatial_absrank`
+in the spatial-metrics section below. Only the PNGs and the small `sub-*.json` files
+(intracranial GFP curves, spike window, timepoint, rho) are produced here;
 `index.qmd` assembles the figure from them. `SensorPlot` keeps MNE's metres
 while `BrainPlot.from_source_space` uses mm, hence the montage rescaling below.
 
@@ -990,6 +994,7 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 import pyvista as pv
+from scipy.stats import rankdata, spearmanr
 
 import mindmap as mm
 import sys
@@ -1003,6 +1008,7 @@ MAIN_SUBJECTS = ["48", "34"]  # display order matches index.qmd's own MAIN_SUBJE
 
 glass_dir = Path("../results/intra/glass_example")
 GLASS_METHODS = ["wcset", "sloreta"]
+N_TOP = 10  # strongest contacts compared in the glass-brain example
 fpng_channels = Path("../results/intra/reconstruction_channels.png")
 
 def best_correlation_time(suite_df, sub):
@@ -1034,7 +1040,7 @@ def best_nonspurious_channel(suite_df, sub, iave, min_burst_ratio=3.0):
 
     raise RuntimeError(f"No non-spurious channel found for sub-{sub} - lower min_burst_ratio.")
 
-def render_glass_example(overwrite=False, clim=3.0, cmap="RdBu_r", view="superior"):
+def render_glass_example(overwrite=False, cmap="Reds", view="superior"):
     if (glass_dir / f"sub-{MAIN_SUBJECTS[-1]}.json").exists() and not overwrite:
         print("Already exists, skipping.")
         return
@@ -1051,16 +1057,18 @@ def render_glass_example(overwrite=False, clim=3.0, cmap="RdBu_r", view="superio
             ieeg[m] = mm.analysis.eeg.normalize_evoked_by_baseline(v, baseline=baseline)
         tmin, tmax = mm.analysis.eeg.find_spike_window(raw_i, baseline=baseline)
 
-        # Timepoint maximizing wCSET's signed spatial correlation within the spike window
+        # Timepoint: peak of the two virtual iEEGs' GFP within the spike window (each scaled to its own
+        # maximum, then averaged), i.e. when both reconstructions are strongest; neutral between the methods
         win = (ieeg["recorded"].times >= tmin) & (ieeg["recorded"].times <= tmax)
-        r_wcset = [np.corrcoef(ieeg["recorded"].data[:, k], ieeg["wcset"].data[:, k])[0, 1]
-                   for k in np.flatnonzero(win)]
-        idx = np.flatnonzero(win)[int(np.argmax(r_wcset))]
+        gfp_virtual = np.mean([ieeg[m].data.std(axis=0)[win] / ieeg[m].data.std(axis=0)[win].max()
+                               for m in GLASS_METHODS], axis=0)
+        idx = np.flatnonzero(win)[int(np.argmax(gfp_virtual))]
         t = ieeg["recorded"].times[idx]
 
-        # Contact values at t, z-scored across contacts, own sign kept
-        snap = {k: e.data[:, idx] for k, e in ieeg.items()}
-        snap = {k: (x - x.mean()) / x.std() for k, x in snap.items()}
+        # Contacts colored by the rank of their absolute amplitude at t (0 = weakest, 1 = strongest; sign not
+        # shown): a few very strong contacts would otherwise wash out the rest, and the ranks are exactly what
+        # rho compares. rho and the top-contact overlap are unaffected.
+        snap = {k: (rankdata(np.abs(e.data[:, idx])) - 1) / (e.data.shape[0] - 1) for k, e in ieeg.items()}
 
         for k, values in snap.items():
             sensors = ieeg["recorded"].copy().crop(t, t, include_tmax=True)
@@ -1072,7 +1080,7 @@ def render_glass_example(overwrite=False, clim=3.0, cmap="RdBu_r", view="superio
             )
             contacts = mm.viz.SensorPlot(
                 sensors, scalar_name="ieeg_z",
-                mesh_params={"clim": (-clim, clim), "cmap": cmap, "point_size": 18,
+                mesh_params={"clim": (0.0, 1.0), "cmap": cmap, "point_size": 18,
                              "render_points_as_spheres": True, "show_scalar_bar": False},
             )
             (cortex + contacts).screenshot(glass_dir / f"sub-{sub}_{k}.png", window_size=(700, 700))
@@ -1088,8 +1096,12 @@ def render_glass_example(overwrite=False, clim=3.0, cmap="RdBu_r", view="superio
 
         meta = {
             "time": float(t), "window": [float(tmin), float(tmax)],
-            "clim": clim, "cmap": cmap, "view": view,
-            "r": {m: float(np.corrcoef(snap["recorded"], snap[m])[0, 1]) for m in GLASS_METHODS},
+            "clim": [0.0, 1.0], "cmap": cmap, "view": view,
+            "rho": {m: float(spearmanr(snap["recorded"], snap[m])[0]) for m in GLASS_METHODS},
+            # number of the N_TOP strongest recorded contacts that are also among the method's N_TOP strongest
+            "n_top": N_TOP,
+            "top_overlap": {m: int(len(set(np.argsort(-snap["recorded"])[:N_TOP]) & set(np.argsort(-snap[m])[:N_TOP])))
+                            for m in GLASS_METHODS},
             "times": times[shown].tolist(), "gfp": gfp,
         }
         with open(glass_dir / f"sub-{sub}.json", "w") as f:
@@ -1325,7 +1337,7 @@ compute_intra_statistics(overwrite=True)  # must force-regen: register() calls a
 ```
 
 
-# Spatial pattern metrics: signed correlation and AUC
+# Spatial pattern metrics: amplitude rank correlation and AUC
 
 Exploratory comparison of two complementary per-timepoint spatial metrics,
 replacing the polarity-invariant `correlation_spatial` (|r|) above, before
@@ -1333,11 +1345,16 @@ anything is moved to `index.qmd`. Both follow the practice of the Grova group
 (Grova et al. 2016; Afnan et al. 2026), who report a spatial correlation
 together with sign-free metrics.
 
-- **Signed spatial correlation** (Pearson r across contacts, no polarity
-  flip): the source estimates are signed and `compute_virtual_ieeg` is a signed
-  dipole projection, so there is no arbitrary global sign to remove. Unlike
-  |r|, its chance level is 0 and the sign cannot flip from one timepoint to the
-  next.
+- **Amplitude rank correlation** (Spearman rho across contacts between the
+  recorded and the virtual |amplitude|): the polarity of intracranial contacts
+  is not interpreted, so only each contact's absolute amplitude is compared,
+  by rank, which also makes it insensitive to the different amplitude scales of
+  virtual and recorded iEEG. Main-text measure.
+- **Signed spatial correlation** (Pearson r across contacts, no polarity flip):
+  the measure reported by Grova et al. 2016 and Afnan et al. 2026, kept for
+  the Annex comparison with their work.
+  Because both maps are absolute values, its chance level is not exactly 0;
+  the permutation null below gives it directly.
 - **AUC on |amplitude|**: at each timepoint, contacts whose recorded
   |amplitude| is at least `AUC_THRESHOLD` (30%, as in Afnan et al. 2026) of
   that timepoint's maximum are "active"; the virtual |amplitude| is the score,
@@ -1388,6 +1405,12 @@ def spatial_r(x, y):
     return (xz * yz).mean(-2)
 
 
+def spatial_absrank(x, y):
+    """Spearman rho across contacts (axis 0) between |x| and |y|, one value per
+    timepoint; y may carry a leading permutation axis."""
+    return spatial_r(rankdata(np.abs(x), axis=0), rankdata(np.abs(y), axis=-2))
+
+
 def spatial_auc(x, y):
     """AUC of |y| for detecting contacts where |x| >= AUC_THRESHOLD * max|x|,
     one value per timepoint (Mann-Whitney U / (n_active * n_inactive), ties
@@ -1424,7 +1447,8 @@ def compute_spatial_metrics(overwrite=False):
             y = vave.data
             y_perm = y[perms]  # (N_PERM, n_ch, n_times)
 
-            for metric, func in [("correlation_spatial_signed", spatial_r), ("auc_spatial", spatial_auc)]:
+            for metric, func in [("correlation_spatial_absrank", spatial_absrank), ("correlation_spatial_signed", spatial_r),
+                                 ("auc_spatial", spatial_auc)]:
                 suite.register(metric, func(x, y), Method=m, Subject=sub, times=iave.times)
                 lo, hi = np.percentile(func(x, y_perm), [2.5, 97.5], axis=0)
                 nulls.append(pd.DataFrame({"Metric": metric, "Method": m, "Subject": sub,
@@ -1433,7 +1457,7 @@ def compute_spatial_metrics(overwrite=False):
     # wCSET vs. each other method, per subject, timepoint-paired
     rows = []
     for sub in SUBJECTS:
-        for metric in ["correlation_spatial_signed", "auc_spatial"]:
+        for metric in ["correlation_spatial_absrank", "correlation_spatial_signed", "auc_spatial"]:
             wide = suite.to_df(metrics=metric, filters={"Subject": sub}).pivot_table(
                 index="times", columns="Method", values="Value").dropna()
             res = suite.stat.ttest_ess(
@@ -1461,7 +1485,7 @@ compute_spatial_metrics(overwrite=True)
 Time courses per subject (columns) for each metric (rows): wCSET and
 sLORETA highlighted, the other methods thin; gray band = permutation chance
 range (2.5-97.5th percentiles, averaged over methods); dotted line = the
-metric's chance value (r = 0, AUC = 0.5). The table below gives the median over
+metric's chance value (rho = 0, AUC = 0.5). The table below gives the median over
 the spike window and the paired comparison with wCSET (dz > 0: wCSET better).
 
 ```{python filename="intra_spatial_metrics_plot.py"}
@@ -1471,7 +1495,8 @@ import sys
 sys.path.insert(0, "..")
 from scripts.figures import COLORS
 
-SPATIAL_METRICS = [("correlation_spatial_signed", "Signed spatial r", 0.0),
+SPATIAL_METRICS = [("correlation_spatial_absrank", "Amplitude rank correlation (rho)", 0.0),
+                   ("correlation_spatial_signed", "Signed spatial r", 0.0),
                    ("auc_spatial", "AUC on |amplitude|", 0.5)]
 
 spatial_df = mm.metric.MetricSuite.load(fspatial).to_df()
