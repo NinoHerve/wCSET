@@ -1549,11 +1549,13 @@ depth prior is applied, the result is *weighted* MNE (wMNE), which is what
 this method actually always was here (it shared a depth-weighted inverse
 operator with sLORETA/dSPM until that operator's own depth was set to
 `None` below). wMNE now gets its own separate `make_inverse_operator` call,
-at `depth=0.8` - the standard/recommended depth-weighting exponent for
-wMNE (MNE-Python's own default for `make_inverse_operator`, and the value
-found near-optimal in the original depth-weighting literature, Lin et al.
+at `depth=2` - the typical depth-weighting exponent for EEG (Lin et al.
 2006, "Assessing and improving the spatial accuracy of MEG source
-localization by depth-weighted minimum-norm estimates," *NeuroImage*) - no
+localization by depth-weighted minimum-norm estimates," *NeuroImage*, found
+2.0-5.0 optimal for EEG; MNE-Python's default 0.8 is the MEG value). Tested
+against 0.8 on the full simulation: wMNE's localization was slightly worse
+at 2 and it stayed the worst method either way, so the conclusions don't
+depend on it - no
 longer the same value as CSET/wCSET's own `depth`, both of which have
 since moved to `0.2`. This is a deliberate
 departure from the reference notebooks (which don't split wMNE out from
@@ -1676,10 +1678,10 @@ def make_reconstruct(fwd, eig):
             data, inv_mne_op, lambda2_auto, method=mne_name, verbose="warning"
           )
     if "wmne" in needed:
-      # wMNE - own inverse operator (depth=0.8, no longer matching CSET/wCSET's own depth=0.2), not
+      # wMNE - own inverse operator (depth=2, the typical EEG value; not CSET/wCSET's own depth=0.2), not
       # shared with sLORETA/dSPM's depth=None one - see prose above
       inv_wmne_op = mne.minimum_norm.make_inverse_operator(
-        info=data.info, forward=fwd, noise_cov=ncov, fixed=True, depth=0.8, verbose="warning",
+        info=data.info, forward=fwd, noise_cov=ncov, fixed=True, depth=2, verbose="warning",
       )
       solutions["wmne"] = mne.minimum_norm.apply_inverse(
         data, inv_wmne_op, lambda2_auto, method="MNE", verbose="warning"
@@ -2183,7 +2185,7 @@ oversight:
   study entirely, see `solve_inverse.py`'s prose above. The surrogate
   reconstruction cells further below stay at 2 (CSET/wCSET only), unaffected.
   `wmne` (renamed from `mne` - see `solve_inverse.py`'s prose above) gets its
-  own depth-weighted (`depth=0.8`) inverse operator here too, same split as
+  own depth-weighted (`depth=2`) inverse operator here too, same split as
   the flagship.
 - **SNR-adaptive `lambda2`** for `dspm`/`sloreta`/`wmne`/`wcset`
   (`max(0.01, 1/snr.max()**2)`, computed per run from that run's own
@@ -2338,10 +2340,10 @@ def make_reconstruct(fwd, eig):
             data, inv_mne_op, lambda2_auto, method=mne_name, verbose="warning"
           )
     if "wmne" in needed:
-      # wMNE - own inverse operator (depth=0.8, no longer matching CSET/wCSET's own depth=0.2), not
+      # wMNE - own inverse operator (depth=2, the typical EEG value; not CSET/wCSET's own depth=0.2), not
       # shared with sLORETA/dSPM's depth=None one - see solve_inverse.py's prose
       inv_wmne_op = mne.minimum_norm.make_inverse_operator(
-        info=data.info, forward=fwd, noise_cov=ncov, fixed=True, depth=0.8, verbose="warning",
+        info=data.info, forward=fwd, noise_cov=ncov, fixed=True, depth=2, verbose="warning",
       )
       solutions["wmne"] = mne.minimum_norm.apply_inverse(
         data, inv_wmne_op, lambda2_auto, method="MNE", verbose="warning"

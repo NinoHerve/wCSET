@@ -27,14 +27,14 @@ COLORS = {
 }
 LINE_COLOR = "#898781"  # neutral gray for reference lines
 
-# Study I methods. Beltrami (wCSET on the Laplace-Beltrami mesh eigenbasis) is computed for the
+# Study I methods. GBF (wCSET on the Laplace-Beltrami mesh eigenbasis; tag "beltrami") is computed for the
 # clinical cohorts only (Studies II/III) and appended locally where those studies build their
 # method order. MCE is excluded from every study: its L1 sparsity makes correlation-type metrics
 # react to whether it fires at all rather than to the quality of its prior.
 METHODS = ["wcset", "cset", "sloreta", "dspm", "wmne"]
 METHOD_LABELS = {
     "wcset": "wCSET", "cset": "CSET", "sloreta": "sLORETA", "dspm": "dSPM", "wmne": "wMNE",
-    "beltrami": "Beltrami",
+    "beltrami": "GBF",
 }
 
 FILL_ALPHA = 0.45  # shared fill opacity for boxes and violins

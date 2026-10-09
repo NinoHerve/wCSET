@@ -615,7 +615,7 @@ sharing sLORETA/dSPM's `depth=None` one.
   `processing_spike.qmd`, see that file's prose for the
   `lambda2-tuning.ipynb` sweep the earlier `lambda2=1` came from; the new
   values are a deliberate override, not re-derived from that sweep.
-- `depth = 0.8` for wMNE, `depth = 0.2` for CSET and wCSET (per explicit
+- `depth = 2` for wMNE (typical EEG value, Lin et al. 2006), `depth = 0.2` for CSET and wCSET (per explicit
   instruction, superseding wCSET's earlier `depth=0.5`), and `depth = None`
   (no depth weighting) for `mne.minimum_norm.make_inverse_operator` shared
   by sLORETA/dSPM - previously `0.8` for wCSET/CSET/wMNE alike (wMNE
@@ -727,9 +727,9 @@ def source_recon(sub, overwrite=True):
     # 2.4 dSPM
     dspm = mne.minimum_norm.apply_inverse(ave, inv, lambda2, method="dSPM")
 
-    # 2.5 wMNE - own inverse operator (depth=0.8, no longer matching CSET/wCSET's own depth=0.2), not
+    # 2.5 wMNE - own inverse operator (depth=2, the typical EEG value; not CSET/wCSET's own depth=0.2), not
     # shared with sLORETA/dSPM's depth=None one - see prose above
-    inv_wmne = mne.minimum_norm.make_inverse_operator(ave.info, fwd, ncov, depth=0.8, fixed=True)
+    inv_wmne = mne.minimum_norm.make_inverse_operator(ave.info, fwd, ncov, depth=2, fixed=True)
     wmne = mne.minimum_norm.apply_inverse(ave, inv_wmne, lambda2, method="MNE")
 
     # 2.6 beltrami - wCSET on the Laplace-Beltrami mesh eigenbasis, GBF

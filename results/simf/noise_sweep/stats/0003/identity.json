@@ -29,7 +29,7 @@
       ]
     ]
   ],
-  "computed_at": "2026-08-21T21:45:02.107589",
+  "computed_at": "2026-10-05T16:21:08.411744",
   "pairs": [
     [
       "wcset",
@@ -41,11 +41,11 @@
       {
         "snr_start": 20.0,
         "snr_end": 1.0,
-        "mass": 53.89835327098858,
+        "mass": 57.979034001818526,
         "sign": 1,
         "p_value": 0.0003333333333333333,
         "significant": true,
-        "effect_size": 2.173758162457347,
+        "effect_size": 2.1976987676683835,
         "effect_size_type": "cohens_dz"
       }
     ]

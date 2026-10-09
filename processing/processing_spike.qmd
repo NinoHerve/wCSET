@@ -550,11 +550,10 @@ sLORETA/dSPM, so the depth-weighting cleanup above (splitting
 sLORETA/dSPM to `depth=None`) would have silently stripped wMNE's own depth
 weighting too - the very thing that makes it "weighted" MNE rather than
 plain MNE. wMNE now gets its own `make_inverse_operator` call, at
-`depth=0.8` - the standard/recommended depth-weighting exponent for wMNE
-(MNE-Python's own default for `make_inverse_operator`, and the value found
-near-optimal in the original depth-weighting literature, Lin et al. 2006,
+`depth=2` - the typical depth-weighting exponent for EEG (Lin et al. 2006,
 "Assessing and improving the spatial accuracy of MEG source localization by
-depth-weighted minimum-norm estimates," *NeuroImage*) - no longer the same
+depth-weighted minimum-norm estimates," *NeuroImage*, found 2.0-5.0 optimal
+for EEG; MNE-Python's default 0.8 is the MEG value) - no longer the same
 value as CSET/wCSET's own `depth`, both of which have since moved to `0.2`
 (see below).
 
@@ -571,7 +570,7 @@ value as CSET/wCSET's own `depth`, both of which have since moved to `0.2`
   CSET, so the grid's upper edge won outright); the new `0.1`/`0.2` values
   are a deliberate override, not re-derived from that sweep or
   independently re-verified on this cohort.
-- `depth = 0.8` for wMNE, `depth = 0.2` for CSET and wCSET (per explicit
+- `depth = 2` for wMNE (typical EEG value, Lin et al. 2006), `depth = 0.2` for CSET and wCSET (per explicit
   instruction, superseding wCSET's earlier `depth=0.5`), and `depth = None`
   (no depth weighting) for `mne.minimum_norm.make_inverse_operator` shared
   by sLORETA/dSPM - see the ⚠ note above for why wMNE needs its own,
@@ -691,9 +690,9 @@ def source_recon(sub, overwrite=True):
     # 2.4 dSPM
     dspm = mne.minimum_norm.apply_inverse(ave, inv, lambda2, method="dSPM")
 
-    # 2.5 wMNE - own inverse operator (depth=0.8, no longer matching CSET/wCSET's own depth=0.2), not
+    # 2.5 wMNE - own inverse operator (depth=2, the typical EEG value; not CSET/wCSET's own depth=0.2), not
     # shared with sLORETA/dSPM's depth=None one - see prose above
-    inv_wmne = mne.minimum_norm.make_inverse_operator(ave.info, fwd, ncov, depth=0.8, fixed=True)
+    inv_wmne = mne.minimum_norm.make_inverse_operator(ave.info, fwd, ncov, depth=2, fixed=True)
     wmne = mne.minimum_norm.apply_inverse(ave, inv_wmne, lambda2, method="MNE")
 
     # 2.6 beltrami - wCSET on the Laplace-Beltrami mesh eigenbasis, GBF

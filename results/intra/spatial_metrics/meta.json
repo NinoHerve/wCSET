@@ -1,7 +1,7 @@
 {
   "name": "Intra vIEEG spatial pattern metrics",
   "metadata": {},
-  "saved_at": "2026-10-05T11:17:54.517263",
+  "saved_at": "2026-10-05T16:47:31.324217",
   "entries": [
     {
       "metric": "correlation_spatial_absrank",
