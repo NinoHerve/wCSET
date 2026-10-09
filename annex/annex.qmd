@@ -100,7 +100,7 @@ You should now be ready to run anything that comes ahead.
 | Minimum outer-skull-to-scalp gap | 2.12 mm | 3.21 mm |
 | `mne.make_bem_model` / `make_bem_solution` | Fails (nesting violation) | Succeeds |
 
-: BEM geometry comparison for the flagship simulation subject (sub-10): MNE-Python's default watershed extraction vs. the custom CHARM-based pipeline used throughout this manuscript. {#tbl-bem-comparison}
+: BEM geometry comparison for the simulation subject: MNE-Python's default watershed extraction vs. the custom CHARM-based pipeline used throughout this manuscript. {#tbl-bem-comparison}
 
 **A second example where watershed does not fail outright.** The sub-10 case above is a hard failure — MNE refuses to build a BEM model at all. That is not the only failure mode: for subject sub-pat10 of the SPIKE resection cohort (Clinical Dataset A), the default watershed geometry *passes* MNE's nesting check (`mne.make_bem_model` and `mne.make_bem_solution` both succeed without error) and is still visibly wrong (@fig-bem-spike). Panel (a) shows CHARM's own tissue segmentation (`Bone-Cortical`/`Bone-Cancellous` in tan, `Skin` not shown) as anatomical reference for where the skull actually is — not independent ground truth, since panel (b)'s CHARM surface is fit directly from this same segmentation, but a meaningful check on panel (c)'s watershed surface, which never sees this segmentation at all. CHARM's outer-skull contour (panel b) closely follows the segmented bone boundary. Watershed's (panel c) does not: it balloons outward well past the true skull, consistent with the coarse expand-the-brain/retract-the-scalp heuristic described above rather than genuine bone detection.
 
@@ -177,14 +177,14 @@ This section provides implementation-level detail for the connectivity matrices 
 
 **Local surrogate.** Nodes are additionally connected across hemispheres to their homotopic (mirror-symmetric) partner to keep the resulting graph connected.
 
-**Beltrami-operator surrogate.** Eigenmodes are computed using the `lapy` Python library (v1.6.0) for the underlying finite-element stiffness/mass matrix assembly. This mesh is the triangulation of the source space itself, in dipole space (Section 2.1.1) — the decimated, cortex-only surface used for the dipoles — rather than the dense FreeSurfer surface typically used for this computation. This matches @wang_geometry_2026's own approach: their Laplace-Beltrami eigenmodes are likewise computed on their own downsampled, dipole-resolution source space (~10,000 dipoles per hemisphere for real data, ~4,000 per hemisphere for their benchmark simulations — comparable in spirit to this manuscript's own ~7,600-dipole source space) rather than the dense native FreeSurfer mesh; their Discussion's contrast against "coarse regional parcellations" refers to connectome/atlas-eigenmode approaches like CSET, not to mesh density.
+**Laplace-Beltrami surrogate (GBF).** Eigenmodes are computed using the `lapy` Python library (v1.6.0) for the underlying finite-element stiffness/mass matrix assembly. This mesh is the triangulation of the source space itself, in dipole space (Section 2.1.1) — the decimated, cortex-only surface used for the dipoles — rather than the dense FreeSurfer surface typically used for this computation. This matches @wang_geometry_2026's own approach: their Laplace-Beltrami eigenmodes are likewise computed on their own downsampled, dipole-resolution source space (~10,000 dipoles per hemisphere for real data, ~4,000 per hemisphere for their benchmark simulations — comparable in spirit to this manuscript's own ~7,600-dipole source space) rather than the dense native FreeSurfer mesh; their Discussion's contrast against "coarse regional parcellations" refers to connectome/atlas-eigenmode approaches like CSET, not to mesh density.
 
-**Harmonic localization (inverse participation ratio).** The Discussion hypothesizes that the true connectome underperforms its dMRI-free surrogates in Study I because its reconstruction-weighted harmonics are more spatially localized. @fig-ipr-harmonics quantifies this: for each condition, every harmonic's inverse participation ratio (IPR) — $\sum_i x_i^4$ for an orthonormal harmonic $x$, higher for harmonics concentrated on fewer dipoles — is weighted by wCSET's own reconstruction weight for that harmonic (Section 2.1.4) and averaged, excluding each condition's trivial constant mode(s) (maximally spread by construction, regardless of graph structure). The true connectome's weighted-mean IPR is higher than every graph-based surrogate's and higher than beltrami's — consistent with a more rigid, spatially specific prior that helps only when it matches genuine tract-driven clustering.
+**Harmonic localization (inverse participation ratio).** The Discussion hypothesizes that the true connectome underperforms its dMRI-free surrogates in Study I because its reconstruction-weighted harmonics are more spatially localized. @fig-ipr-harmonics quantifies this: for each condition, every harmonic's inverse participation ratio (IPR) — $\sum_i x_i^4$ for an orthonormal harmonic $x$, higher for harmonics concentrated on fewer dipoles — is weighted by wCSET's own reconstruction weight for that harmonic (Section 2.1.4) and averaged, excluding each condition's trivial constant mode(s) (maximally spread by construction, regardless of graph structure). The true connectome's weighted-mean IPR is higher than every graph-based surrogate's and higher than the Laplace-Beltrami surrogate's — consistent with a more rigid, spatially specific prior that helps only when it matches genuine tract-driven clustering.
 
 ```{python filename="simf_ipr_harmonics_plot.py"}
 #| echo: false
 #| label: fig-ipr-harmonics
-#| fig-cap: "Reconstruction-weighted mean inverse participation ratio (IPR) of each condition's harmonics (subject sub-10) — the basis wCSET's spatial prior is built from. Higher IPR means harmonics concentrated on fewer, sometimes spatially disjoint dipoles; lower IPR means harmonics that vary smoothly across the cortex. The true connectome (original) produces more localized harmonics than every dMRI-free surrogate."
+#| fig-cap: "Reconstruction-weighted mean inverse participation ratio (IPR) of each condition's harmonics — the basis wCSET's spatial prior is built from. Higher IPR means harmonics concentrated on fewer, sometimes spatially disjoint dipoles; lower IPR means harmonics that vary smoothly across the cortex. The true connectome (original) produces more localized harmonics than every dMRI-free surrogate."
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
@@ -203,7 +203,7 @@ LOGPASS_CUTOFF = 150
 ALL_CONDS = LOWPASS_CONDS + ["beltrami"]
 
 IPR_LABELS = {
-    "original": "original", "beltrami": "beltrami",
+    "original": "original", "beltrami": "Beltrami (GBF)",
     "fused": "atlas", "fused-bin": "atlas-bin",
     "geom-atlas": "local", "geom-atlas-bin": "local-bin",
 }
@@ -273,65 +273,31 @@ ipr_ax.spines[["top", "right"]].set_visible(False)
 plt.tight_layout()
 ```
 
-To make "IPR" concrete rather than abstract, @fig-ipr-example renders two actual harmonics from the true connectome's own spectrum, both drawn from the same low-frequency band (k=1–30) that carries the largest individual per-harmonic weight in wCSET's reconstruction (Section 2.1.4) — so the visual difference between them reflects localization, not frequency. The lowest-IPR harmonic in that band (k=`{python} k_lo_ipr`, IPR=`{python} ipr_lo_val`) is spread smoothly across almost the entire cortex, essentially a single left-right gradient; the highest-IPR harmonic (k=`{python} k_hi_ipr`, IPR=`{python} ipr_hi_val`, ~`{python} ipr_ratio_val`× higher) instead concentrates its activity onto a few disjoint patches. This is what "more spatially concentrated" means for the true connectome's weighted-mean IPR above: not that every harmonic it relies on looks like the right-hand panel, but that its harmonics tend further in that direction than the surrogates'.
-
-```{python filename="simf_ipr_example_plot.py"}
-#| echo: false
-#| label: fig-ipr-example
-#| fig-cap: "Example low-frequency harmonics (k=1-30 band) of the true connectome (subject sub-10), illustrating what inverse participation ratio (IPR) means spatially. Left: the lowest-IPR harmonic in this band, spread smoothly across the cortex. Right: the highest-IPR harmonic in this band, concentrated onto a few disjoint patches. Dorsal view, both hemispheres."
-import mindmap as mm
-import pyvista as pv
-import matplotlib.pyplot as plt
-
-pv.OFF_SCREEN = True
-
-# Restrict the example search to the same low-frequency band (k=1-30,
-# excluding the trivial k=0 constant mode) that dominates wCSET's
-# per-harmonic weight, rather than searching the full spectrum - a harmonic
-# with extreme IPR far out in the spectrum wouldn't illustrate what the
-# weighted-mean IPR above is actually summarizing.
-ipr_band = range(1, 31)
-iprs_original = iprs_ipr["original"]
-k_lo_ipr = min(ipr_band, key=lambda k: iprs_original[k])
-k_hi_ipr = max(ipr_band, key=lambda k: iprs_original[k])
-
-ipr_lo_val = fmt_stat(iprs_original[k_lo_ipr], 4)
-ipr_hi_val = fmt_stat(iprs_original[k_hi_ipr], 4)
-ipr_ratio_val = fmt_num(iprs_original[k_hi_ipr] / iprs_original[k_lo_ipr], 1)
-
-# Reloads the forward solution just for its source space (dipole positions/
-# hemisphere split) - not otherwise needed by this section, so not part of
-# the shared eigs_ipr/dm_ipr setup above.
-src_ipr = dm_ipr.load(sub_ipr, "fwd", desc="sim")["src"]
-vec_original = eigs_ipr["original"][0]
-
-ipr_example_panel = (
-    mm.viz.BrainPlot.from_source_space(
-        src_ipr, values=vec_original[:, k_lo_ipr], states=[0],
-        title=f"k={k_lo_ipr} (low IPR)", view="dorsal",
-    )
-    | mm.viz.BrainPlot.from_source_space(
-        src_ipr, values=vec_original[:, k_hi_ipr], states=[0],
-        title=f"k={k_hi_ipr} (high IPR)", view="dorsal",
-    )
-)
-ipr_example_img = ipr_example_panel.screenshot()
-
-ipr_example_fig, ipr_example_ax = plt.subplots(
-    figsize=(ipr_example_img.shape[1] / 130, ipr_example_img.shape[0] / 130)
-)
-ipr_example_ax.imshow(ipr_example_img)
-ipr_example_ax.axis("off")
-plt.tight_layout()
+```{python filename="simf_ipr_example_stats.py"}
+#| output: false
+# Harmonic 139: concentrated on a few patches in the empirical connectome, spread across the cortex in
+# the binarized atlas surrogate (same harmonic index, so a similar position in the spectrum). Values
+# quoted in the prose; the figure itself is a prepared image (results/simf/ipr_example_harmonic139.png).
+ipr_ex_k = 139
+ipr_ex_conds = {"original": "empirical", "fused-bin": "binarized atlas"}
+ipr_ex = {c: (float(eigs_ipr[c][1][ipr_ex_k]), float(iprs_ipr[c][ipr_ex_k])) for c in ipr_ex_conds}
+ipr_ex_lam_orig, ipr_ex_lam_atlas = (fmt_num(ipr_ex[c][0], 3) for c in ipr_ex_conds)
+ipr_ex_ipr_orig, ipr_ex_ipr_atlas = (f"{ipr_ex[c][1]:.3g}" for c in ipr_ex_conds)
+ipr_ex_ratio = fmt_num(ipr_ex["original"][1] / ipr_ex["fused-bin"][1], 0)
 ```
+
+To make "IPR" concrete, @fig-ipr-example shows the same harmonic (k = `{python} ipr_ex_k`) for the empirical connectome and for the binarized atlas surrogate. In the empirical connectome, the harmonic concentrates on a few patches of one hemisphere (circled; IPR = `{python} ipr_ex_ipr_orig`, λ = `{python} ipr_ex_lam_orig`). In the atlas surrogate, it spreads across both hemispheres (IPR = `{python} ipr_ex_ipr_atlas`, about `{python} ipr_ex_ratio` times lower; λ = `{python} ipr_ex_lam_atlas`). This is what "more spatially concentrated" means for the empirical connectome's weighted-mean IPR above: not that every harmonic it relies on looks like the left panel, but that its harmonics tend further in that direction than the surrogates'.
+
+![Harmonic 139 of the empirical connectome (left) and of the binarized atlas surrogate (right), dorsal view. Red and blue show the harmonic's positive and negative values. The empirical harmonic concentrates on a few patches of one hemisphere (circled); the atlas harmonic spreads across both hemispheres. λ₁₃₉: graph frequency (eigenvalue) of the harmonic; IPR: inverse participation ratio (higher = more spatially concentrated).](../results/simf/ipr_example_harmonic139.png){#fig-ipr-example}
+
 
 ### Inverse Problem and Methods — Additional Details
 
 **Standard inverse solutions — full derivation.** This section provides the full derivation of the standard inverse solutions (wMNE, dSPM, sLORETA) introduced in Section 2.1.4.
 
-From a Bayesian perspective, $\mathbf s$ is treated as a random variable with a prior distribution $P(\mathbf s)$ [@knosche_eegmeg_2022]. Assuming a Gaussian prior $\mathbf s \sim \mathcal N(0, \Sigma_{\mathbf s})$, reconstruction becomes a Maximum A Posteriori (MAP) estimation, leading to the optimization problem given in Eq. (1) of the main text. There, $\mathbf C$ acts as a weighting matrix derived from the prior covariance, such that $\mathbf C^T\mathbf C = \mathbf \Sigma_{\mathbf s}^{-1}$. In practice, the true source covariance $\Sigma_{\mathbf s}$ is unknown and replaced with the identity matrix — the assumption of independent, equal-variance sources that gives wMNE, dSPM and sLORETA their "independent-source" label throughout this work.
+From a Bayesian perspective, $\mathbf s$ is treated as a random variable with a prior distribution $P(\mathbf s)$ [@knosche_eegmeg_2022]. Assuming a Gaussian prior $\mathbf s \sim \mathcal N(0, \Sigma_{\mathbf s})$, reconstruction becomes a Maximum A Posteriori (MAP) estimation, leading to the optimization problem given in Eq. (1) of the main text. There, $\mathbf C$ acts as a weighting matrix derived from the prior covariance, such that $\mathbf C^T\mathbf C = \mathbf \Sigma_{\mathbf s}^{-1}$. In practice, the true source covariance $\Sigma_{\mathbf s}$ is unknown. sLORETA and dSPM replace it with the identity matrix, i.e. independent sources with equal variance. wMNE replaces it with a diagonal depth-weighting matrix (below): its sources are still independent a priori, but deep sources receive larger variances. This diagonal prior, shared by all three methods, is why we call them connectivity-agnostic throughout this work.
 
-wMNE additionally adjusts source variances, generating the depth-weighting matrix $\mathbf W_d$ applied to counteract the bias of $l_2$-regularized solutions toward superficial dipoles:
+For wMNE, the depth-weighting matrix $\mathbf W_d$ counteracts the bias of $l_2$-regularized solutions toward superficial dipoles:
 
 $$
 \mathbf \Sigma_{\mathbf s} = \mathbf W_d^2, \qquad \text{where} \quad W_{d,ii} = \lVert \mathbf L_{:i}\rVert^{-\kappa}
@@ -339,7 +305,7 @@ $$
 
 so that deep sources, with small lead-field norms, receive a larger prior variance. In the SVD form of the main text, $\mathbf B=\mathbf W_d$.
 
-For wMNE, the depth-weighting exponent was set to $\kappa=0.8$, the MEG-optimized value reported by @lin_assessing_2006 (who found a higher optimal range, 2.0–5.0, for EEG specifically). sLORETA and dSPM apply an additional post-hoc standardization on top of the minimum-norm estimate, and were run without additional depth weighting, since this noise-normalization step already compensates for depth bias on its own.
+For wMNE, the depth-weighting exponent was set to $\kappa=2$, within the 2.0–5.0 range that @lin_assessing_2006 found optimal for EEG (MNE-Python's default, 0.8, is the value for MEG). In simulation, κ = 2 gave slightly larger localization errors than κ = 0.8, and wMNE remained the least accurate method with either value. sLORETA and dSPM apply an additional post-hoc standardization on top of the minimum-norm estimate, and were run without additional depth weighting, since this noise-normalization step already compensates for depth bias on its own.
 
 With $\mathbf B=\mathbf I$ and the SVD $\mathbf L=\mathbf E_f\boldsymbol\Gamma\mathbf E_\ell^\top$ of the main text, both standardizations divide the minimum-norm estimate $s^*_k$ of source $k$ by a norm computed from the same decomposition:
 
@@ -460,11 +426,11 @@ This section provides additional recruitment, implantation, and ethics detail fo
 
 ### Study I Example Run — All Views (Section 3.1.1)
 
-All four cortical views of the example run shown in the main text (@fig-flagship-example of the main text shows the left hemisphere only). Spatial correlations with the ground truth are computed over the whole cortex.
+All four cortical views of the example run shown in the main text (Figure 2 of the main text shows the left hemisphere only). Spatial correlations with the ground truth are computed over the whole cortex.
 
 ```{python filename="simf_example_all_views.py"}
 #| label: fig-flagship-all-views
-#| fig-cap: "Ground truth, wCSET and sLORETA for the main-text example run (sub-10, ctx-lh-caudalmiddlefrontal_3), all four cortical views, at (a) the quarter rising phase (t₁) and (b) the peak phase (t₂). Each row is independently normalized (own maximum = 1). r = spatial correlation with the ground truth over the whole cortex."
+#| fig-cap: "Ground truth, wCSET and sLORETA for the main-text example run (ctx-lh-caudalmiddlefrontal_3), all four cortical views, at (a) the quarter rising phase (t₁) and (b) the peak phase (t₂). Each row is independently normalized (own maximum = 1). r = spatial correlation with the ground truth over the whole cortex."
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 
@@ -609,12 +575,12 @@ noise_corr_wcset_pp1 = fmt_num(_corr_medians_pp["wcset"][str(float(1))], 2)
 
 To assess whether the improvements shown above survive noisier measurement conditions, we swept the simulated target SNR from 20 down to 1 and repeated source reconstruction with each method (Section 2.2.1), re-evaluating localization error and spatial correlation with the ground truth as before.
 
-Localization error increased for every method as SNR decreased (@fig-noise-localization), but wMNE alone accounts for most of that pattern: already several times wCSET's error at the highest SNR tested (median `{python} noise_loc_wmne_median20` mm at SNR=20), it climbed steadily worse from there and was significantly worse than wCSET across the entire SNR range tested (region-paired cluster-permutation, p_corrected `{python} noise_loc_wmne_p`, Cohen's dz = `{python} noise_loc_wmne_dz`), reaching `{python} noise_loc_wmne_median1` mm by SNR=1. The other four methods (wCSET, CSET, sLORETA, dSPM) instead behaved similarly to one another, staying low until roughly SNR=3–5 before climbing. sLORETA's and dSPM's high-SNR plateaus did reach significance against wCSET (SNR=`{python} noise_loc_sloreta_snr`–`{python} noise_loc_sloreta_snr_end`, p_corrected `{python} noise_loc_sloreta_p`; SNR=`{python} noise_loc_dspm_snr_start`–`{python} noise_loc_dspm_snr_end`, p_corrected `{python} noise_loc_dspm_p`), but with modest effect sizes (dz = `{python} noise_loc_sloreta_dz` and `{python} noise_loc_dspm_dz` respectively) that didn't extend to lower SNR; CSET's own curve never diverged from wCSET's enough to register even a candidate cluster anywhere in the range tested — a stronger statement than "not significant," since no cluster (and so no p-value or effect size) exists to report.
+Localization error increased for every method as SNR decreased (@fig-noise-localization), but wMNE alone accounts for most of that pattern: already above wCSET's error at the highest SNR tested (median `{python} noise_loc_wmne_median20` mm at SNR=20), it climbed steadily worse from there and was significantly worse than wCSET across the entire SNR range tested (region-paired cluster-permutation, p_corrected `{python} noise_loc_wmne_p`, Cohen's dz = `{python} noise_loc_wmne_dz`), reaching `{python} noise_loc_wmne_median1` mm by SNR=1. The other four methods (wCSET, CSET, sLORETA, dSPM) instead behaved similarly to one another, staying low until roughly SNR=3–5 before climbing. sLORETA's and dSPM's high-SNR plateaus did reach significance against wCSET (SNR=`{python} noise_loc_sloreta_snr`–`{python} noise_loc_sloreta_snr_end`, p_corrected `{python} noise_loc_sloreta_p`; SNR=`{python} noise_loc_dspm_snr_start`–`{python} noise_loc_dspm_snr_end`, p_corrected `{python} noise_loc_dspm_p`), but with modest effect sizes (dz = `{python} noise_loc_sloreta_dz` and `{python} noise_loc_dspm_dz` respectively) that didn't extend to lower SNR; CSET's own curve never diverged from wCSET's enough to register even a candidate cluster anywhere in the range tested — a stronger statement than "not significant," since no cluster (and so no p-value or effect size) exists to report.
 
 ```{python filename="simf_localization_noise_plot.py"}
 #| echo: false
 #| label: fig-noise-localization
-#| fig-cap: "Localization error (mm) versus single-trial SNR (subject sub-10, quarter rising phase), median curve with thin IQR whiskers across the 100 simulated regions. Markers are filled/solid where wCSET's error is significantly lower than the competitor's (region-paired cluster-permutation); wCSET is the reference."
+#| fig-cap: "Localization error (mm) versus single-trial SNR (quarter rising phase), median curve with thin IQR whiskers across the 100 simulated regions. Markers are filled/solid where wCSET's error is significantly lower than the competitor's (region-paired cluster-permutation); wCSET is the reference."
 import matplotlib.pyplot as plt
 
 noise_loc_fig, noise_loc_ax = plt.subplots(figsize=(7, 5))
@@ -634,7 +600,7 @@ For spatial correlation with the ground truth (@fig-noise-correlation), wCSET si
 ```{python filename="simf_correlation_noise_plot.py"}
 #| echo: false
 #| label: fig-noise-correlation
-#| fig-cap: "Spatial correlation versus single-trial SNR (subject sub-10) at the quarter rising phase (left) and peak phase (right), median curve with thin IQR whiskers across the 100 simulated regions. Markers are filled/solid where wCSET's correlation is significantly higher than the competitor's (region-paired cluster-permutation); wCSET is the reference."
+#| fig-cap: "Spatial correlation versus single-trial SNR at the quarter rising phase (left) and peak phase (right), median curve with thin IQR whiskers across the 100 simulated regions. Markers are filled/solid where wCSET's correlation is significantly higher than the competitor's (region-paired cluster-permutation); wCSET is the reference."
 import matplotlib.pyplot as plt
 
 noise_corr_fig, noise_corr_axes = plt.subplots(1, 2, figsize=(13, 5))
@@ -786,7 +752,7 @@ wCSET's localization error remained essentially flat under permutation up to 60%
 ```{python filename="simf_localization_degradation_plot.py"}
 #| echo: false
 #| label: fig-degradation-localization
-#| fig-cap: "Localization error (mm) versus percentage of connectome edges randomly permuted (subject sub-10, quarter rising phase), for CSET and wCSET; median curve with thin IQR whiskers across the 100 simulated regions. Markers are filled/solid where significantly different from sLORETA, tested at each degradation level (region-paired cluster-permutation). Dashed line: dSPM's undegraded-connectome reference level."
+#| fig-cap: "Localization error (mm) versus percentage of connectome edges randomly permuted (quarter rising phase), for CSET and wCSET; median curve with thin IQR whiskers across the 100 simulated regions. Markers are filled/solid where significantly different from sLORETA, tested at each degradation level (region-paired cluster-permutation). Dashed line: dSPM's undegraded-connectome reference level."
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
@@ -828,7 +794,7 @@ Spatial correlation with the ground truth showed a similar but more pronounced p
 ```{python filename="simf_correlation_degradation_plot.py"}
 #| echo: false
 #| label: fig-degradation-correlation
-#| fig-cap: "Spatial correlation versus percentage of connectome edges randomly permuted (subject sub-10, quarter rising phase only), for CSET and wCSET; median curve with thin IQR whiskers across the 100 simulated regions. Markers are filled/solid where significantly different from sLORETA, tested at each degradation level (region-paired cluster-permutation). Dashed line: dSPM's undegraded-connectome reference level."
+#| fig-cap: "Spatial correlation versus percentage of connectome edges randomly permuted (quarter rising phase only), for CSET and wCSET; median curve with thin IQR whiskers across the 100 simulated regions. Markers are filled/solid where significantly different from sLORETA, tested at each degradation level (region-paired cluster-permutation). Dashed line: dSPM's undegraded-connectome reference level."
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
@@ -871,7 +837,7 @@ conditions_full = ["original"] + surrogates_full
 # same reader-facing renaming as the main-text cell (Section 3.1.4) - fused/
 # fused-bin/geom-atlas/geom-atlas-bin are the on-disk `Surrogate` tags.
 SURROGATE_LABELS_FULL = {
-    "fused": "atlas", "fused-bin": "atlas-bin",
+    "beltrami": "Beltrami (GBF)", "fused": "atlas", "fused-bin": "atlas-bin",
     "geom-atlas": "local", "geom-atlas-bin": "local-bin",
 }
 
@@ -907,7 +873,7 @@ surr_corr_wcset_qrp = surr_metrics_full.stat.wilcoxon(
     filters={"Method": "wcset", "phase": "qrp"},
 )
 
-# dSPM's and sLORETA's true-connectome reference lines, summarized like the boxes (as in the main text):
+# dSPM's and sLORETA's benchmark reference lines, summarized like the boxes (as in the main text):
 # one value per run, mean over repetitions per region, median across regions. Correlation: each run's
 # curve read at the population median qrp/peak time.
 # Correlation: per-region curves (mean over repetitions) read at the population median qrp/peak time,
@@ -930,14 +896,14 @@ for _phase, _key in [("qrp", "qrp_time_median"), ("pp", "pp_time_median")]:
 
 This section reports CSET's full surrogate-connectome breakdown (@fig-surrogate-cset), summarized qualitatively in the main text alongside wCSET's own (Section 3.1.4), which is reported there in full.
 
-For localization error, CSET was significantly less accurate with beltrami (p_corrected `{python} loc_cset_p['beltrami']`, r = `{python} loc_cset_r['beltrami']`) and the local surrogate (p_corrected `{python} loc_cset_p['geom-atlas']`, r = `{python} loc_cset_r['geom-atlas']`); the atlas, atlas-bin, and local-bin surrogates did not differ significantly from the original connectome (p_corrected `{python} loc_cset_p['fused']`, `{python} loc_cset_p['fused-bin']`, and `{python} loc_cset_p['geom-atlas-bin']` respectively).
+For localization error, CSET was significantly less accurate with the Laplace-Beltrami surrogate (GBF; p_corrected `{python} loc_cset_p['beltrami']`, r = `{python} loc_cset_r['beltrami']`) and the local surrogate (p_corrected `{python} loc_cset_p['geom-atlas']`, r = `{python} loc_cset_r['geom-atlas']`); the atlas, atlas-bin, and local-bin surrogates did not differ significantly from the original connectome (p_corrected `{python} loc_cset_p['fused']`, `{python} loc_cset_p['fused-bin']`, and `{python} loc_cset_p['geom-atlas-bin']` respectively).
 
-For spatial correlation, CSET was significantly lower than the original connectome with the atlas surrogate at both the quarter rising phase (p_corrected `{python} corr_cset_p[('fused', 'qrp')]`) and the peak (p_corrected `{python} corr_cset_p[('fused', 'pp')]`), and likewise with the local (p_corrected `{python} corr_cset_p[('geom-atlas', 'qrp')]` and `{python} corr_cset_p[('geom-atlas', 'pp')]`) and local-bin (p_corrected `{python} corr_cset_p[('geom-atlas-bin', 'qrp')]` and `{python} corr_cset_p[('geom-atlas-bin', 'pp')]`) surrogates at both phases. The atlas-bin surrogate reached significance only at the peak (p_corrected `{python} corr_cset_p[('fused-bin', 'pp')]`), not at the quarter rising phase (p_corrected `{python} corr_cset_p[('fused-bin', 'qrp')]`). Beltrami never differed significantly from the original connectome, at either phase (p_corrected `{python} corr_cset_p[('beltrami', 'qrp')]` and `{python} corr_cset_p[('beltrami', 'pp')]`).
+For spatial correlation, CSET was significantly lower than the original connectome with the atlas surrogate at both the quarter rising phase (p_corrected `{python} corr_cset_p[('fused', 'qrp')]`) and the peak (p_corrected `{python} corr_cset_p[('fused', 'pp')]`), and likewise with the local (p_corrected `{python} corr_cset_p[('geom-atlas', 'qrp')]` and `{python} corr_cset_p[('geom-atlas', 'pp')]`) and local-bin (p_corrected `{python} corr_cset_p[('geom-atlas-bin', 'qrp')]` and `{python} corr_cset_p[('geom-atlas-bin', 'pp')]`) surrogates at both phases. The atlas-bin surrogate reached significance only at the peak (p_corrected `{python} corr_cset_p[('fused-bin', 'pp')]`), not at the quarter rising phase (p_corrected `{python} corr_cset_p[('fused-bin', 'qrp')]`). The Laplace-Beltrami surrogate never differed significantly from the original connectome, at either phase (p_corrected `{python} corr_cset_p[('beltrami', 'qrp')]` and `{python} corr_cset_p[('beltrami', 'pp')]`).
 
 ```{python filename="simf_surrogate_cset_plot.py"}
 #| echo: false
 #| label: fig-surrogate-cset
-#| fig-cap: "CSET accuracy using the true structural connectome versus five dMRI-free connectome surrogates (subject sub-10; box = IQR, line = median). (a) Localization error (mm) at the quarter rising phase. (b, c) Spatial correlation with ground truth at the quarter rising phase (b) and peak phase (c). Dashed lines mark dSPM's and sLORETA's values with the true connectome as reference, summarized like the boxes (mean over repetitions per region, median across regions). Stars mark significance vs. the original (true) connectome (Wilcoxon signed-rank, region-paired, FDR-corrected). wCSET's equivalent comparisons are reported in Figure 4 of the main text."
+#| fig-cap: "CSET accuracy using the true structural connectome versus five dMRI-free connectome surrogates (box = IQR, line = median). (a) Localization error (mm) at the quarter rising phase. (b, c) Spatial correlation with ground truth at the quarter rising phase (b) and peak phase (c). Dashed lines mark dSPM's and sLORETA's values as connectome-free benchmarks, summarized like the boxes (mean over repetitions per region, median across regions). Stars mark significance vs. the original (true) connectome (Wilcoxon signed-rank, region-paired, FDR-corrected). wCSET's equivalent comparisons are reported in Figure 4 of the main text."
 import matplotlib.pyplot as plt
 
 CONDITION_COLORS_FULL = {
@@ -958,7 +924,7 @@ def surr_cset_panel(result, ax, ref_medians):
     surr_metrics_full.plot.group_comparison(
         result, order=conditions_full, palette=CONDITION_COLORS_FULL, points=False, showfliers=False, width=0.6,
         tick_labels=SURROGATE_LABELS_FULL, reference_suffix=" (ref.)", ax=ax,
-        reference_lines={f"{METHOD_LABELS[m]} (original connectome)": (ref_medians[m], COLORS[m]) for m in ref_methods_full},
+        reference_lines={f"{METHOD_LABELS[m]} (benchmark)": (ref_medians[m], COLORS[m]) for m in ref_methods_full},
     )
     plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
     ax.set_xlabel("")
@@ -993,12 +959,12 @@ plt.tight_layout()
 ```{python filename="simf_surrogate_wcset_qrp_plot.py"}
 #| echo: false
 #| label: fig-surrogate-wcset-qrp
-#| fig-cap: "wCSET's spatial correlation with ground truth at the quarter rising phase, using the true structural connectome versus five dMRI-free connectome surrogates (subject sub-10); the peak phase is shown in Figure 4 of the main text. (a) Per condition (box = IQR, line = median); dashed lines mark dSPM's and sLORETA's values with the true connectome, summarized like the boxes (mean over repetitions per region, median across regions). (b) Paired difference vs. the original connectome, one value per region (mean over repetitions; violin = distribution, thick line = median, thin line = IQR), positive = surrogate better. Above each violin: significance (Wilcoxon signed-rank, region-paired, FDR-corrected), rank-biserial r (positive = surrogate better), and the number of regions where the surrogate is better/tied/worse."
+#| fig-cap: "wCSET's spatial correlation with ground truth at the quarter rising phase, using the true structural connectome versus five dMRI-free connectome surrogates; the peak phase is shown in Figure 4 of the main text. (a) Per condition (box = IQR, line = median); dashed lines mark dSPM's and sLORETA's values as connectome-free benchmarks, summarized like the boxes (mean over repetitions per region, median across regions). (b) Paired difference vs. the original connectome, one value per region (mean over repetitions; violin = distribution, thick line = median, thin line = IQR), positive = surrogate better. Above each violin: significance (Wilcoxon signed-rank, region-paired, FDR-corrected), rank-biserial r (positive = surrogate better), and the number of regions where the surrogate is better/tied/worse."
 surr_qrp_fig, (surr_qrp_ax, surr_qrp_dax) = plt.subplots(1, 2, figsize=(len(conditions_full) * 1.3 * 1.8, 5.5))
 surr_metrics_full.plot.group_comparison(
     surr_corr_wcset_qrp, order=conditions_full, palette=CONDITION_COLORS_FULL, points=False, showfliers=False,
     width=0.6, tick_labels=SURROGATE_LABELS_FULL, reference_suffix=" (ref.)", ax=surr_qrp_ax,
-    reference_lines={f"{METHOD_LABELS[m]} (original connectome)": (surr_ref_corr_full["qrp"][m], COLORS[m]) for m in ref_methods_full},
+    reference_lines={f"{METHOD_LABELS[m]} (benchmark)": (surr_ref_corr_full["qrp"][m], COLORS[m]) for m in ref_methods_full},
 )
 plt.setp(surr_qrp_ax.get_xticklabels(), rotation=45, ha="right")
 surr_qrp_ax.set_xlabel("")
@@ -1024,7 +990,7 @@ plt.tight_layout()
 
 ### Spatial Correlation Analysis — Full Results, All Subjects (Section 3.3.1)
 
-This section reports both polarity-invariant spatial metrics of Study III (amplitude rank correlation and AUC on |amplitude|; Sections 2.3.2 and 2.3.3) for all four Clinical Dataset B subjects, with the per-method AUC that the main text leaves out (@fig-intracranial-diff of the main text shows Subjects 1 and 2, sub-48 and sub-34). Sub-12 and sub-50 had deep sources, far from the cortical source space (Section 2.2.3): their EEG-derived reconstruction, and the virtual iEEG projected from it, is inherently less reliable, so their results are reported here rather than pooled into the main comparison. Statistics are the same autocorrelation-corrected paired tests as in the main text (Section 2.4.2).
+This section reports both polarity-invariant spatial metrics of Study III (amplitude rank correlation and AUC on |amplitude|; Sections 2.3.2 and 2.3.3) for all four Clinical Dataset B subjects, with the per-method AUC that the main text leaves out (Figure 6 of the main text shows Subjects 1 and 2, sub-48 and sub-34). Subjects 3 and 4 (sub-12 and sub-50) had deep sources, far from the cortical source space (Section 2.2.3): their EEG-derived reconstruction, and the virtual iEEG projected from it, is inherently less reliable, so their results are reported here rather than pooled into the main comparison. Statistics are the same autocorrelation-corrected paired tests as in the main text (Section 2.4.2).
 
 ```{python filename="intra_spatial_full_stats.py"}
 #| output: false
@@ -1042,7 +1008,7 @@ COMPETITORS = ["sloreta", "cset", "dspm", "wmne", "beltrami"]
 FULL_ORDER = ["wcset"] + COMPETITORS
 FULL_SUBJECTS = ["48", "34", "12", "50"]
 FULL_TITLES = {"48": "Subject 1 (sub-48)", "34": "Subject 2 (sub-34)",
-               "12": "sub-12 (deep source)", "50": "sub-50 (deep source)"}
+               "12": "Subject 3 (sub-12, deep source)", "50": "Subject 4 (sub-50, deep source)"}
 FULL_METRICS = {"correlation_spatial_absrank": ("amplitude rank correlation", 0.0), "auc_spatial": ("AUC on |amplitude|", 0.5)}
 
 full_wide, full_results = {}, {}
@@ -1078,12 +1044,12 @@ full_12_auc_std_lo = fmt_num(min(full_wide[("12", "auc_spatial")][c].median() fo
 full_12_auc_std_hi = fmt_num(max(full_wide[("12", "auc_spatial")][c].median() for c in ["sloreta", "cset", "dspm", "wmne"]), 2)
 ```
 
-For sub-12, wCSET had the highest median AUC of all methods (median `{python} full_12_auc_wcset`, sLORETA, CSET, dSPM, and wMNE `{python} full_12_auc_std_lo`–`{python} full_12_auc_std_hi`; @fig-intra-full), but only its advantage over CSET reached significance. For sub-50, every method stayed close to zero rank correlation and 0.5 AUC, and no comparison was significant (smallest p_corrected `{python} full_50_p_min`). Across both deep-source subjects, `{python} full_deep_n_sig` comparison(s) reached significance (`{python} full_deep_sig`), all in wCSET's favor, and wCSET was never significantly worse than any other method. This matches the Discussion's framing: for these subjects, no method's reconstruction tracked the recording well enough to clearly distinguish one from another.
+For Subject 3, wCSET had the highest median AUC of all methods (median `{python} full_12_auc_wcset`, sLORETA, CSET, dSPM, and wMNE `{python} full_12_auc_std_lo`–`{python} full_12_auc_std_hi`; @fig-intra-full), but only its advantage over CSET reached significance. For Subject 4, every method stayed close to zero rank correlation and 0.5 AUC, and no comparison was significant (smallest p_corrected `{python} full_50_p_min`). Across both deep-source subjects, `{python} full_deep_n_sig` comparison(s) reached significance (`{python} full_deep_sig`), all in wCSET's favor, and wCSET was never significantly worse than any other method. This matches the Discussion's framing: for these subjects, no method's reconstruction tracked the recording well enough to clearly distinguish one from another.
 
 ```{python filename="intra_spatial_full_plot.py"}
 #| echo: false
 #| label: fig-intra-full
-#| fig-cap: "Spatial agreement between virtual and recorded iEEG for all four Clinical Dataset B subjects (columns); Subjects 1 and 2 are the main-text subjects, sub-12 and sub-50 had deep sources, far from the cortical source space. Rows 1–2: amplitude rank correlation (Spearman ρ across contacts between recorded and virtual absolute amplitude); rows 3–4: AUC on |amplitude| (spatial overlap, active contacts = at least 30% of the recorded maximum). Both ignore the sign of the contacts; the signed correlation is shown in @fig-intra-signed. Rows 1 and 3: value per method at each timepoint of the comparison window (box = IQR, line = median, outliers hidden); dotted line = chance value (ρ = 0, AUC = 0.5). Rows 2 and 4: paired difference, wCSET minus each other method, one value per timepoint (violin = distribution, thick line = median, thin line = IQR); positive = wCSET better. Above each violin: significance from a paired t-test with an autocorrelation-corrected effective sample size (FDR-corrected; *p<0.05, **p<0.01, ***p<0.001), Cohen's dz (positive = wCSET better), and the percentage of timepoints at which wCSET's value exceeds the other method's, relative to 50%."
+#| fig-cap: "Spatial agreement between virtual and recorded iEEG for all four Clinical Dataset B subjects (columns); Subjects 1 and 2 are the main-text subjects, Subjects 3 and 4 had deep sources, far from the cortical source space. Rows 1–2: amplitude rank correlation (Spearman ρ across contacts between recorded and virtual absolute amplitude); rows 3–4: AUC on |amplitude| (spatial overlap, active contacts = at least 30% of the recorded maximum). Both ignore the sign of the contacts; the signed correlation is shown in @fig-intra-signed. Rows 1 and 3: value per method at each timepoint of the comparison window (box = IQR, line = median, outliers hidden); dotted line = chance value (ρ = 0, AUC = 0.5). Rows 2 and 4: paired difference, wCSET minus each other method, one value per timepoint (violin = distribution, thick line = median, thin line = IQR); positive = wCSET better. Above each violin: significance from a paired t-test with an autocorrelation-corrected effective sample size (FDR-corrected; *p<0.05, **p<0.01, ***p<0.001), Cohen's dz (positive = wCSET better), and the percentage of timepoints at which wCSET's value exceeds the other method's, relative to 50%."
 import matplotlib.pyplot as plt
 
 full_fig, full_axes = plt.subplots(2 * len(FULL_METRICS), len(FULL_SUBJECTS), figsize=(4.4 * len(FULL_SUBJECTS), 16),
@@ -1154,7 +1120,7 @@ signed_48_p_beltrami = fmt_p(signed_vs["48"].loc["beltrami", "p_corrected"])
 signed_others_p_min = fmt_p(min(signed_vs[s_]["p_corrected"].min() for s_ in ["34", "12", "50"]))
 ```
 
-In Subject 1, wCSET's virtual iEEG correlated with the recording above the chance range (median r = `{python} signed_48_wcset`, chance range up to `{python} signed_48_chance`), whereas sLORETA, dSPM, wMNE, and CSET did not (medians `{python} signed_48_std_lo` to `{python} signed_48_std_hi`). wCSET's correlation was significantly higher than these four methods' (largest p_corrected `{python} signed_48_p_max`, dz = `{python} signed_48_dz_lo`–`{python} signed_48_dz_hi`), and did not differ from Beltrami's (p_corrected `{python} signed_48_p_beltrami`). No comparison was significant in the other three subjects (smallest p_corrected `{python} signed_others_p_min`). These are the same conclusions as with the sign-free measures of the main text, with larger effects in Subject 1.
+In Subject 1, wCSET's virtual iEEG correlated with the recording above the chance range (median r = `{python} signed_48_wcset`, chance range up to `{python} signed_48_chance`), whereas sLORETA, dSPM, wMNE, and CSET did not (medians `{python} signed_48_std_lo` to `{python} signed_48_std_hi`). wCSET's correlation was significantly higher than these four methods' (largest p_corrected `{python} signed_48_p_max`, dz = `{python} signed_48_dz_lo`–`{python} signed_48_dz_hi`), and did not differ from GBF's (p_corrected `{python} signed_48_p_beltrami`). No comparison was significant in the other three subjects (smallest p_corrected `{python} signed_others_p_min`). These are the same conclusions as with the sign-free measures of the main text, with larger effects in Subject 1.
 
 ```{python filename="intra_signed_full_plot.py"}
 #| echo: false
