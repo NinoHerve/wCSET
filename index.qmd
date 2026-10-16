@@ -19,6 +19,7 @@ author:
     roles: methodology
   - name: Maria Dimou
     affiliation: University Hospital and Faculty of Medicine of Geneva
+    email: maria.dimou@unige.ch
   - name: Serge Vuillemoz
     affiliation: University Hospital and Faculty of Medicine of Geneva
     email: serge.vulliemoz@hug.ch

@@ -80,7 +80,7 @@ You should now be ready to run anything that comes ahead.
 
 **Surface reconstruction and dipole placement.** The cortical surface was reconstructed using FreeSurfer (v7.4.1). Dipoles were placed via an oct6 icosahedral subdivision (after excluding medial-wall and non-cortical vertices) using MNE-Python (v1.9.0; @gramfort_meg_2013).
 
-**Orientation-constraint rationale.** Dipole orientations were fixed normal to the cortical manifold — a constraint widely adopted in distributed source imaging because the dominant contributors to the EEG signal, pyramidal neurons, have net dipole moments oriented normal to the cortical surface [@dale_improved_1993]. For the connectivity-informed methods, the constraint is also a structural requirement. The connectome describes connections between pairs of fixed cortical locations. Each location carries a single scalar source amplitude. A free-orientation dipole instead has three orthogonal components, which have no counterpart in the connectome.
+**Orientation-constraint rationale.** Dipole orientations were fixed normal to the cortical manifold — a constraint widely adopted in distributed source reconstruction because the dominant contributors to the EEG signal, pyramidal neurons, have net dipole moments oriented normal to the cortical surface [@dale_improved_1993]. For the connectivity-informed methods, the constraint is also a structural requirement. The connectome describes connections between pairs of fixed cortical locations. Each location carries a single scalar source amplitude. A free-orientation dipole instead has three orthogonal components, which have no counterpart in the connectome.
 
 ### Volume Conduction Model — Additional Implementation Details
 
