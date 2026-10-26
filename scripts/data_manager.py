@@ -143,7 +143,7 @@ class IntraManager(mm.io.DatasetManager):
 
     def load_eeg(self, path):
         """Load EEG for INTRA dataset."""
-        files = glob.glob(str(path))
+        files = sorted(glob.glob(str(path)))  # by run: epoch k is the same spike in EEG and iEEG
         montage = glob.glob(str(path.parent/"*_electrodes.tsv"))[0]
 
         dat = []

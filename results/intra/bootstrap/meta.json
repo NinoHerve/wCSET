@@ -1,0 +1,2671 @@
+{
+  "name": "Intra vIEEG spike-level bootstrap",
+  "metadata": {
+    "bootstrap": {
+      "n_boot": 1000,
+      "unit": "burst of spikes whose baseline holds an earlier spike's window",
+      "baseline": [
+        0.5,
+        1.0
+      ],
+      "peak_samples": 5,
+      "subjects": {
+        "48": {
+          "n_spikes": 265,
+          "n_bursts": 210,
+          "window": [
+            1.61,
+            2.605
+          ],
+          "peak_times": [
+            1.99,
+            1.995,
+            2.0,
+            2.005,
+            2.01
+          ]
+        },
+        "34": {
+          "n_spikes": 200,
+          "n_bursts": 170,
+          "window": [
+            1.84,
+            2.35
+          ],
+          "peak_times": [
+            2.055,
+            2.06,
+            2.065,
+            2.07,
+            2.075
+          ]
+        },
+        "12": {
+          "n_spikes": 257,
+          "n_bursts": 195,
+          "window": [
+            1.715,
+            3.225
+          ],
+          "peak_times": [
+            1.97,
+            1.975,
+            1.98,
+            1.985,
+            1.99
+          ]
+        },
+        "50": {
+          "n_spikes": 130,
+          "n_bursts": 117,
+          "window": [
+            1.705,
+            2.37
+          ],
+          "peak_times": [
+            1.995,
+            2.0,
+            2.005,
+            2.01,
+            2.015
+          ]
+        }
+      }
+    }
+  },
+  "saved_at": "2026-10-26T08:16:41.435144",
+  "entries": [
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "48"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "48"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "34"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "34"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "12"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "12"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "wcset",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "sloreta",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "cset",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "dspm",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "wmne",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_window",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_window_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_absrank_peak_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_window",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_window_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "correlation_spatial_signed_peak",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "correlation_spatial_signed_peak_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_window",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_window_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    },
+    {
+      "metric": "auc_spatial_peak",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "50"
+      },
+      "array_coord_names": []
+    },
+    {
+      "metric": "auc_spatial_peak_boot",
+      "scalar_coords": {
+        "Method": "beltrami",
+        "Subject": "50"
+      },
+      "array_coord_names": [
+        "draw"
+      ]
+    }
+  ]
+}

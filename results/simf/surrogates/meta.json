@@ -1,30 +1,12 @@
 {
   "name": "sub-10 simulation validation - surrogates",
   "metadata": {
-    "derived": {
-      "ref_loc": {
-        "dspm": 11.231609507155992,
-        "sloreta": 14.005507641007341
-      },
-      "ref_corr": {
-        "qrp": {
-          "dspm": 0.09303622385329915,
-          "sloreta": 0.09716612974491835
-        },
-        "pp": {
-          "dspm": 0.12730266164286272,
-          "sloreta": 0.1369664702050421
-        }
-      },
-      "wcset_beltrami_qrp_median": 0.2782566484461588,
-      "wcset_beltrami_pp_median": 0.48816675747768534
-    },
     "units": {
       "correlation": "r",
       "localization_error": "mm"
     }
   },
-  "saved_at": "2026-08-21T21:46:09.261108",
+  "saved_at": "2026-10-23T20:07:18.611313",
   "entries": [
     {
       "metric": "localization_error",

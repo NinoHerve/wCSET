@@ -2703,8 +2703,10 @@ against this machine's free space, and it protects the actually slow step
   has no reason to apply here). wCSET's `depth` and `harm` are now fixed at
   `0.2` and `5` respectively, with `harmonic_method="lowpass"` now passed
   explicitly (superseding this file's earlier `depth=0.8`/`harm=0.8`/default
-  `"gap"`), `lambda2=0.1` unchanged - matches
-  `surrogate_reconstruction.py`'s convention. CSET's `depth` and `lambda2`
+  `"gap"`). wCSET's `lambda2` is SNR-adaptive (`max(0.01, 1/snr**2)`, per
+  run), as in `solve_inverse.py`, so that 0% matches the flagship's wCSET
+  (superseding a fixed `lambda2=0.1`) - same as
+  `surrogate_reconstruction.py`. CSET's `depth` and `lambda2`
   are fixed at `0.2` and `0.1` respectively, per explicit instruction -
   superseding this file's earlier `depth=0.8`/`lambda2=1.0` (itself raised
   from `0.1`, see `solve_inverse.py`'s prose above for the
@@ -2873,13 +2875,19 @@ def run_degradation_reconstruction(overwrite=False):
   def make_reconstruct(eigvec, eigval):
     def reconstruct(ctx):
       data, ncov = ctx["phase_data"], ctx["ncov"]
+      # SNR-adaptive lambda2 for wCSET, from the run's full (uncropped) ave - same rule as solve_inverse.py;
+      # CSET keeps its fixed 0.1
+      snr, _ = mm.analysis.eeg.estimate_evoked_snr(
+        evoked=ctx["ave"], baseline=ctx["simulator"].epoch_config.baseline, noise_cov=ncov
+      )
+      lambda2_auto = max(0.01, 1.0 / (snr.max() ** 2))
       inv_wcset = mm.analysis.inverse.wCSET(
         forward=fwd, noise_cov=ncov, depth=0.2, eigenvectors=eigvec, eigenvalues=eigval,
         harm=5, harmonic_method="lowpass",
       )
       inv_cset = mm.analysis.inverse.CSET(forward=fwd, noise_cov=ncov, depth=0.2, eigenvectors=eigvec)
       solutions = {
-        "wcset": inv_wcset.solve(data, lambda2=0.1),
+        "wcset": inv_wcset.solve(data, lambda2=lambda2_auto),
         "cset": inv_cset.solve(data, lambda2=0.1),
       }
       return {"solutions": solutions}
@@ -2936,7 +2944,7 @@ def run_degradation_reconstruction(overwrite=False):
   metrics.metadata["units"] = {"correlation": "r", "localization_error": "mm"}
   metrics.save(fmetrics, overwrite=overwrite)
 
-run_degradation_reconstruction(overwrite=True)  # must force-regen: switched from half- to quarter-rising-phase (ratio=0.25, "qrp" - was "hrp"/ratio=0.5); permutation-only now (deletion/addition dropped), correlation_pp/ap_qrp/ap_pp dropped, correlation_qrp/localization_error_qrp renamed to correlation/localization_error (+ phase="qrp" coord), and now registers a `region` coordinate per entry (was previously absent), so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region
+run_degradation_reconstruction(overwrite=True)  # must force-regen: wCSET now uses the SNR-adaptive lambda2 (was a fixed 0.1); switched from half- to quarter-rising-phase (ratio=0.25, "qrp" - was "hrp"/ratio=0.5); permutation-only now (deletion/addition dropped), correlation_pp/ap_qrp/ap_pp dropped, correlation_qrp/localization_error_qrp renamed to correlation/localization_error (+ phase="qrp" coord), and now registers a `region` coordinate per entry (was previously absent), so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region
 ```
 
 ## Experiment 3: Surrogate-Connectome Reconstruction & Validation
@@ -2985,16 +2993,12 @@ cell now checkpoints each surrogate's suite to a transient
 `results/simf/surrogates/_checkpoint/{surrogate}` folder as it finishes
 (tagged `Surrogate=` in addition to `Method=`/`region=`/`phase=`) - giving
 the same crash-resumability the old per-surrogate files gave, without
-keeping 5 files around permanently. `simf_statistics_surrogate.py` below
-(in the Statistics section) concatenates all 5 checkpoints, merges in the
+keeping 5 files around permanently. `simf_assembly_surrogate.py` below
+(in the Suite Assembly section) concatenates all 5 checkpoints, merges in the
 flagship's "original" (undegraded) values under `Surrogate="original"`, and
 saves the result as one combined `results/simf/surrogates` suite - then
 deletes `_checkpoint/`, since its contents are now fully redundant with the
-combined suite. That merge step needs the flagship suite's own
-`metadata["derived"]` (for the qrp/pp median interpolation), which is only
-populated once `simf_statistics_flagship.py` has run - which is why the
-merge happens in the Statistics section (already ordered after flagship's
-own stats cell) rather than here.
+combined suite.
 
 **Parameter choices:**
 
@@ -3010,8 +3014,9 @@ own stats cell) rather than here.
   superseding this file's earlier `depth=0.8`/`lambda2=1.0` - itself raised
   from `0.1`, see `solve_inverse.py`'s prose above for the
   `lambda2-tuning.ipynb` sweep this comes from). wCSET's `depth = 0.2`,
-  `harmonic_method="lowpass"`, `lambda2 = 0.1` unchanged across all 5
-  surrogates (also per explicit instruction, superseding the earlier
+  `harmonic_method="lowpass"`, SNR-adaptive `lambda2` (`max(0.01,
+  1/snr**2)`, per run, as in `solve_inverse.py`, superseding a fixed `0.1`)
+  across all 5 surrogates (also per explicit instruction, superseding the earlier
   `depth=0.8`/`harm=0.8`/default `"gap"`) - not retuned per surrogate/basis,
   a documented assumption, not a verified sub-sweep (parallel to the same
   assumption flagged for the noise-robustness experiment).
@@ -3040,9 +3045,8 @@ own stats cell) rather than here.
   `beltrami` (itself an earlier sweep in the same tutorial notebook, before
   `mindmap` implemented the paper's own log-form prior directly - see
   `beltrami_harmonics_notes.md` in the `mindmap` repo for that superseded
-  decision). `lambda2=0.1` (shared with CSET, fixed per this experiment's
-  own convention) is unaffected by this change, for `beltrami` or any other
-  surrogate.
+  decision). `lambda2` is the same SNR-adaptive value as every other
+  surrogate's wCSET (CSET keeps its fixed `0.1`).
 - **CSET/wCSET only** - matches `degradation_reconstruction.py`'s
   convention exactly.
 - Reconstruction at quarter-rising-phase and peak-phase only, not the full
@@ -3050,7 +3054,7 @@ own stats cell) rather than here.
 - **Output**: one checkpoint `MetricSuite` per surrogate, saved to
   `results/simf/surrogates/_checkpoint/{surrogate}` - transient, see ⚠ note
   above; combined into the final `results/simf/surrogates` suite by
-  `simf_statistics_surrogate.py` in the Statistics section.
+  `simf_assembly_surrogate.py` in the Suite Assembly section.
 - `n_threads_per_job=1` on the `run_parallel_pipeline` call - see project
   memory on thread capping; `n_jobs_solve=25` already saturates this
   machine's 32-core budget, so no per-worker headroom for more than 1 BLAS
@@ -3085,7 +3089,7 @@ n_jobs_solve = 25   # reconstruct+score, parallelized across probe-set runs
 
 def run_surrogate_reconstruction(overwrite=False):
   # checkpoint folder - transient, see prose above. Not the final suite
-  # (results/simf/surrogates), which simf_statistics_surrogate.py builds by
+  # (results/simf/surrogates), which simf_assembly_surrogate.py builds by
   # concatenating these 5 plus the flagship's "original" values.
   checkpoint_dir = Path("../results/simf/surrogates/_checkpoint")
   fmetrics = {s: checkpoint_dir/s for s in surrogates}
@@ -3142,6 +3146,12 @@ def run_surrogate_reconstruction(overwrite=False):
   def make_reconstruct(eigvec, eigval, surrogate):
     def reconstruct(ctx):
       data, ncov = ctx["phase_data"], ctx["ncov"]
+      # SNR-adaptive lambda2 for wCSET, from the run's full (uncropped) ave - same rule as solve_inverse.py;
+      # CSET keeps its fixed 0.1
+      snr, _ = mm.analysis.eeg.estimate_evoked_snr(
+        evoked=ctx["ave"], baseline=ctx["simulator"].epoch_config.baseline, noise_cov=ncov
+      )
+      lambda2_auto = max(0.01, 1.0 / (snr.max() ** 2))
       if surrogate == "beltrami":
         # GBF paper's log-form spectral prior (Wang et al. 2026, Nat Biomed
         # Eng) - depth=0 and cutoff=150 per the dedicated sweep in
@@ -3158,7 +3168,7 @@ def run_surrogate_reconstruction(overwrite=False):
         )
       inv_cset = mm.analysis.inverse.CSET(forward=fwd, noise_cov=ncov, depth=0.2, eigenvectors=eigvec)
       solutions = {
-        "wcset": inv_wcset.solve(data, lambda2=0.1),
+        "wcset": inv_wcset.solve(data, lambda2=lambda2_auto),
         "cset": inv_cset.solve(data, lambda2=0.1),
       }
       return {"solutions": solutions}
@@ -3215,258 +3225,98 @@ def run_surrogate_reconstruction(overwrite=False):
     metrics.save(fmetrics[surrogate], overwrite=overwrite)
     print(f"[{surrogate}] done ({len(inverse_tasks)} runs x 2 methods).")
 
-run_surrogate_reconstruction(overwrite=True)  # must force-regen: beltrami's wCSET switched from depth=0.2/harm=30/"lowpass" to the GBF paper's depth=0/"logpass"/cutoff=150 mechanism (every other surrogate's depth=0.2/harm=5/"lowpass" is unaffected); switched from half- to quarter-rising-phase (ratio=0.25, "qrp" - was "hrp"/ratio=0.5); old metrics used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; ap_qrp/ap_pp dropped; correlation_qrp/correlation_pp/localization_error_qrp renamed to correlation/localization_error (+ phase= coord); now registers `Surrogate=`/`region=` coordinates per entry (were previously absent/implicit in the filename), so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region and select surrogates by filter instead of by file
+run_surrogate_reconstruction(overwrite=True)  # must force-regen: wCSET now uses the SNR-adaptive lambda2 (was a fixed 0.1); beltrami's wCSET switched from depth=0.2/harm=30/"lowpass" to the GBF paper's depth=0/"logpass"/cutoff=150 mechanism (every other surrogate's depth=0.2/harm=5/"lowpass" is unaffected); switched from half- to quarter-rising-phase (ratio=0.25, "qrp" - was "hrp"/ratio=0.5); old metrics used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; ap_qrp/ap_pp dropped; correlation_qrp/correlation_pp/localization_error_qrp renamed to correlation/localization_error (+ phase= coord); now registers `Surrogate=`/`region=` coordinates per entry (were previously absent/implicit in the filename), so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region and select surrogates by filter instead of by file
 ```
 
-# Statistics
+# Suite Assembly
 
-Computes and caches every statistical test - and every derived scalar quoted
-in `index.qmd`'s prose (medians, chance/reference lines, interpolated
-values) - for this study, so `index.qmd` only ever reloads already-computed
-results and plots them; it never computes a statistic itself. This works
-because `MetricSuite.stat.*` calls are cached by
-`(metric, group_by, test, unit_col, pairing_col, subject_order, filters, pair)`
-(not `correction`/`alpha`) and that cache is persisted into each suite's
-`stats/` subfolder by `save()` and restored by `load()` - so `index.qmd`
-calling the exact same `stat.wilcoxon`/`.cluster_permutation` signature
-below gets an instant cache hit, never a recomputation. Every suite here is
-reloaded from disk, augmented with `stat.*` results and a
-`metadata["derived"]` dict, and re-saved in place (`overwrite=True`) -
-except the combined surrogates suite, which is assembled here from
-`surrogate_reconstruction.py`'s per-surrogate checkpoints plus the
-flagship's "original" values (previously built ad-hoc inside `index.qmd`,
-which can no longer construct suites of its own).
-
-## Flagship
-
-```{python filename="simf_statistics_flagship.py"}
-# | output: false
-from pathlib import Path
-import mindmap as mm
-
-METHODS = ["wcset", "cset", "sloreta", "dspm", "wmne"]
-COMPETITORS = [m for m in METHODS if m != "wcset"]
-
-fmetrics = Path("../results/simf/flagship")
-flag_metrics = mm.metric.MetricSuite.load(fmetrics)
-
-comparisons = flag_metrics.stat.build_comparisons(["wcset"], COMPETITORS)
-
-# Wilcoxon signed-rank vs. wCSET, region-paired - same test simf_localization_stats.py
-# in index.qmd will ask for again (cache hit). phase="qrp" always (no pp
-# counterpart exists for this metric).
-flag_metrics.stat.wilcoxon(
-    "localization_error", group_by="Method", comparisons=comparisons, pairing_col="region", filters={"phase": "qrp"},
-)
-
-# Region-paired cluster-permutation vs. wCSET, over time.
-times_order = sorted(flag_metrics.to_df(metrics="correlation")["times"].unique())
-flag_metrics.stat.cluster_permutation(
-    "correlation", coord="times", group_by="Method", comparisons=comparisons, pairing_col="region",
-    coord_order=times_order, higher_is_better=True,
-    n_permutations=3000, seed=0,
-)
-
-loc_df = flag_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})
-flag_metrics.metadata["derived"] = {
-    "loc_median": loc_df.groupby("Method")["Value"].median().to_dict(),
-    "qrp_time_median": float(flag_metrics.to_df(metrics="qrp_time")["Value"].median()),
-    "pp_time_median": float(flag_metrics.to_df(metrics="pp_time")["Value"].median()),
-}
-flag_metrics.metadata["units"] = {"correlation": "r", "localization_error": "mm", "qrp_time": "s", "pp_time": "s"}
-flag_metrics.save(fmetrics, overwrite=True)
-```
-
-## Noise/SNR Sweep (Experiment 1)
-
-```{python filename="simf_statistics_noise_sweep.py"}
-# | output: false
-from pathlib import Path
-import mindmap as mm
-
-METHODS = ["wcset", "cset", "sloreta", "dspm", "wmne"]
-COMPETITORS = [m for m in METHODS if m != "wcset"]
-
-fnoise = Path("../results/simf/noise_sweep")
-noise_metrics = mm.metric.MetricSuite.load(fnoise)
-comparisons = noise_metrics.stat.build_comparisons(["wcset"], COMPETITORS)
-
-# localization error is lower-is-better, unlike correlation below. phase="qrp"
-# always (no pp counterpart exists for this metric).
-noise_loc_snr_order = sorted(
-    noise_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})["snr"].unique(), reverse=True
-)
-noise_metrics.stat.cluster_permutation(
-    "localization_error", coord="snr", group_by="Method", comparisons=comparisons, pairing_col="region",
-    coord_order=noise_loc_snr_order, higher_is_better=False, filters={"phase": "qrp"},
-    n_permutations=3000, seed=0,
-)
-
-# correlation, once per phase (qrp/pp) - higher-is-better.
-noise_corr_snr_order = sorted(
-    noise_metrics.to_df(metrics="correlation", filters={"phase": "qrp"})["snr"].unique(), reverse=True
-)
-for phase in ["qrp", "pp"]:
-    noise_metrics.stat.cluster_permutation(
-        "correlation", coord="snr", group_by="Method", comparisons=comparisons, pairing_col="region",
-        coord_order=noise_corr_snr_order, higher_is_better=True, filters={"phase": phase},
-        n_permutations=3000, seed=0,
-    )
-
-def _nested_median(df):
-    # str(float(snr)), not str(snr): `snr` may come through as numpy int64 or
-    # float64 depending on pandas' dtype inference, but the sweep itself
-    # includes non-integer levels (e.g. 1.5), so the underlying column is
-    # always float - normalizing the key through float() first keeps lookups
-    # consistent regardless of which dtype this particular groupby produced.
-    out = {}
-    for (method, snr), v in df.groupby(["Method", "snr"])["Value"].median().items():
-        out.setdefault(method, {})[str(float(snr))] = float(v)
-    return out
-
-noise_metrics.metadata["derived"] = {
-    "loc_median": _nested_median(noise_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})),
-    "corr_qrp_median": _nested_median(noise_metrics.to_df(metrics="correlation", filters={"phase": "qrp"})),
-    "corr_pp_median": _nested_median(noise_metrics.to_df(metrics="correlation", filters={"phase": "pp"})),
-}
-noise_metrics.metadata["units"] = {"correlation": "r", "localization_error": "mm"}
-noise_metrics.save(fnoise, overwrite=True)
-```
+Every statistic (tests, effect sizes, confidence intervals, medians, reference
+lines) is computed in `index.qmd` (and `annex/annex.qmd`), next to the figure
+or sentence that reports it. This document only produces metrics. The two
+chunks below finish that job for the experiments whose suite needs data from
+another one: the degradation suite gets the flagship's sLORETA and dSPM values as
+its connectome-agnostic baselines, and the surrogate suite is assembled from
+`surrogate_reconstruction.py`'s per-surrogate checkpoints plus the flagship's
+"original" (true-connectome) values. Both are guarded, so rerunning them never
+duplicates rows or fails on already-assembled data.
 
 ## Connectome Degradation (Experiment 2)
 
-```{python filename="simf_statistics_degradation.py"}
+```{python filename="simf_assembly_degradation.py"}
 # | output: false
 from pathlib import Path
 import numpy as np
 import pandas as pd
 import mindmap as mm
 
-# per explicit instruction, only the permutation experiment is
-# computed/plotted anywhere in this document - deletion/addition are no
-# longer produced by degradation_reconstruction.py either.
-operator = "permutation"
-
 flag_metrics = mm.metric.MetricSuite.load("../results/simf/flagship")
-
-# dSPM/sLORETA are connectome-agnostic (not recomputed per degradation
-# level), so their flagship (undegraded) values are reused as flat
-# reference lines for both metrics.
-flag_loc = flag_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})
-deg_ref_loc = {m: float(flag_loc[flag_loc["Method"] == m]["Value"].median()) for m in ["dspm", "sloreta"]}
-
-qrp_median = flag_metrics.metadata["derived"]["qrp_time_median"]
-corr_raw_df = flag_metrics.to_df(metrics="correlation", filters={"Method": ["dspm", "sloreta"]})
-deg_ref_corr = {}
-for m in ["dspm", "sloreta"]:
-    curve = corr_raw_df[corr_raw_df["Method"] == m].groupby("times")["Value"].median().sort_index()
-    deg_ref_corr[m] = float(np.interp(qrp_median, curve.index, curve.values))
-
-def _median_at(df, method, pct):
-    return float(df[(df["Method"] == method) & (df["percentage"] == pct)]["Value"].median())
-
-def _median_range(df, method, pct_min, pct_max):
-    """(min, max) of the per-percentage median, over percentages in
-    [pct_min, pct_max] - used for the 'stayed within X-Y' range claims in
-    prose, computed from the data rather than eyeballed off the figure."""
-    sub = df[(df["Method"] == method) & (df["percentage"] >= pct_min) & (df["percentage"] <= pct_max)]
-    by_pct = sub.groupby("percentage")["Value"].median()
-    return float(by_pct.min()), float(by_pct.max())
-
 fdeg = Path("../results/simf/degradation")
 deg_metrics = mm.metric.MetricSuite.load(fdeg)
 
-# sLORETA reference, injected into deg_metrics itself: sLORETA is
-# connectome-agnostic, so degradation_reconstruction.py never recomputes it
-# per level - its flagship (undegraded, same noise level/probe set)
+# sLORETA and dSPM references, injected into deg_metrics itself: both are
+# connectome-agnostic, so degradation_reconstruction.py never recomputes them
+# per level - their flagship (undegraded, same noise level/probe set)
 # per-region values are reused as a flat "no connectome" baseline,
 # replicated at every percentage, so stat.cluster_permutation can test
-# CSET/wCSET against it with the same region-paired machinery (it needs the
+# CSET/wCSET against them with the same region-paired machinery (it needs the
 # comparison method present as its own `Method=` row in deg_metrics, not
-# just a plotted reference line).
+# just a plotted reference line). Each reference is skipped once injected.
+REFERENCES = ["sloreta", "dspm"]
+present = set(deg_metrics.to_df(metrics="localization_error")["Method"].unique())
+to_inject = [m for m in REFERENCES if m not in present]
+if not to_inject:
+  print("References already injected into the degradation suite - nothing to do.")
+else:
+  percentages = sorted(deg_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})["percentage"].unique())
+  deg_regions = set(deg_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})["region"].unique())
+  qrp_median = float(flag_metrics.to_df(metrics="qrp_time")["Value"].median())
 
-# localization_error: flagship already stores this as a raw per-run scalar
-# at phase="qrp", tagged by region - same shape/semantics degradation
-# itself uses, so reuse the raw values directly.
-sloreta_loc = flag_metrics.to_df(metrics="localization_error", filters={"phase": "qrp", "Method": "sloreta"})
+  for method in to_inject:
+    # localization_error: flagship already stores this as a raw per-run scalar
+    # at phase="qrp", tagged by region - same shape/semantics degradation
+    # itself uses, so reuse the raw values directly.
+    ref_loc = flag_metrics.to_df(metrics="localization_error", filters={"phase": "qrp", "Method": method})
 
-# correlation: flagship stores this as a full per-run curve over `times`
-# (no phase tag) - interpolate each run's own curve at qrp_median (the same
-# reference time deg_ref_corr above already uses) to get one
-# qrp-comparable scalar per run, matching degradation's own
-# correlation_qrp semantics.
-sloreta_corr_curves = flag_metrics.to_df(metrics="correlation", filters={"Method": "sloreta"})
-sloreta_corr_rows = []
-for (region, rep), curve in sloreta_corr_curves.groupby(["region", "rep"]):
-    curve = curve.sort_values("times")
-    value = np.interp(qrp_median, curve["times"].to_numpy(), curve["Value"].to_numpy())
-    sloreta_corr_rows.append({"region": region, "Value": value})
-sloreta_corr = pd.DataFrame(sloreta_corr_rows)
+    # correlation: flagship stores this as a full per-run curve over `times`
+    # (no phase tag) - interpolate each run's own curve at the population median
+    # qrp time to get one qrp-comparable scalar per run, matching degradation's
+    # own correlation_qrp semantics.
+    ref_corr_curves = flag_metrics.to_df(metrics="correlation", filters={"Method": method})
+    ref_corr_rows = []
+    for (region, rep), curve in ref_corr_curves.groupby(["region", "rep"]):
+      curve = curve.sort_values("times")
+      value = np.interp(qrp_median, curve["times"].to_numpy(), curve["Value"].to_numpy())
+      ref_corr_rows.append({"region": region, "Value": value})
+    ref_corr = pd.DataFrame(ref_corr_rows)
 
-# percentages shared by both metrics - computed before injection (from the
-# existing wcset/cset rows only) so it can drive both the injection loop
-# below and coord_order for both cluster_permutation calls.
-percentages = sorted(deg_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})["percentage"].unique())
-
-deg_regions = set(deg_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})["region"].unique())
-missing_loc = deg_regions - set(sloreta_loc["region"].unique())
-missing_corr = deg_regions - set(sloreta_corr["region"].unique())
-if missing_loc or missing_corr:
-    raise ValueError(
-        f"flagship sLORETA data missing regions needed by degradation: "
+    missing_loc = deg_regions - set(ref_loc["region"].unique())
+    missing_corr = deg_regions - set(ref_corr["region"].unique())
+    if missing_loc or missing_corr:
+      raise ValueError(
+        f"flagship {method} data missing regions needed by degradation: "
         f"localization_error missing {sorted(missing_loc)}, correlation missing {sorted(missing_corr)}."
-    )
+      )
 
-# .to_numpy() on a pandas string column stays dtype=object (needs pickle to
-# round-trip), unlike every other region array in this codebase (built via
-# plain np.array(list_of_str), which numpy infers as fixed-width unicode) -
-# .astype(str) matches that convention so MetricSuite.save()'s
-# allow_pickle=False npz writer can serialize it.
-sloreta_loc_regions = sloreta_loc["region"].to_numpy().astype(str)
-sloreta_corr_regions = sloreta_corr["region"].to_numpy().astype(str)
+    # .to_numpy() on a pandas string column stays dtype=object (needs pickle to
+    # round-trip), unlike every other region array in this codebase (built via
+    # plain np.array(list_of_str), which numpy infers as fixed-width unicode) -
+    # .astype(str) matches that convention so MetricSuite.save()'s
+    # allow_pickle=False npz writer can serialize it.
+    ref_loc_regions = ref_loc["region"].to_numpy().astype(str)
+    ref_corr_regions = ref_corr["region"].to_numpy().astype(str)
 
-for pct in percentages:
-    deg_metrics.register(
-        "localization_error", sloreta_loc["Value"].to_numpy(),
-        Method="sloreta", percentage=pct, region=sloreta_loc_regions, phase="qrp",
-    )
-    deg_metrics.register(
-        "correlation", sloreta_corr["Value"].to_numpy(),
-        Method="sloreta", percentage=pct, region=sloreta_corr_regions, phase="qrp",
-    )
+    for pct in percentages:
+      deg_metrics.register(
+        "localization_error", ref_loc["Value"].to_numpy(),
+        Method=method, percentage=pct, region=ref_loc_regions, phase="qrp",
+      )
+      deg_metrics.register(
+        "correlation", ref_corr["Value"].to_numpy(),
+        Method=method, percentage=pct, region=ref_corr_regions, phase="qrp",
+      )
 
-deg_comparisons = deg_metrics.stat.build_comparisons(["sloreta"], ["cset", "wcset"])
-
-deg_metrics.stat.cluster_permutation(
-    "localization_error", coord="percentage", group_by="Method", comparisons=deg_comparisons,
-    pairing_col="region", coord_order=percentages, higher_is_better=False, filters={"phase": "qrp"},
-    n_permutations=3000, seed=0,
-)
-deg_metrics.stat.cluster_permutation(
-    "correlation", coord="percentage", group_by="Method", comparisons=deg_comparisons,
-    pairing_col="region", coord_order=percentages, higher_is_better=True, filters={"phase": "qrp"},
-    n_permutations=3000, seed=0,
-)
-
-loc_df = deg_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})
-corr_df = deg_metrics.to_df(metrics="correlation", filters={"phase": "qrp"})
-
-# permutation-specific median/median-range claims quoted in index.qmd's prose.
-derived = {
-    "ref_loc": deg_ref_loc,
-    "ref_corr": deg_ref_corr,
-    "loc_wcset_0_60": _median_range(loc_df, "wcset", 0, 60),
-    "loc_wcset_70": _median_at(loc_df, "wcset", 70),
-    "loc_wcset_100": _median_at(loc_df, "wcset", 100),
-    "corr_wcset_0": _median_at(corr_df, "wcset", 0),
-    "corr_wcset_100": _median_at(corr_df, "wcset", 100),
-    "corr_cset_0_60": _median_range(corr_df, "cset", 0, 60),
-    "corr_cset_100": _median_at(corr_df, "cset", 100),
-}
-
-deg_metrics.metadata["derived"] = derived
-deg_metrics.metadata["units"] = {"correlation": "r", "localization_error": "mm"}
-deg_metrics.save(fdeg, overwrite=True)
+  deg_metrics.metadata["units"] = {"correlation": "r", "localization_error": "mm"}
+  deg_metrics.save(fdeg, overwrite=True)
 ```
 
 ## Surrogate Connectomes (Experiment 3)
@@ -3478,9 +3328,10 @@ merges in the flagship's "original" (true-connectome) values under
 then tests original-vs-surrogate directly, region-paired, selecting a
 method/phase via `filters=` instead of loading a separate per-condition
 file. Once the combined suite is saved, `_checkpoint/` is deleted - its
-contents are now fully redundant with the combined suite.
+contents are now fully redundant with the combined suite - so this chunk only
+runs again after `surrogate_reconstruction.py` has written new checkpoints.
 
-```{python filename="simf_statistics_surrogate.py"}
+```{python filename="simf_assembly_surrogate.py"}
 # | output: false
 import shutil
 from pathlib import Path
@@ -3490,86 +3341,53 @@ import mindmap as mm
 
 surrogates = ["beltrami", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin"]
 methods2 = ["cset", "wcset"]
+checkpoint_dir = Path("../results/simf/surrogates/_checkpoint")
 
-flag_metrics = mm.metric.MetricSuite.load("../results/simf/flagship")
-flag_loc = flag_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})
-ref_loc = {m: float(flag_loc[flag_loc["Method"] == m]["Value"].median()) for m in ["dspm", "sloreta"]}
+if not checkpoint_dir.exists():
+  print("No surrogate checkpoints - the combined suite is already assembled.")
+else:
+  flag_metrics = mm.metric.MetricSuite.load("../results/simf/flagship")
+  flag_loc = flag_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})
 
-qrp_median = flag_metrics.metadata["derived"]["qrp_time_median"]
-pp_median = flag_metrics.metadata["derived"]["pp_time_median"]
-ref_methods = ["dspm", "sloreta"]
-corr_ref_df = flag_metrics.to_df(metrics="correlation", filters={"Method": ref_methods})
-ref_corr = {"qrp": {}, "pp": {}}
-for m in ref_methods:
-    curve = corr_ref_df[corr_ref_df["Method"] == m].groupby("times")["Value"].median().sort_index()
-    ref_corr["qrp"][m] = float(np.interp(qrp_median, curve.index, curve.values))
-    ref_corr["pp"][m] = float(np.interp(pp_median, curve.index, curve.values))
+  # The flagship suite has no correlation phase-scalar for cset/wcset (only
+  # the continuous correlation-over-time curve), so build one: for each
+  # (region, rep), interpolate that run's own curve at the population median
+  # qrp/pp time.
+  phase_time = {
+    "qrp": float(flag_metrics.to_df(metrics="qrp_time")["Value"].median()),
+    "pp": float(flag_metrics.to_df(metrics="pp_time")["Value"].median()),
+  }
+  corr_cw_df = flag_metrics.to_df(metrics="correlation", filters={"Method": methods2})
 
-# The flagship suite has no correlation phase-scalar for cset/wcset (only
-# the continuous correlation-over-time curve), so build one: for each
-# (region, rep), interpolate that run's own curve at the population median
-# qrp/pp time.
-corr_cw_df = flag_metrics.to_df(metrics="correlation", filters={"Method": methods2})
-
-def original_phase_scalar(method, phase_time):
+  def original_phase_scalar(method, t):
     df = corr_cw_df[corr_cw_df["Method"] == method]
     rows = []
     for (region, rep), g in df.groupby(["region", "rep"]):
-        g = g.sort_values("times")
-        rows.append((region, np.interp(phase_time, g["times"], g["Value"])))
+      g = g.sort_values("times")
+      rows.append((region, np.interp(t, g["times"], g["Value"])))
     return pd.DataFrame(rows, columns=["region", "Value"])
 
-phase_time = {"qrp": qrp_median, "pp": pp_median}
-
-# -- build the "original" (undegraded, true-connectome) entries -----------
-original = mm.metric.MetricSuite("original connectome (flagship)")
-for method in methods2:
+  # -- build the "original" (undegraded, true-connectome) entries -----------
+  original = mm.metric.MetricSuite("original connectome (flagship)")
+  for method in methods2:
     method_loc_df = flag_loc[flag_loc["Method"] == method]
     original.register(
-        "localization_error", method_loc_df["Value"].values,
-        Method=method, region=method_loc_df["region"].values.astype(str), Surrogate="original", phase="qrp",
+      "localization_error", method_loc_df["Value"].values,
+      Method=method, region=method_loc_df["region"].values.astype(str), Surrogate="original", phase="qrp",
     )
     for phase in ["qrp", "pp"]:
-        orig_df = original_phase_scalar(method, phase_time[phase])
-        original.register(
-            "correlation", orig_df["Value"].values,
-            Method=method, region=orig_df["region"].values.astype(str), Surrogate="original", phase=phase,
-        )
+      orig_df = original_phase_scalar(method, phase_time[phase])
+      original.register(
+        "correlation", orig_df["Value"].values,
+        Method=method, region=orig_df["region"].values.astype(str), Surrogate="original", phase=phase,
+      )
 
-# -- load the 5 per-surrogate checkpoints and concatenate everything ------
-checkpoint_dir = Path("../results/simf/surrogates/_checkpoint")
-checkpoints = [mm.metric.MetricSuite.load(checkpoint_dir/s) for s in surrogates]
-combined = mm.metric.MetricSuite.concat([original] + checkpoints, name="sub-10 simulation validation - surrogates")
+  # -- load the 5 per-surrogate checkpoints and concatenate everything ------
+  checkpoints = [mm.metric.MetricSuite.load(checkpoint_dir/s) for s in surrogates]
+  combined = mm.metric.MetricSuite.concat([original] + checkpoints, name="sub-10 simulation validation - surrogates")
+  combined.metadata["units"] = {"correlation": "r", "localization_error": "mm"}
+  combined.save(Path("../results/simf/surrogates"), overwrite=True)
 
-# -- statistics: original vs. each surrogate, per method (localization
-# error, phase="qrp" only) and per (method, phase) (correlation) ----------
-comparisons = combined.stat.build_comparisons(["original"], surrogates)
-for method in methods2:
-    combined.stat.wilcoxon(
-        "localization_error", group_by="Surrogate", comparisons=comparisons,
-        pairing_col="region", filters={"Method": method, "phase": "qrp"},
-    )
-    for phase in ["qrp", "pp"]:
-        combined.stat.wilcoxon(
-            "correlation", group_by="Surrogate", comparisons=comparisons,
-            pairing_col="region", filters={"Method": method, "phase": phase},
-        )
-
-# one-off medians quoted directly in index.qmd's prose
-_beltrami_qrp = combined.to_df(metrics="correlation", filters={"Method": "wcset", "Surrogate": "beltrami", "phase": "qrp"})
-_beltrami_pp = combined.to_df(metrics="correlation", filters={"Method": "wcset", "Surrogate": "beltrami", "phase": "pp"})
-
-combined.metadata["derived"] = {
-    "ref_loc": ref_loc,
-    "ref_corr": ref_corr,
-    "wcset_beltrami_qrp_median": float(_beltrami_qrp["Value"].median()),
-    "wcset_beltrami_pp_median": float(_beltrami_pp["Value"].median()),
-}
-combined.metadata["units"] = {"correlation": "r", "localization_error": "mm"}
-
-fsurrogates = Path("../results/simf/surrogates")
-combined.save(fsurrogates, overwrite=True)
-
-# checkpoint contents are now fully redundant with the combined suite
-shutil.rmtree(checkpoint_dir)
+  # checkpoint contents are now fully redundant with the combined suite
+  shutil.rmtree(checkpoint_dir)
 ```

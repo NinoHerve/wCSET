@@ -1161,7 +1161,7 @@ fpng = Path("../results/spike/resection_reconstruction_grid.png")
 
 def select_example_subject():
     """wCSET peak inside the resection, sLORETA's not, largest distance gap."""
-    # same exclusion list as spike_statistics.py's EXCLUDED_SUBJECTS below
+    # same exclusion list as EXCLUDED_SUBJECTS in index.qmd's results_resection_localization.py
     # (pat01: no usable resection mask; pat18: no real resection zone) -
     # duplicated here rather than referenced since that cell runs later in
     # this file.
@@ -1359,89 +1359,10 @@ def render_resection_example_panels(overwrite=False):
 render_resection_example_panels(overwrite=True)
 ```
 
-# Statistics
-
-Computes and caches every statistical test - and every derived scalar quoted
-in `index.qmd`'s prose (medians, chance level) - for this study, so
-`index.qmd` only ever reloads already-computed results and plots them; it
-never computes a statistic itself. This works because `MetricSuite.stat.*`
-calls are cached by `(metric, group_by, test, unit_col, pairing_col,
-subject_order, filters, pair)` (not `correction`/`alpha`), and that cache is
-persisted into the suite's `stats/` subfolder by `save()` and restored by
-`load()` - so `index.qmd` calling the exact same `stat.wilcoxon`
-signature below gets an instant cache hit, never a recomputation.
-
-`chance_cluster_threshold.py`'s output stays a plain CSV (per-subject
-calibration data, not naturally a per-method metric - folding it into the
-resection MetricSuite would force an artificial `Method="chance"` row
-nothing else needs); only its mean-across-subjects value moves here.
-
-```{python filename="spike_statistics.py"}
-# | output: false
-from pathlib import Path
-import pandas as pd
-import mindmap as mm
-
-METHODS = ["wcset", "cset", "sloreta", "dspm", "wmne", "beltrami"]
-COMPETITORS = [m for m in METHODS if m != "wcset"]
-
-fmetrics = Path("../results/spike/resection")
-resection = mm.metric.MetricSuite.load(fmetrics)
-
-# Excluded regardless of ILAE outcome - see the Cohort Summary at the end of
-# this file for the full breakdown, and the EEG Preprocessing / Quality
-# Assessment sections above for each subject's specific issue:
-# - pat01: no usable resection mask (two resection cavities, no candidate
-#   mask - RAMPS, man-seg, auto-seg, or RAMPS' own second-attempt mask -
-#   captures both) AND no EEG channel locations (unrelated, separate issue).
-# - pat18: no real resection zone at all - every candidate mask ends up
-#   attributing content essentially at random rather than to real resected
-#   tissue.
-# `MetricSuite.to_df`/`.stat.*`'s `filters=` only supports inclusion
-# (`.isin()`), not exclusion, so the included-subjects list is built as the
-# complement of this set rather than passed as a "not in" filter directly.
-EXCLUDED_SUBJECTS = ["pat01", "pat18"]
-all_subjects = resection.to_df(metrics="peak_distance_mm")["Subject"].unique()
-included_subjects = [s for s in all_subjects if s not in EXCLUDED_SUBJECTS]
-
-# seizure-free (ILAE=1) subjects only, minus the exclusions above, half
-# rising phase (the primary evaluation point) - the suite-native replacement
-# for a manual df[(df["ILAE"]==1) & ~df["Subject"].isin(EXCLUDED_SUBJECTS)]
-# filter.
-FILTERS = {"phase": "hrp", "ILAE": 1, "Subject": included_subjects}
-comparisons = resection.stat.build_comparisons(["wcset"], COMPETITORS)
-
-# Wilcoxon signed-rank vs. wCSET, subject-paired, FDR-corrected.
-resection.stat.wilcoxon(
-    "peak_distance_mm", group_by="Method", comparisons=comparisons, pairing_col="Subject", filters=FILTERS,
-)
-resection.stat.wilcoxon(
-    "cluster_fraction_pct", group_by="Method", comparisons=comparisons, pairing_col="Subject", filters=FILTERS,
-)
-
-df = resection.to_df(metrics=["peak_distance_mm", "cluster_fraction_pct"], filters=FILTERS)
-peak_df = df[df["Metric"] == "peak_distance_mm"]
-frac_df = df[df["Metric"] == "cluster_fraction_pct"]
-
-# chance level for cluster_fraction_pct: how much cortex a purely random
-# signal needs before ANY cluster reaches the 600 mm^2 size floor, ignoring
-# the "must touch the resection" requirement - a lower bound / reference,
-# not the true chance level (which is strictly harder to reach).
-chance = pd.read_csv("../results/spike/intermediate/chance_cluster_threshold.csv")
-
-resection.metadata["derived"] = {
-    "resection_n": int(peak_df["Subject"].nunique()),
-    "peak_median": peak_df.groupby("Method")["Value"].median().to_dict(),
-    "frac_median": frac_df.groupby("Method")["Value"].median().to_dict(),
-    "chance_pct": float(chance["mean_fraction_of_cortex"].mean() * 100),
-}
-resection.save(fmetrics, overwrite=True)
-```
-
 # Cohort Summary
 
-Final subject accounting for `spike_statistics.py`'s statistics above, out
-of all 45 subjects in `participants.tsv`:
+Final subject accounting for the Study II statistics
+(`results_resection_localization.py` in `index.qmd`), out of all 45 subjects in `participants.tsv`:
 
 - **Not symptom-free (ILAE != 1) - 17 subjects excluded** via
   `FILTERS = {"ILAE": 1, ...}`: pat29, pat30 (ILAE=2); pat31-pat36 (ILAE=3);
@@ -1450,7 +1371,7 @@ of all 45 subjects in `participants.tsv`:
   seizure-free population Study II evaluates in the first place, regardless
   of their mask.
 - **Symptom-free (ILAE=1) but excluded anyway - pat01, pat18** via
-  `EXCLUDED_SUBJECTS` in `spike_statistics.py`. See the EEG Preprocessing
+  `EXCLUDED_SUBJECTS` in `index.qmd`'s `results_resection_localization.py`. See the EEG Preprocessing
   and Quality Assessment sections above for the full detail on each:
   - pat01: no candidate resection mask (RAMPS, `man-seg`, `auto-seg`, or
     RAMPS' own second-attempt mask) captures both of its two resection

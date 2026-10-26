@@ -4,32 +4,9 @@
     "units": {
       "correlation": "r",
       "localization_error": "mm"
-    },
-    "derived": {
-      "ref_loc": {
-        "dspm": 11.231609507155992,
-        "sloreta": 14.005507641007341
-      },
-      "ref_corr": {
-        "dspm": 0.09303622385329915,
-        "sloreta": 0.09716612974491835
-      },
-      "loc_wcset_0_60": [
-        4.444224407322421,
-        9.58810035447585
-      ],
-      "loc_wcset_70": 12.370088435067377,
-      "loc_wcset_100": 25.790236634635317,
-      "corr_wcset_0": 0.31843072598537014,
-      "corr_wcset_100": 0.07757745385161442,
-      "corr_cset_0_60": [
-        0.15030324731079459,
-        0.20077558759125297
-      ],
-      "corr_cset_100": 0.04573429036426895
     }
   },
-  "saved_at": "2026-08-21T21:45:47.495455",
+  "saved_at": "2026-10-23T17:55:36.790930",
   "entries": [
     {
       "metric": "correlation",
@@ -352266,6 +352243,248 @@
       "metric": "correlation",
       "scalar_coords": {
         "Method": "sloreta",
+        "percentage": 100,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "localization_error",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 0,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 0,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "localization_error",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 10,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 10,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "localization_error",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 20,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 20,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "localization_error",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 30,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 30,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "localization_error",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 40,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 40,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "localization_error",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 50,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 50,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "localization_error",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 60,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 60,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "localization_error",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 70,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 70,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "localization_error",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 80,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 80,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "localization_error",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 90,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 90,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "localization_error",
+      "scalar_coords": {
+        "Method": "dspm",
+        "percentage": 100,
+        "phase": "qrp"
+      },
+      "array_coord_names": [
+        "region"
+      ]
+    },
+    {
+      "metric": "correlation",
+      "scalar_coords": {
+        "Method": "dspm",
         "percentage": 100,
         "phase": "qrp"
       },

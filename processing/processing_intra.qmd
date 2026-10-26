@@ -74,6 +74,37 @@ simulated source.
 
 # 2. Signal Processing (Electrophysiology)
 
+## Spike Overlaps
+
+The exported spike epochs (4 s each) carry no timestamps, but spikes less than 4 s apart were cut from the same
+stretch of recording, so their epochs share samples. This finds every such pair from the samples themselves
+(equal on all channels over the shared stretch; the iEEG epochs give the same pairs). A spike's pre-spike
+baseline can then hold the window of the spike before it: `eeg_preprocessing.py` leaves those baselines out of
+the noise covariance, and the spike-level bootstrap resamples spikes linked this way as one burst.
+
+```{python filename="spike_overlaps.py"}
+# | output: false
+from pathlib import Path
+import sys
+sys.path.insert(0, "..")
+from scripts.utils import loop
+from scripts.data_manager import IntraManager
+from scripts.spikes import find_overlaps
+
+dm = IntraManager("intra.config.yml")
+foverlaps = Path("../results/intra/spike_overlaps")
+
+@loop(subjects=dm.subjects)
+def detect_overlaps(sub, overwrite):
+    fout = foverlaps / f"sub-{sub}.csv"
+    if fout.exists() and not overwrite:
+        return
+    fout.parent.mkdir(parents=True, exist_ok=True)
+    find_overlaps(dm.load(sub, "eeg", task="spk")).to_csv(fout, index=False)
+
+detect_overlaps(overwrite=False)
+```
+
 ## Scalp EEG Conditioning
 
 Preprocesses the scalp EEG recorded concurrently with intracranial EEG.
@@ -85,23 +116,31 @@ pre-averaged).
 
 **Parameter choices:**
 
-- `baseline = [0, 1.5]` (s): same window used for both baseline correction
-  and the noise covariance's `tmax` below. **FILL**
+- `BASELINE = (0.5, 1.0)` (s): pre-spike baseline shared by every Study III
+  step (baseline correction, noise covariance and SNR here and in
+  `solve_inverse.py`, iEEG normalization and spike-window detection below).
+  Starts at 0.5 s rather than 0 so the window of a spike less than ~2 s
+  earlier falls into it less often (see Spike Overlaps).
 - `ref_channels = "average"`: same average-reference choice as
   `processing_spike.qmd`/`processing_simf.qmd` - **FILL** applies
   consistently across all three files.
-- `mne.compute_covariance(eeg, tmax=1.5, method="empirical")`: empirical
-  (sample) covariance rather than a shrinkage/regularized estimator (e.g.
-  `"shrunk"`, `"auto"`). **FILL**
+- `mne.compute_covariance(eeg[clean], tmin=0.5, tmax=1.0, method="empirical")`:
+  empirical (sample) covariance rather than a shrinkage/regularized
+  estimator (e.g. `"shrunk"`, `"auto"`), from clean baselines only: spikes
+  whose baseline holds an earlier spike's window are left out of the
+  covariance (but kept in the average). **FILL**
 
 ```{python filename="eeg_preprocessing.py"}
 # | output: false
 
 from pathlib import Path
 import sys
+import numpy as np
+import pandas as pd
 sys.path.insert(0, "..")
 from scripts.utils import loop, check_files
 from scripts.data_manager import IntraManager
+from scripts.spikes import window_in_baseline
 
 # data manager
 dm = IntraManager("intra.config.yml")
@@ -109,6 +148,8 @@ dm = IntraManager("intra.config.yml")
 # report folder
 report_dir = Path("../reports/")
 report_dir.mkdir(exist_ok=True)
+
+BASELINE = (0.5, 1.0)  # pre-spike baseline shared by every Study III step
 
 @loop(subjects=dm.subjects)
 def process_eeg(sub, overwrite):
@@ -124,9 +165,14 @@ def process_eeg(sub, overwrite):
 
     # 1. Process EEG
     eeg = eeg.set_eeg_reference(ref_channels="average", projection=True) # Average referencing
-    eeg = eeg.apply_baseline(baseline=[0,1.5])                           # Apply baseline correction
-    ncov = mne.compute_covariance(eeg, tmax=1.5, method="empirical")     # Noise covariance
-    ave = eeg.average()                                                  # averaging
+    eeg = eeg.apply_baseline(baseline=BASELINE)                          # Apply baseline correction
+
+    # Noise covariance from clean baselines only: leave out spikes whose baseline holds an earlier spike's window
+    window = mm.analysis.eeg.find_spike_window(dm.load(sub, "ieeg", task="spk").average(), baseline=BASELINE)
+    overlaps = pd.read_csv(f"../results/intra/spike_overlaps/sub-{sub}.csv")
+    clean = np.setdiff1d(np.arange(len(eeg)), window_in_baseline(overlaps, window, BASELINE)["later"])
+    ncov = mne.compute_covariance(eeg[clean], tmin=BASELINE[0], tmax=BASELINE[1], method="empirical")
+    ave = eeg.average()                                                  # averaging (every spike)
 
     # 2. save
     ave.save(fave, overwrite=overwrite)
@@ -137,7 +183,7 @@ def process_eeg(sub, overwrite):
         ave, ncov, subject_id=sub, fname=report_dir/f"sub-{sub}_desc-intra_ave.html",
     )
 
-process_eeg(overwrite=False)
+process_eeg(overwrite=True)  # must force-regen: baseline (0.5, 1.0) and clean-baseline covariance
 ```
 
 
@@ -679,7 +725,7 @@ def source_recon(sub, overwrite=True):
     eig_beltrami = dm.load(sub, "eig", desc="beltrami")  # Laplace-Beltrami mesh eigensystem
 
     # 1. Estimate regularizer parameter
-    snr, _ = mm.analysis.eeg.estimate_evoked_snr(ave, baseline=(0,1.5), noise_cov=ncov)
+    snr, _ = mm.analysis.eeg.estimate_evoked_snr(ave, baseline=(0.5, 1.0), noise_cov=ncov)  # eeg_preprocessing.py's BASELINE
     snr = snr.max()
     lambda2 = 1.0 / (snr**2)
 
@@ -687,11 +733,6 @@ def source_recon(sub, overwrite=True):
     print(f"Estimated lambda2: {lambda2:.3f}")
 
     lambda2 = max(0.01, lambda2)
-
-    # TEMP HACK (revert later): force lambda2=0.01 for wCSET/beltrami only,
-    # test requested out-of-band - doesn't touch the SNR-derived `lambda2`
-    # above, still shared by CSET's fixed 0.1 / sLORETA / dSPM / wMNE.
-    lambda2_hack = 0.01
 
     # ---------------------------------
     # 2. Run source reconstructions <3
@@ -707,7 +748,7 @@ def source_recon(sub, overwrite=True):
         harm = 5,                   # harmonic weighting
         harmonic_method = "lowpass",
     )
-    wcset = inv.solve(ave, lambda2_hack)
+    wcset = inv.solve(ave, lambda2)
 
     # 2.2 CSET
     inv = mm.analysis.inverse.CSET(
@@ -745,7 +786,7 @@ def source_recon(sub, overwrite=True):
         harmonic_method = "logpass",
         cutoff = 150,
     )
-    beltrami = inv.solve(ave, lambda2_hack)
+    beltrami = inv.solve(ave, lambda2)
 
     # 3. Save
     wcset.save(fwcset, overwrite=overwrite, verbose="warning")
@@ -851,15 +892,14 @@ instead; this project drops MCE from every study instead (see
 `processing_spike.qmd`'s `solve_inverse.py` prose) and keeps `wmne`. One
 transient checkpoint `MetricSuite` per subject is saved to
 `results/intra/_checkpoint/sub-{sub}/`, combined across subjects into
-`results/intra/combined` by `intra_statistics.py` below, and reloaded from
-there in `index.qmd`.
+`results/intra/combined` by `intra_assembly.py` below.
 
 **Parameter choices:**
 
-- `baseline = (0, 1.0)` (s): window used both for
+- `baseline = (0.5, 1.0)` (s): window used both for
   `normalize_evoked_by_baseline` and as `find_spike_window`'s noise
-  reference - same convention already used elsewhere in this study (e.g.
-  `intra_corr.py` in `index.qmd`). **FILL**
+  reference - `eeg_preprocessing.py`'s `BASELINE`, shared by every Study III
+  step.
 - `polarity_invariant = True` (correlation, cosine, explained variance):
   virtual-channel polarity is an arbitrary reference/orientation convention
   here, not a meaningful failure mode, so an overall sign flip shouldn't
@@ -887,7 +927,7 @@ methods = ["wcset", "sloreta", "cset", "dspm", "wmne", "beltrami"]
 @loop(subjects=dm.subjects)
 def evaluate_vieeg_fidelity(sub, overwrite):
     # output folder - transient checkpoint (one per subject), crash-resumable;
-    # intra_statistics.py concatenates all of these into results/intra/combined
+    # intra_assembly.py concatenates all of these into results/intra/combined
     # at the end and deletes this whole _checkpoint/ folder, since its
     # contents become fully redundant with the combined suite.
     fmetrics = Path(f"../results/intra/_checkpoint/sub-{sub}")
@@ -901,10 +941,10 @@ def evaluate_vieeg_fidelity(sub, overwrite):
 
     # 2. Preprocess: baseline-normalize, then restrict to the GFP-detected
     # spike window only (not the whole baseline+spike epoch)
-    iave_norm = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0, 1.0))
-    vave_norm = {m: mm.analysis.eeg.normalize_evoked_by_baseline(v, baseline=(0, 1.0)) for m, v in vave.items()}
+    iave_norm = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0.5, 1.0))
+    vave_norm = {m: mm.analysis.eeg.normalize_evoked_by_baseline(v, baseline=(0.5, 1.0)) for m, v in vave.items()}
 
-    tmin, tmax = mm.analysis.eeg.find_spike_window(iave, baseline=(0, 1.0))
+    tmin, tmax = mm.analysis.eeg.find_spike_window(iave, baseline=(0.5, 1.0))
 
     iave_win = iave_norm.copy().crop(tmin, tmax)
     vave_win = {m: v.copy().crop(tmin, tmax) for m, v in vave_norm.items()}
@@ -954,6 +994,38 @@ def evaluate_vieeg_fidelity(sub, overwrite):
 evaluate_vieeg_fidelity(overwrite=True)  # must force-regen: predates this session's solve_inverse.py/compute_vieeg.py changes, so overwrite=False would silently skip already-processed subjects and leave them stale
 ```
 
+## Suite Assembly
+
+Concatenates the per-subject checkpoints of `evaluate_vieeg_fidelity.py` into
+one suite (`results/intra/combined`), read by the renders below, then deletes
+the checkpoints. Runs only when the checkpoints exist, i.e. right after
+`evaluate_vieeg_fidelity.py`.
+
+```{python filename="intra_assembly.py"}
+# | output: false
+import shutil
+from pathlib import Path
+
+import mindmap as mm
+
+fcombined = Path("../results/intra/combined")
+checkpoint_dir = Path("../results/intra/_checkpoint")
+
+if checkpoint_dir.exists():
+    vieeg = mm.metric.MetricSuite.concat(
+        [mm.metric.MetricSuite.load(f) for f in sorted(checkpoint_dir.glob("sub-*"))],
+        name="Intra vIEEG fidelity (combined)",
+    )
+    vieeg.metadata["units"] = {
+        "correlation_spatial": "|r|", "correlation_temporal": "|r|", "correlation_spatio-temporal": "|r|",
+        "cosine_spatial": "unitless", "cosine_temporal": "unitless", "cosine_spatio-temporal": "unitless",
+        "explained_variance": "fraction (0-1)",
+        "rem_correlation_temporal": "unitless", "rem_correlation_spatial": "unitless",
+    }
+    vieeg.save(fcombined, overwrite=True)
+    shutil.rmtree(checkpoint_dir)  # fully redundant with the combined suite
+```
+
 ## Reconstruction Renders
 
 Two illustrative figures for `index.qmd`'s Study III Results, both for the
@@ -965,13 +1037,12 @@ on a translucent cortex, every contact colored by its absolute amplitude at
 one timepoint - the peak of the two virtual iEEGs' GFP within the spike
 window (each scaled to its own maximum, then averaged), i.e. when both
 reconstructions are strongest, a choice that favors neither method - with
-both methods shown at that same timepoint. (wCSET's rho exceeds sLORETA's at
-every candidate timepoint checked: the recorded GFP peak and each method's own
-GFP peak.) Signs are not shown: the polarity of intracranial contacts is not
-interpreted. Each contact is colored by the rank of its absolute amplitude
-across contacts (0 = weakest, 1 = strongest), and rho is the rank correlation of absolute amplitudes across
-contacts at that timepoint, the same quantity as `correlation_spatial_absrank`
-in the spatial-metrics section below. Only the PNGs and the small `sub-*.json` files
+both methods shown at that same timepoint. Each contact is colored by its
+signed amplitude, each map scaled symmetrically to the 95th percentile of its
+own absolute values and clipped there, so that a few very strong contacts do
+not wash out the rest. r is the signed Pearson correlation across contacts at
+that timepoint, the same quantity as `correlation_spatial_signed` in the
+spatial-metrics section below, whose window mean is the tested outcome. Only the PNGs and the small `sub-*.json` files
 (intracranial GFP curves, spike window, timepoint, rho) are produced here;
 `index.qmd` assembles the figure from them. `SensorPlot` keeps MNE's metres
 while `BrainPlot.from_source_space` uses mm, hence the montage rescaling below.
@@ -994,7 +1065,7 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 import pyvista as pv
-from scipy.stats import rankdata, spearmanr
+from scipy.stats import pearsonr
 
 import mindmap as mm
 import sys
@@ -1005,6 +1076,7 @@ pv.OFF_SCREEN = True
 
 dm = IntraManager("intra.config.yml")
 MAIN_SUBJECTS = ["48", "34"]  # display order matches index.qmd's own MAIN_SUBJECTS ("Subject 1" = 48)
+GLASS_SUBJECTS = ["48", "34", "12", "50"]  # index.qmd's SUBJECT_ORDER (Subjects 1-4)
 
 glass_dir = Path("../results/intra/glass_example")
 GLASS_METHODS = ["wcset", "sloreta"]
@@ -1024,10 +1096,10 @@ def best_nonspurious_channel(suite_df, sub, iave, min_burst_ratio=3.0):
         & (suite_df["Method"] == "wcset") & (suite_df["Subject"] == sub)
     ].sort_values("Value", ascending=False)
 
-    iave_norm = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0, 1.0))
-    tmin, tmax = mm.analysis.eeg.find_spike_window(iave, baseline=(0, 1.0))
+    iave_norm = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0.5, 1.0))
+    tmin, tmax = mm.analysis.eeg.find_spike_window(iave, baseline=(0.5, 1.0))
     baseline_rms = {
-        ch: np.sqrt(np.mean(iave_norm.copy().crop(0, 1.0).get_data(picks=[ch]) ** 2))
+        ch: np.sqrt(np.mean(iave_norm.copy().crop(0.5, 1.0).get_data(picks=[ch]) ** 2))
         for ch in df["channel"]
     }
     window = iave_norm.copy().crop(tmin, tmax)
@@ -1040,15 +1112,15 @@ def best_nonspurious_channel(suite_df, sub, iave, min_burst_ratio=3.0):
 
     raise RuntimeError(f"No non-spurious channel found for sub-{sub} - lower min_burst_ratio.")
 
-def render_glass_example(overwrite=False, cmap="Reds", view="superior"):
-    if (glass_dir / f"sub-{MAIN_SUBJECTS[-1]}.json").exists() and not overwrite:
+def render_glass_example(overwrite=False, cmap="RdBu_r", view="superior", clip_q=95):
+    if (glass_dir / f"sub-{GLASS_SUBJECTS[-1]}.json").exists() and not overwrite:
         print("Already exists, skipping.")
         return
     glass_dir.mkdir(parents=True, exist_ok=True)
 
-    baseline = (0, 1.0)
+    baseline = (0.5, 1.0)
 
-    for sub in MAIN_SUBJECTS:
+    for sub in GLASS_SUBJECTS:
         src = dm.load(sub, "fwd")["src"]
         raw_i = dm.load(sub, "i-ave", task="spk")
         ieeg = {"recorded": mm.analysis.eeg.normalize_evoked_by_baseline(raw_i, baseline=baseline)}
@@ -1065,12 +1137,11 @@ def render_glass_example(overwrite=False, cmap="Reds", view="superior"):
         idx = np.flatnonzero(win)[int(np.argmax(gfp_virtual))]
         t = ieeg["recorded"].times[idx]
 
-        # Contacts colored by the rank of their absolute amplitude at t (0 = weakest, 1 = strongest; sign not
-        # shown): a few very strong contacts would otherwise wash out the rest, and the ranks are exactly what
-        # rho compares. rho and the top-contact overlap are unaffected.
-        snap = {k: (rankdata(np.abs(e.data[:, idx])) - 1) / (e.data.shape[0] - 1) for k, e in ieeg.items()}
+        # Signed amplitude at t, each map's symmetric color range set at its own clip_q-th percentile of
+        # |amplitude| (stronger contacts saturate): a few very strong contacts would otherwise wash out the rest
+        amp = {k: e.data[:, idx] for k, e in ieeg.items()}
 
-        for k, values in snap.items():
+        for k, values in amp.items():
             sensors = ieeg["recorded"].copy().crop(t, t, include_tmax=True)
             sensors.data[:, 0] = values
             for d in sensors.info["dig"]:  # metres -> mm, to match the cortex
@@ -1080,7 +1151,7 @@ def render_glass_example(overwrite=False, cmap="Reds", view="superior"):
             )
             contacts = mm.viz.SensorPlot(
                 sensors, scalar_name="ieeg_z",
-                mesh_params={"clim": (0.0, 1.0), "cmap": cmap, "point_size": 18,
+                mesh_params={"clim_percentile": clip_q, "symmetric": True, "cmap": cmap, "point_size": 18,
                              "render_points_as_spheres": True, "show_scalar_bar": False},
             )
             (cortex + contacts).screenshot(glass_dir / f"sub-{sub}_{k}.png", window_size=(700, 700))
@@ -1096,11 +1167,13 @@ def render_glass_example(overwrite=False, cmap="Reds", view="superior"):
 
         meta = {
             "time": float(t), "window": [float(tmin), float(tmax)],
-            "clim": [0.0, 1.0], "cmap": cmap, "view": view,
-            "rho": {m: float(spearmanr(snap["recorded"], snap[m])[0]) for m in GLASS_METHODS},
+            "clim": [-1.0, 1.0],  # for the shared colorbar: in units of each map's own clip_q-th percentile
+            "cmap": cmap, "view": view, "clip_q": clip_q,
+            "r": {m: float(pearsonr(amp["recorded"], amp[m])[0]) for m in GLASS_METHODS},
             # number of the N_TOP strongest recorded contacts that are also among the method's N_TOP strongest
             "n_top": N_TOP,
-            "top_overlap": {m: int(len(set(np.argsort(-snap["recorded"])[:N_TOP]) & set(np.argsort(-snap[m])[:N_TOP])))
+            "top_overlap": {m: int(len(set(np.argsort(-np.abs(amp["recorded"]))[:N_TOP])
+                                       & set(np.argsort(-np.abs(amp[m]))[:N_TOP])))
                             for m in GLASS_METHODS},
             "times": times[shown].tolist(), "gfp": gfp,
         }
@@ -1119,10 +1192,10 @@ def render_channel_panel(overwrite=False):
         iave = dm.load(sub, "i-ave", task="spk")
         ch, corr = best_nonspurious_channel(suite_df, sub, iave)
 
-        iave_norm = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0, 1.0))
+        iave_norm = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=(0.5, 1.0))
         vave = {
             m: mm.analysis.eeg.normalize_evoked_by_baseline(
-                dm.load(sub, "v-ave", task="spk", desc=m), baseline=(0, 1.0),
+                dm.load(sub, "v-ave", task="spk", desc=m), baseline=(0.5, 1.0),
             )
             for m in ["wcset", "sloreta"]
         }
@@ -1151,7 +1224,7 @@ intracranial recording vs. wCSET's, sLORETA's, and the Beltrami operator's
 virtual iEEG, so a channel can be picked by hand rather than only seeing the
 automatically-selected one above. Each channel is normalized by its own
 baseline standard deviation over `(0.0, 0.5)` s (pre-spike segment,
-narrower than the `(0, 1.0)` s convention used for the metrics above).
+earlier than the `(0.5, 1.0)` s baseline used for the metrics above).
 
 ```{python filename="intra_reconstruction_all_channels.py"}
 # | output: true
@@ -1208,134 +1281,6 @@ render_all_channels_panel(overwrite=True)
 
 ![All channels, sub-48](../results/intra/reconstruction_channels_all_sub-48.png)
 
-# Statistics
-
-Computes and caches every statistical test - and every derived scalar quoted
-in `index.qmd`'s prose (win-rates, the exact subject/channel order used per
-test, the sub-12 cross-metric/competitor argmin) - for this study, so
-`index.qmd` only ever reloads already-computed results and plots them; it
-never computes a statistic itself. This works because `MetricSuite.stat.*`
-calls are cached by `(metric, group_by, test, unit_col, pairing_col,
-subject_order, filters, pair)` (not `correction`/`alpha`), and that cache is
-persisted into the suite's `stats/` subfolder by `save()` and restored by
-`load()` - so `index.qmd` calling the exact same `stat.ttest_ess`
-signature below gets an instant cache hit, never a recomputation.
-
-`MetricSuite.load_study()`, used previously to combine every `sub-*/`
-subfolder into one suite, no longer exists - replaced by
-`MetricSuite.concat([MetricSuite.load(f) for f in folders])`. Unlike
-`load_study()`, `concat()` does not pool cached stats, so every statistic is
-computed (and re-saved) here, after concatenation, into one new combined
-suite folder (`results/intra/combined`) - `index.qmd` loads that directly
-and never needs to call `concat()` itself. The per-subject checkpoint
-folders this concatenates (`results/intra/_checkpoint/sub-*`) are deleted
-once the combined suite is saved, since their contents are now fully
-redundant with it.
-
-```{python filename="intra_statistics.py"}
-# | output: false
-import re
-import shutil
-from pathlib import Path
-
-import pandas as pd
-import mindmap as mm
-
-METHODS = ["wcset", "sloreta", "cset", "dspm", "wmne", "beltrami"]
-COMPETITORS = [m for m in METHODS if m != "wcset"]
-SUBJECTS = ["34", "48", "12", "50"]
-METRIC_BLOCKS = [("correlation_temporal", "channel"), ("correlation_spatial", "times")]
-
-
-def natural_channel_order(channels):
-    """sEEG channel names are `<shaft letter code><contact number>` (e.g.
-    "AD1", "AD2", ..., "AD10") - alphabetical sort breaks true within-shaft
-    contact adjacency ("AD1", "AD10", "AD2", ...). Sorts on
-    (shaft, contact number) instead."""
-    def key(ch):
-        m = re.match(r"([A-Za-z]+)(\d+)", ch)
-        return (m.group(1), int(m.group(2))) if m else (ch, 0)
-    return sorted(channels, key=key)
-
-
-fcombined = Path("../results/intra/combined")
-checkpoint_dir = Path("../results/intra/_checkpoint")
-
-def compute_intra_statistics(overwrite=False):
-    if fcombined.exists() and not overwrite:
-        print("Already exists, skipping.")
-        return
-
-    folders = sorted(checkpoint_dir.glob("sub-*"))
-    vieeg = mm.metric.MetricSuite.concat(
-        [mm.metric.MetricSuite.load(f) for f in folders], name="Intra vIEEG fidelity (combined)"
-    )
-
-    win_rates, subject_orders, results = {}, {}, {}
-
-    for subject in SUBJECTS:
-        for metric, coord in METRIC_BLOCKS:
-            df_sub = vieeg.to_df(metrics=metric, filters={"Subject": subject})
-            if coord == "channel":
-                order = natural_channel_order(df_sub["channel"].dropna().unique().tolist())
-            else:
-                order = sorted(df_sub[coord].dropna().unique().tolist())
-
-            # complete-case pivot - mirrors PairwiseResult.compute's own
-            # dropna, so the win-rate denominator matches the paired test's
-            # own n exactly, and the resulting order is what `subject_order`
-            # below (part of the stat cache key) must reuse verbatim.
-            wide = df_sub.pivot_table(index=coord, columns="Method", values="Value", aggfunc="mean").reindex(order)
-            wide = wide.dropna(subset=["wcset"] + COMPETITORS)
-
-            comparisons = vieeg.stat.build_comparisons(["wcset"], COMPETITORS)
-            result = vieeg.stat.ttest_ess(
-                metric, group_by="Method", comparisons=comparisons,
-                pairing_col=coord, subject_order=wide.index.tolist(),
-                filters={"Subject": subject},
-            )
-            results[(subject, metric)] = result
-            subject_orders.setdefault(subject, {})[metric] = wide.index.tolist()
-            for c in COMPETITORS:
-                win_rates[f"{subject}|{metric}|{c}"] = float((wide["wcset"] - wide[c] > 0).mean())
-
-    # smallest p_corrected across every mode/competitor for sub-12 - found
-    # programmatically rather than assumed, so the prose stays correct even
-    # if a different comparison becomes the smallest on reanalysis.
-    def _row(subject, metric, competitor):
-        t = results[(subject, metric)].table
-        row = t[(t["group_a"] == "wcset") & (t["group_b"] == competitor)]
-        if row.empty:
-            row = t[(t["group_a"] == competitor) & (t["group_b"] == "wcset")]
-        return row.iloc[0]
-
-    sub12_rows = [
-        (metric, c, _row("12", metric, c)["p_corrected"])
-        for metric, _ in METRIC_BLOCKS for c in COMPETITORS
-    ]
-    sub12_min_metric, sub12_min_competitor, sub12_min_p = min(sub12_rows, key=lambda t: t[2])
-
-    vieeg.metadata["derived"] = {
-        "win_rate": win_rates,
-        "subject_order": subject_orders,
-        "sub12_min_metric": sub12_min_metric,
-        "sub12_min_competitor": sub12_min_competitor,
-        "sub12_min_p": float(sub12_min_p),
-    }
-    vieeg.metadata["units"] = {
-        "correlation_spatial": "|r|", "correlation_temporal": "|r|", "correlation_spatio-temporal": "|r|",
-        "cosine_spatial": "unitless", "cosine_temporal": "unitless", "cosine_spatio-temporal": "unitless",
-        "explained_variance": "fraction (0-1)",
-        "rem_correlation_temporal": "unitless", "rem_correlation_spatial": "unitless",
-    }
-    vieeg.save(fcombined, overwrite=True)
-
-    # checkpoint contents are now fully redundant with the combined suite
-    shutil.rmtree(checkpoint_dir)
-
-compute_intra_statistics(overwrite=True)  # must force-regen: register() calls above now tag Method/Subject explicitly (old suite-level subject= is gone), so any previously combined/saved suite predates this session's schema
-```
-
 
 # Spatial pattern metrics: amplitude rank correlation and AUC
 
@@ -1369,9 +1314,8 @@ recomputed after randomly permuting the contact labels of the virtual map
 (`N_PERM` permutations, the same permutations at every timepoint, as in Afnan
 et al. 2026); the 2.5-97.5th percentiles of that null are stored. Same
 preprocessing as `evaluate_vieeg_fidelity.py`: baseline-normalized
-(`(0, 1.0)` s), restricted to the GFP-detected spike window. Statistics mirror
-`intra_statistics.py`: paired t-test with autocorrelation-corrected effective
-sample size, wCSET vs. each other method, per subject, FDR-corrected.
+(`(0.5, 1.0)` s), restricted to the GFP-detected spike window. Statistics
+are computed in `index.qmd`, from the spike-level bootstrap below.
 
 ```{python filename="intra_spatial_metrics.py"}
 # | output: false
@@ -1390,7 +1334,7 @@ dm = IntraManager("intra.config.yml")
 METHODS = ["wcset", "sloreta", "cset", "dspm", "wmne", "beltrami"]
 COMPETITORS = [m for m in METHODS if m != "wcset"]
 SUBJECTS = ["48", "34", "12", "50"]
-BASELINE = (0, 1.0)
+BASELINE = (0.5, 1.0)  # eeg_preprocessing.py's BASELINE
 AUC_THRESHOLD = 0.3
 N_PERM = 1000
 
@@ -1454,30 +1398,8 @@ def compute_spatial_metrics(overwrite=False):
                 nulls.append(pd.DataFrame({"Metric": metric, "Method": m, "Subject": sub,
                                            "times": iave.times, "null_lo": lo, "null_hi": hi}))
 
-    # wCSET vs. each other method, per subject, timepoint-paired
-    rows = []
-    for sub in SUBJECTS:
-        for metric in ["correlation_spatial_absrank", "correlation_spatial_signed", "auc_spatial"]:
-            wide = suite.to_df(metrics=metric, filters={"Subject": sub}).pivot_table(
-                index="times", columns="Method", values="Value").dropna()
-            res = suite.stat.ttest_ess(
-                metric, group_by="Method", comparisons=suite.stat.build_comparisons(["wcset"], COMPETITORS),
-                pairing_col="times", subject_order=wide.index.tolist(), filters={"Subject": sub},
-            )
-            t = res.table
-            for c in COMPETITORS:
-                row = t[((t["group_a"] == "wcset") & (t["group_b"] == c)) | ((t["group_a"] == c) & (t["group_b"] == "wcset"))].iloc[0]
-                rows.append({
-                    "Subject": sub, "Metric": metric, "Competitor": c,
-                    "median_wcset": wide["wcset"].median(), "median_other": wide[c].median(),
-                    # oriented so positive = wCSET better
-                    "dz": row["effect_size"] if row["group_a"] == "wcset" else -row["effect_size"],
-                    "p_corrected": row["p_corrected"],
-                })
-
     suite.save(fspatial, overwrite=True)
     pd.concat(nulls).to_csv(fspatial / "null.csv", index=False)
-    pd.DataFrame(rows).to_csv(fspatial / "stats.csv", index=False)
 
 compute_spatial_metrics(overwrite=True)
 ```
@@ -1485,8 +1407,7 @@ compute_spatial_metrics(overwrite=True)
 Time courses per subject (columns) for each metric (rows): wCSET and
 sLORETA highlighted, the other methods thin; gray band = permutation chance
 range (2.5-97.5th percentiles, averaged over methods); dotted line = the
-metric's chance value (rho = 0, AUC = 0.5). The table below gives the median over
-the spike window and the paired comparison with wCSET (dz > 0: wCSET better).
+metric's chance value (rho = 0, AUC = 0.5).
 
 ```{python filename="intra_spatial_metrics_plot.py"}
 # | output: true
@@ -1501,7 +1422,6 @@ SPATIAL_METRICS = [("correlation_spatial_absrank", "Amplitude rank correlation (
 
 spatial_df = mm.metric.MetricSuite.load(fspatial).to_df()
 spatial_null = pd.read_csv(fspatial / "null.csv", dtype={"Subject": str})
-spatial_stats = pd.read_csv(fspatial / "stats.csv", dtype={"Subject": str})
 
 fig, axes = plt.subplots(len(SPATIAL_METRICS), len(SUBJECTS), figsize=(4.2 * len(SUBJECTS), 6.5),
                          sharex="col", sharey="row", squeeze=False)
@@ -1531,10 +1451,205 @@ fig.legend(handles, labels, loc="upper center", ncol=len(labels), fontsize=8, fr
            bbox_to_anchor=(0.5, 1.02))
 fig.tight_layout(rect=[0, 0, 1, 0.96])
 plt.show()
-
-spatial_stats.round(3).sort_values(["Metric", "Subject", "Competitor"])
 ```
 
 The per-method boxplots and paired differences of both metrics are drawn in
 `index.qmd` (`fig-intracranial-diff`, main-text subjects) and in the Annex
 (`fig-intra-full`, all subjects).
+
+
+# Spike-level bootstrap
+
+Uncertainty of the window-mean spatial metrics over the recorded spikes, for
+the paired comparisons in `index.qmd`. Each draw resamples the spikes with
+replacement, re-averages the same spikes for the EEG and the iEEG, re-inverts
+with every method and recomputes the metrics of `intra_spatial_metrics.py`,
+averaged over the spike window and over the 5 samples centred on the recorded
+iEEG's peak (one window mean and one peak mean per method and metric). Spikes are
+resampled as bursts: spikes linked because one's window falls in the other's
+baseline (see Spike Overlaps) are drawn together, so the units drawn are
+independent (a cluster bootstrap). Noise covariance and `lambda2` stay fixed
+from all spikes, as computed by `eeg_preprocessing.py`/`solve_inverse.py`. Each timepoint is
+solved independently, so each draw reconstructs only the baseline (for the z-score of the virtual iEEG)
+and the window.
+
+**Parameter choices:**
+
+- `N_BOOT = 1000`: smallest attainable p is 2/1001, enough for Holm across
+  the 5 competitors.
+- `PEAK_SAMPLES = 5`: samples averaged around the peak (25 ms at 200 Hz),
+  as Grova et al. (2016) averaged 5 samples around the spike peak. The peak is
+  the maximum of the recorded iEEG's GFP (standard deviation across contacts
+  of the baseline-normalized average) within the window, taken from all
+  spikes and kept fixed across draws, like the window.
+- One seed per subject (`int(sub)`), so draws are reproducible.
+- The average over all spikes must reproduce `intra_spatial_metrics.py`'s
+  window means (assert), which checks that `build_solvers` matches
+  `solve_inverse.py`.
+
+```{python filename="intra_spike_bootstrap.py"}
+# | output: false
+import shutil
+from pathlib import Path
+
+import mne
+import numpy as np
+import pandas as pd
+from joblib import Parallel, delayed
+
+import mindmap as mm
+import sys
+sys.path.insert(0, "..")
+from scripts.data_manager import IntraManager
+from scripts.spikes import window_in_baseline, find_bursts
+
+dm = IntraManager("intra.config.yml")
+METHODS = ["wcset", "sloreta", "cset", "dspm", "wmne", "beltrami"]
+SUBJECTS = ["48", "34", "12", "50"]
+SPATIAL_METRICS = {"correlation_spatial_absrank": spatial_absrank, "correlation_spatial_signed": spatial_r,
+                   "auc_spatial": spatial_auc}  # from intra_spatial_metrics.py
+BASELINE = (0.5, 1.0)  # eeg_preprocessing.py's BASELINE
+N_BOOT = 1000
+N_JOBS = 8  # more jobs slow each CSET solve down enough to lower throughput (14 jobs: ~70 draws/h; 6: ~100)
+CHUNK = 50  # draws per parallel task, saved as they finish
+PEAK_SAMPLES = 5  # samples averaged around the recorded iEEG's peak, as Grova et al. 2016
+SUMMARIES = ["window", "peak"]
+
+fboot = Path("../results/intra/bootstrap")
+checkpoint_dir = Path("../results/intra/_checkpoint_bootstrap")
+
+
+def build_solvers(sub):
+    """The inverse solutions with solve_inverse.py's parameters, set up once from all spikes (noise covariance
+    and lambda2 stay fixed across draws)."""
+    fwd = dm.load(sub, "fwd")
+    ave = dm.load(sub, "ave", task="spk")
+    ncov = dm.load(sub, "cov", task="spk")
+    eig = dm.load(sub, "eig", atlas="multicon")
+    eig_beltrami = dm.load(sub, "eig", desc="beltrami")
+    snr, _ = mm.analysis.eeg.estimate_evoked_snr(ave, baseline=BASELINE, noise_cov=ncov)
+    lambda2 = max(0.01, 1.0 / snr.max()**2)
+
+    wcset = mm.analysis.inverse.wCSET(forward=fwd, noise_cov=ncov, depth=0.2, eigenvectors=eig["vec"],
+                                      eigenvalues=eig["val"], harm=5, harmonic_method="lowpass")
+    cset = mm.analysis.inverse.CSET(forward=fwd, noise_cov=ncov, depth=0.2, eigenvectors=eig["vec"])
+    beltrami = mm.analysis.inverse.wCSET(forward=fwd, noise_cov=ncov, depth=0, eigenvectors=eig_beltrami["vec"],
+                                         eigenvalues=eig_beltrami["val"], harmonic_method="logpass", cutoff=150)
+    inv = mne.minimum_norm.make_inverse_operator(ave.info, fwd, ncov, depth=None, fixed=True)
+    inv_wmne = mne.minimum_norm.make_inverse_operator(ave.info, fwd, ncov, depth=2, fixed=True)
+    solvers = {
+        "wcset": lambda a: wcset.solve(a, lambda2),
+        "cset": lambda a: cset.solve(a, lambda2=0.1),
+        "sloreta": lambda a: mne.minimum_norm.apply_inverse(a, inv, lambda2, method="sLORETA", verbose="warning"),
+        "dspm": lambda a: mne.minimum_norm.apply_inverse(a, inv, lambda2, method="dSPM", verbose="warning"),
+        "wmne": lambda a: mne.minimum_norm.apply_inverse(a, inv_wmne, lambda2, method="MNE", verbose="warning"),
+        "beltrami": lambda a: beltrami.solve(a, lambda2),
+    }
+    return solvers, fwd["src"]
+
+
+def zscore(data, base):
+    """normalize_evoked_by_baseline's z-score (per channel), with the baseline samples given separately."""
+    std = base.std(1, keepdims=True)
+    std[std < 1e-15] = 1.0
+    return (data - base.mean(1, keepdims=True)) / std
+
+
+def evaluate(draws, eeg, ieeg, ave, iave, solvers, src, window, peak):
+    """Mean of each metric over the spike window and over the `peak` samples of the window, per method, for each
+    draw (array of spike indices): the same spikes re-averaged for EEG and iEEG, re-inverted, projected onto the
+    contacts."""
+    X, Xi = eeg.get_data(), ieeg.get_data()
+    # Each timepoint is solved alone: only the baseline (for the z-score) and the window are reconstructed. The
+    # baseline excludes its end sample, as in normalize_evoked_by_baseline.
+    segments = {"base": dict(tmin=BASELINE[0], tmax=BASELINE[1], include_tmax=False),
+                "win": dict(tmin=window[0], tmax=window[1])}
+    out = np.zeros((len(draws), len(METHODS), len(SPATIAL_METRICS), len(SUMMARIES)))
+    for d, idx in enumerate(draws):
+        ave_b, iave_b = ave.copy(), iave.copy()
+        ave_b.data, ave_b.nave = X[idx].mean(0), len(idx)
+        iave_b.data, iave_b.nave = Xi[idx].mean(0), len(idx)
+        crops = {seg: (ave_b.copy().crop(**c), iave_b.copy().crop(**c)) for seg, c in segments.items()}
+        x = zscore(crops["win"][1].data, crops["base"][1].data)
+        for k, m in enumerate(METHODS):
+            v = {seg: mm.analysis.eeg.compute_virtual_ieeg(src, solvers[m](e), i, conductivity=0.25, threshold=0.003)
+                 .reorder_channels(iave.ch_names).data for seg, (e, i) in crops.items()}
+            y = zscore(v["win"], v["base"])
+            for j, func in enumerate(SPATIAL_METRICS.values()):
+                values = func(x, y)
+                out[d, k, j] = values.mean(), values[peak].mean()
+    return out
+
+
+def bootstrap_subject(sub):
+    """Observed and N_BOOT burst-resampled window means for one subject, checkpointed per chunk of draws."""
+    fsub = checkpoint_dir / f"sub-{sub}"
+    fsub.mkdir(parents=True, exist_ok=True)
+
+    # EEG preprocessed as eeg_preprocessing.py; iEEG as ieeg_preprocessing.py
+    eeg = dm.load(sub, "eeg", task="spk")
+    eeg = eeg.set_eeg_reference(ref_channels="average", projection=True).apply_baseline(baseline=BASELINE)
+    ieeg = dm.load(sub, "ieeg", task="spk")
+    ave, iave = eeg.average(), ieeg.average()
+    window = mm.analysis.eeg.find_spike_window(iave, baseline=BASELINE)
+    solvers, src = build_solvers(sub)
+
+    # Peak: PEAK_SAMPLES centred on the recorded iEEG's GFP maximum within the window (all spikes), fixed across draws
+    iave_win = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=BASELINE).crop(*window)
+    gfp = iave_win.data.std(0)
+    half = PEAK_SAMPLES // 2
+    centre = int(np.clip(gfp.argmax(), half, len(gfp) - 1 - half))
+    peak = slice(centre - half, centre + half + 1)
+
+    # Bursts: spikes whose baseline holds an earlier spike's window, resampled whole; one seed per subject
+    overlaps = pd.read_csv(f"../results/intra/spike_overlaps/sub-{sub}.csv")
+    bursts = find_bursts(window_in_baseline(overlaps, window, BASELINE), len(eeg))
+    n_bursts = bursts.max() + 1
+    rng = np.random.default_rng(int(sub))
+    draws = [np.concatenate([np.flatnonzero(bursts == b) for b in rng.choice(n_bursts, n_bursts)])
+             for _ in range(N_BOOT)]
+
+    args = (eeg, ieeg, ave, iave, solvers, src, window, peak)
+    if not (fsub / "observed.npy").exists():
+        np.save(fsub / "observed.npy", evaluate([np.arange(len(eeg))], *args)[0])
+    todo = [c for c in range(0, N_BOOT, CHUNK) if not (fsub / f"draws_{c:04d}.npy").exists()]
+    Parallel(n_jobs=N_JOBS)(
+        delayed(lambda c: np.save(fsub / f"draws_{c:04d}.npy", evaluate(draws[c:c + CHUNK], *args)))(c) for c in todo
+    )
+    return {"n_spikes": len(eeg), "n_bursts": int(n_bursts), "window": [float(t) for t in window],
+            "peak_times": iave_win.times[peak].tolist()}
+
+
+def compute_bootstrap(overwrite=False):
+    if (fboot / "meta.json").exists() and not overwrite:
+        print("Already exists, skipping.")
+        return
+
+    counts = {sub: bootstrap_subject(sub) for sub in SUBJECTS}
+
+    suite = mm.metric.MetricSuite("Intra vIEEG spike-level bootstrap")
+    observed_ts = mm.metric.MetricSuite.load("../results/intra/spatial_metrics")
+    for sub in SUBJECTS:
+        fsub = checkpoint_dir / f"sub-{sub}"
+        observed = np.load(fsub / "observed.npy")
+        boot = np.concatenate([np.load(fsub / f"draws_{c:04d}.npy") for c in range(0, N_BOOT, CHUNK)])
+        peak_times = np.array(counts[sub]["peak_times"])
+        for k, m in enumerate(METHODS):
+            for j, metric in enumerate(SPATIAL_METRICS):
+                # all spikes must reproduce intra_spatial_metrics.py's time course (same pipeline); tolerance =
+                # numerical noise only (CSET's iterative solver: up to ~2e-4 on the rank metric)
+                ts = observed_ts.to_df(metrics=metric, filters={"Subject": sub, "Method": m})
+                at_peak = np.isclose(ts["times"].to_numpy()[:, None], peak_times).any(1)
+                assert at_peak.sum() == PEAK_SAMPLES, (sub, m, metric)
+                for i, (summary, expected) in enumerate(zip(SUMMARIES, [ts["Value"].mean(), ts["Value"][at_peak].mean()])):
+                    assert np.isclose(observed[k, j, i], expected, atol=1e-3), (sub, m, metric, summary, observed[k, j, i], expected)
+                    suite.register(f"{metric}_{summary}", np.array([observed[k, j, i]]), Method=m, Subject=sub)
+                    suite.register(f"{metric}_{summary}_boot", boot[:, k, j, i], Method=m, Subject=sub,
+                                   draw=np.arange(N_BOOT))
+    suite.metadata["bootstrap"] = {"n_boot": N_BOOT, "unit": "burst of spikes whose baseline holds an earlier spike's window",
+                                   "baseline": list(BASELINE), "peak_samples": PEAK_SAMPLES, "subjects": counts}
+    suite.save(fboot, overwrite=True)
+    shutil.rmtree(checkpoint_dir)
+
+compute_bootstrap(overwrite=True)  # must force-regen: SNR-derived lambda2 for wCSET/GBF too (was a fixed 0.01)
+```

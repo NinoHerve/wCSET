@@ -5,14 +5,22 @@ Statistics read-out and paired-difference panels come from mindmap (`PairwiseRes
 
 Imported with `from scripts.figures import *`; everything listed in `__all__` is available.
 """
+import hashlib
+import json
+import shutil
+from pathlib import Path
+
 import matplotlib.colors
 import matplotlib.image as mpimg
 import numpy as np
 from matplotlib.cm import ScalarMappable
+from mindmap.metric.results import ClusterResult, PairwiseResult
+
+_RESULT_TYPES = {"ClusterResult": ClusterResult, "PairwiseResult": PairwiseResult}
 
 __all__ = [
     "COLORS", "LINE_COLOR", "METHODS", "METHOD_LABELS", "FILL_ALPHA", "LINE_MATTE",
-    "fmt_p", "fmt_stat", "fmt_num", "main_cluster", "mark_reference", "matte",
+    "fmt_p", "fmt_stat", "fmt_num", "fmt_ci", "main_cluster", "cached", "mark_reference", "matte",
     "crop_white", "image_panel", "colorbar", "share_ylim", "column_headers",
 ]
 
@@ -54,9 +62,35 @@ def fmt_num(value, digits=1):
     """Plain descriptive number (medians, mm, %, correlation units) for prose."""
     return f"{value:.{digits}f}"
 
+def fmt_ci(row, name, digits=1, unit=""):
+    """Estimate with its 95% CI from a `vs()` row, e.g. '-0.8 mm (95% CI -1.2 to -0.4)': a test's effect size
+    (`<name>_ci_low`/`_ci_high` columns) or an `EstimateResult`'s `"estimate"` (`ci_low`/`ci_high`)."""
+    low, high = (f"{name}_ci_low", f"{name}_ci_high") if f"{name}_ci_low" in row else ("ci_low", "ci_high")
+    return f"{row[name]:.{digits}f}{unit} (95% CI {row[low]:.{digits}f} to {row[high]:.{digits}f})"
+
 def main_cluster(cluster_df):
     """Largest-mass cluster of one competitor's cluster table."""
     return cluster_df.loc[cluster_df["mass"].abs().idxmax()]
+
+def cached(test, folder, *args, **kwargs):
+    """`test(*args, **kwargs)` (a bound `suite.stat.*` method), reloaded from `folder` instead of rerun when
+    it was saved by the very same call and still matches the suite's data (`suite.verify`). For the
+    expensive cluster permutations, which index.qmd and the Annex both read."""
+    folder = Path(folder)
+    call = hashlib.sha1(repr((test.__name__, args, sorted(kwargs.items()))).encode()).hexdigest()
+    suite = test.__self__._suite
+    if (folder/"call.json").exists():
+        saved = json.loads((folder/"call.json").read_text())
+        if saved["call"] == call:
+            result = _RESULT_TYPES[saved["type"]].load(folder)
+            if suite.verify(result):
+                return result
+    result = test(*args, **kwargs)
+    if folder.exists():
+        shutil.rmtree(folder)
+    result.save(folder)
+    (folder/"call.json").write_text(json.dumps({"call": call, "type": type(result).__name__}))
+    return result
 
 # ---------------------------------------------------------------- labels and colors
 def mark_reference(ax, reference, suffix=" (ref.)"):
