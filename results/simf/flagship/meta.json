@@ -6,20 +6,9 @@
       "localization_error": "mm",
       "qrp_time": "s",
       "pp_time": "s"
-    },
-    "derived": {
-      "loc_median": {
-        "cset": 9.299061246682543,
-        "dspm": 11.231609507155992,
-        "sloreta": 14.005507641007341,
-        "wcset": 5.6583490440379265,
-        "wmne": 68.59765660245168
-      },
-      "qrp_time_median": 0.003999986171722425,
-      "pp_time_median": 0.01999998617172244
     }
   },
-  "saved_at": "2026-10-05T16:21:02.436083",
+  "saved_at": "2026-10-26T16:56:21.544944",
   "entries": [
     {
       "metric": "correlation",

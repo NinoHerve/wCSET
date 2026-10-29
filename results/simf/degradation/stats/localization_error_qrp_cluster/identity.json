@@ -34,8 +34,8 @@
   "correction": "holm",
   "alpha": 0.05,
   "family": "pair",
-  "data_key": "f6d3d2ad8b9aa520",
-  "computed_at": "2026-10-26T08:42:42.411126",
+  "data_key": "e8de5f87d4b5976a",
+  "computed_at": "2026-10-27T08:49:56.972156",
   "pairs": [
     [
       "sloreta",
@@ -59,22 +59,22 @@
       {
         "percentage_start": 80,
         "percentage_end": 100,
-        "mass": 18.511182746039477,
+        "mass": 17.06057780120825,
         "sign": 1,
-        "p_value": 0.005666666666666667,
+        "p_value": 0.008666666666666666,
         "significant": true,
-        "effect_size": 0.7008296019519974,
+        "effect_size": 0.6473292681072148,
         "effect_size_type": "cohens_dz",
-        "p_corrected": 0.005666666666666667
+        "p_corrected": 0.008666666666666666
       },
       {
         "percentage_start": 0,
         "percentage_end": 60,
-        "mass": -42.32961341515275,
+        "mass": -48.58945652343884,
         "sign": -1,
         "p_value": 0.0003333333333333333,
         "significant": true,
-        "effect_size": -0.6674241457705012,
+        "effect_size": -0.7725503759408844,
         "effect_size_type": "cohens_dz",
         "p_corrected": 0.0013333333333333333
       }
@@ -83,35 +83,46 @@
       {
         "percentage_start": 60,
         "percentage_end": 100,
-        "mass": 48.74697709472912,
+        "mass": 45.66168908288844,
         "sign": 1,
         "p_value": 0.0003333333333333333,
         "significant": true,
-        "effect_size": 1.2810586384667295,
+        "effect_size": 1.204185063203863,
         "effect_size_type": "cohens_dz",
         "p_corrected": 0.0013333333333333333
       },
       {
         "percentage_start": 0,
         "percentage_end": 40,
-        "mass": -20.97322782434089,
+        "mass": -24.02694344971944,
         "sign": -1,
-        "p_value": 0.001,
+        "p_value": 0.0003333333333333333,
         "significant": true,
-        "effect_size": -0.45268847131108,
+        "effect_size": -0.5175256737439278,
         "effect_size_type": "cohens_dz",
         "p_corrected": 0.0013333333333333333
       }
     ],
     "pair2": [
       {
-        "percentage_start": 0,
+        "percentage_start": 10,
+        "percentage_end": 10,
+        "mass": 2.865748375869164,
+        "sign": 1,
+        "p_value": 0.09366666666666666,
+        "significant": false,
+        "effect_size": 0.28657483758691643,
+        "effect_size_type": "cohens_dz",
+        "p_corrected": 0.09366666666666666
+      },
+      {
+        "percentage_start": 30,
         "percentage_end": 100,
-        "mass": 87.88579853804096,
+        "mass": 72.6206866563414,
         "sign": 1,
         "p_value": 0.0003333333333333333,
         "significant": true,
-        "effect_size": 1.123248559529706,
+        "effect_size": 1.2281621373070652,
         "effect_size_type": "cohens_dz",
         "p_corrected": 0.0013333333333333333
       }
@@ -120,11 +131,11 @@
       {
         "percentage_start": 0,
         "percentage_end": 100,
-        "mass": 114.12756852066296,
+        "mass": 104.56287628251422,
         "sign": 1,
         "p_value": 0.0003333333333333333,
         "significant": true,
-        "effect_size": 1.3168774624033275,
+        "effect_size": 1.187617181744789,
         "effect_size_type": "cohens_dz",
         "p_corrected": 0.0013333333333333333
       }

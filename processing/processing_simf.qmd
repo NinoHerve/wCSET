@@ -2627,9 +2627,11 @@ run_noise_sweep_comparison(overwrite=True)  # must force-regen: switched from ha
 
 Sweeps the permutation degradation operator on the *reconstruction-side*
 connectome only, at 0-100% severity, and rerun CSET/wCSET on the probe-set
-runs at each level - dSPM/sLORETA are connectome-agnostic, so their flagship
-probe-set results are reused unchanged as a flat reference (not recomputed
-here), same pattern as Experiment 3 (surrogates). No new simulation is
+runs at each level - dSPM/sLORETA are connectome-agnostic, so they are solved
+once per run (with the 0% connectome, on the same qrp/pp samples) and serve as
+a flat reference at every level, same pattern as Experiment 3 (surrogates).
+Localization error is scored at qrp, spatial correlation at pp, where the
+methods differ most. No new simulation is
 needed: like Experiment 3, this reuses the flagship's existing SNR=5,
 original-connectome `ave`/`cov`/`gold` files for the probe-set runs - only
 the reconstruction-side connectome changes. Purpose: figure out how much of
@@ -2698,7 +2700,8 @@ against this machine's free space, and it protects the actually slow step
   memory) validated a 5-repeat-per-level design as a possible follow-up, but
   this was deliberately not adopted here - single draw per level stays the
   design for this dataset.
-- **CSET/wCSET only**, not the noise-sweep's SNR-adaptive-lambda2/6-method
+- **CSET/wCSET at every level**, plus sLORETA/dSPM once per run as the
+  flat references (wMNE not needed), not the noise-sweep's SNR-adaptive-lambda2/6-method
   convention (this experiment doesn't vary noise, so SNR-adaptive `lambda2`
   has no reason to apply here). wCSET's `depth` and `harm` are now fixed at
   `0.2` and `5` respectively, with `harmonic_method="lowpass"` now passed
@@ -2757,6 +2760,45 @@ n_reps_per_region = 8   # full flagship repetition count, not a subset
 n_jobs_cache = 4
 
 n_jobs_solve = 25   # Stage 2: reconstruct+score, parallelized across probe-set runs
+
+REFERENCE_METHODS = ["sloreta", "dspm"]
+
+FLAGSHIP_CROP = (-0.02, 0.15)  # s - solve_inverse.py's `crop`, where comparison.py picks qrp/pp
+
+def pick_qrp_pp(ave):
+  """qrp/pp sample indices in `ave`, picked within the flagship's crop window as comparison.py does: on the full
+  epoch, a noise peak outside the spike can outgrow it and move both time points."""
+  cropped = ave.copy().crop(*FLAGSHIP_CROP)
+  return tuple(ave.time_as_index(mm.analysis.eeg.get_rising_phase(cropped, ratio=r), use_rounding=True)[0]
+               for r in (0.25, 1))
+
+# CSET's sparse solutions can have near-tied peaks (two strongest dipoles within ~0.01%), where rounding differences
+# between single- and multi-threaded solves flip the peak: tolerate up to 1% of its runs
+CHECK_TOLERANCE = {"cset": 0.01}
+
+def check_against_flagship(metrics, filters):
+  """The unperturbed/true connectome and sLORETA/dSPM must reproduce the flagship run for run (same localization
+  errors per region), or the experiments aren't scored like Study I."""
+  flag = mm.metric.MetricSuite.load("../results/simf/flagship")
+  for m in ["wcset", "cset"] + REFERENCE_METHODS:
+    a = flag.to_df(metrics="localization_error", filters={"Method": m}).groupby("region")["Value"].apply(lambda v: np.sort(v.to_numpy()))
+    b = metrics.to_df(metrics="localization_error", filters={"Method": m, **filters}).groupby("region")["Value"].apply(lambda v: np.sort(v.to_numpy()))
+    # runs whose error has no match among the flagship's runs of that region (comparing the sorted lists
+    # position by position would count one flipped run several times)
+    n_diff = sum(sum(not np.isclose(a[r], x, atol=1e-6).any() for x in b[r]) for r in b.index)
+    n_runs = sum(len(b[r]) for r in b.index)
+    assert n_diff <= CHECK_TOLERANCE.get(m, 0) * n_runs, f"{m} differs from the flagship in {n_diff}/{n_runs} runs"
+
+def solve_references(data, fwd, ncov, lambda2):
+  """sLORETA and dSPM on `data`, as solve_inverse.py solves them (fixed orientation, no depth weighting, the
+  run's SNR-adaptive lambda2): connectome-agnostic references solved on the same samples as CSET/wCSET."""
+  inv_op = mne.minimum_norm.make_inverse_operator(
+    info=data.info, forward=fwd, noise_cov=ncov, fixed=True, depth=None, verbose="warning",
+  )
+  return {
+    m: mne.minimum_norm.apply_inverse(data, inv_op, lambda2, method=mne_name, verbose="warning")
+    for m, mne_name in {"sloreta": "sLORETA", "dspm": "dSPM"}.items()
+  }
 
 def run_degradation_reconstruction(overwrite=False):
   fmetrics = Path("../results/simf/degradation")
@@ -2861,18 +2903,17 @@ def run_degradation_reconstruction(overwrite=False):
   # be picked in practice). The qrp index must still be identical across
   # every connectome variant for a given run to stay comparable, which it is:
   # `ave` doesn't depend on which connectome the run is later reconstructed
-  # with. Quarter-rising-phase only now (pp dropped along with
-  # correlation_pp/ap_qrp/ap_pp above) - one timepoint solved per
-  # connectome/run instead of two.
-  def preprocess_qrp(ctx):
+  # with. Two timepoints solved per connectome/run: localization error is
+  # scored at qrp, spatial correlation at pp (where the methods differ most).
+  def preprocess_qrp_pp(ctx):
     ave = ctx["ave"]
-    qrp_idx = mm.analysis.eeg.get_rising_phase(ave, ratio=0.25, as_idx=True)[0]
+    qrp_idx, pp_idx = pick_qrp_pp(ave)
     phase_data = mne.EvokedArray(
-      ave.data[:, [qrp_idx]], ave.info, tmin=0, nave=ave.nave, kind=ave.kind
+      ave.data[:, [qrp_idx, pp_idx]], ave.info, tmin=0, nave=ave.nave, kind=ave.kind
     )
-    return {"phase_data": phase_data, "qrp_idx": qrp_idx}
+    return {"phase_data": phase_data, "qrp_idx": qrp_idx, "pp_idx": pp_idx}
 
-  def make_reconstruct(eigvec, eigval):
+  def make_reconstruct(eigvec, eigval, with_references=False):
     def reconstruct(ctx):
       data, ncov = ctx["phase_data"], ctx["ncov"]
       # SNR-adaptive lambda2 for wCSET, from the run's full (uncropped) ave - same rule as solve_inverse.py;
@@ -2890,6 +2931,8 @@ def run_degradation_reconstruction(overwrite=False):
         "wcset": inv_wcset.solve(data, lambda2=lambda2_auto),
         "cset": inv_cset.solve(data, lambda2=0.1),
       }
+      if with_references:
+        solutions.update(solve_references(data, fwd, ncov, lambda2_auto))
       return {"solutions": solutions}
     return reconstruct
 
@@ -2897,27 +2940,30 @@ def run_degradation_reconstruction(overwrite=False):
     # correlated against the noisy ground truth: the reconstruction is
     # solved from noisy sensor data, so the clean source is an unreachable
     # target.
-    gold, qrp_idx = ctx["gold-noisy"], ctx["qrp_idx"]
+    gold, qrp_idx, pp_idx = ctx["gold-noisy"], ctx["qrp_idx"], ctx["pp_idx"]
     src, simulator = ctx["src"], ctx["simulator"]
     true_source_mask = src.select_targets(simulator.hm.src, simulator.hm.parc, simulator.hm.ras2tkras)
-    gold_qrp = gold.data[:, qrp_idx]
 
     rows = []
     for method, sol in ctx["solutions"].items():
-      sol_qrp = sol.data[:, 0]
-      hit = find_peak_localization_error(sol_qrp, true_source_mask, dipole_positions)
+      hit = find_peak_localization_error(sol.data[:, 0], true_source_mask, dipole_positions)
       rows.append({
         "method": method,
         "run": ctx["task"].run,  # for region lookup at registration time below
-        "correlation_qrp": np.corrcoef(gold_qrp, sol_qrp)[0, 1],
+        "correlation_pp": np.corrcoef(gold.data[:, pp_idx], sol.data[:, 1])[0, 1],
         "localization_error_qrp": hit["distance_mm"],
       })
     return rows
 
   # 5. Stage 2: sequential connectomes x parallel runs - no STC ever written
-  # to disk, solutions discarded right after scoring (see prose above)
+  # to disk, solutions discarded right after scoring (see prose above).
+  # sLORETA and dSPM don't use the connectome: solved once, with the 0%
+  # connectome, and registered at every percentage as the flat references
+  # the cluster tests pair CSET/wCSET against.
   metrics = mm.metric.MetricSuite(f"sub-{sub} connectome degradation - {operator}")
+  reference_rows = None
 
+  assert percentages[0] == 0, "the references are solved with the first (0%) connectome"
   for pct in percentages:
     if pct == 0:
       eigvec, eigval = eigvec_clean, eigval_clean
@@ -2928,23 +2974,25 @@ def run_degradation_reconstruction(overwrite=False):
     # n_threads_per_job=1: n_jobs already saturates the 32-core budget, see
     # project memory on run_parallel_pipeline thread capping
     results = run_parallel_pipeline(
-      inverse_tasks, preprocess_qrp, make_reconstruct(eigvec, eigval), postprocess_score,
+      inverse_tasks, preprocess_qrp_pp, make_reconstruct(eigvec, eigval, with_references=pct == 0), postprocess_score,
       n_jobs=n_jobs_solve, n_threads_per_job=1, verbose="warning",
     )
+    rows = [row for run_rows in results for row in run_rows]
+    if pct == 0:
+      reference_rows = [row for row in rows if row["method"] in REFERENCE_METHODS]
 
-    for run_rows in results:
-      for row in run_rows:
-        method = row["method"]
-        region = run2region[row["run"]]
-        metrics.register("correlation", row["correlation_qrp"], Method=method, percentage=pct, region=region, phase="qrp")
-        metrics.register("localization_error", row["localization_error_qrp"], Method=method, percentage=pct, region=region, phase="qrp")
+    for row in [row for row in rows if row["method"] not in REFERENCE_METHODS] + reference_rows:
+      region = run2region[row["run"]]
+      metrics.register("correlation", row["correlation_pp"], Method=row["method"], percentage=pct, region=region, phase="pp")
+      metrics.register("localization_error", row["localization_error_qrp"], Method=row["method"], percentage=pct, region=region, phase="qrp")
 
     print(f"{pct}% done ({len(inverse_tasks)} runs x 2 methods).")
 
   metrics.metadata["units"] = {"correlation": "r", "localization_error": "mm"}
   metrics.save(fmetrics, overwrite=overwrite)
+  check_against_flagship(metrics, {"percentage": 0})
 
-run_degradation_reconstruction(overwrite=True)  # must force-regen: wCSET now uses the SNR-adaptive lambda2 (was a fixed 0.1); switched from half- to quarter-rising-phase (ratio=0.25, "qrp" - was "hrp"/ratio=0.5); permutation-only now (deletion/addition dropped), correlation_pp/ap_qrp/ap_pp dropped, correlation_qrp/localization_error_qrp renamed to correlation/localization_error (+ phase="qrp" coord), and now registers a `region` coordinate per entry (was previously absent), so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region
+run_degradation_reconstruction(overwrite=True)  # must force-regen: correlation now scored at pp (localization stays at qrp), and sLORETA/dSPM now solved in the run at each run's own qrp/pp (were copied from the flagship at the median qrp time); wCSET now uses the SNR-adaptive lambda2 (was a fixed 0.1); switched from half- to quarter-rising-phase (ratio=0.25, "qrp" - was "hrp"/ratio=0.5); permutation-only now (deletion/addition dropped), correlation_pp/ap_qrp/ap_pp dropped, correlation_qrp/localization_error_qrp renamed to correlation/localization_error (+ phase="qrp" coord), and now registers a `region` coordinate per entry (was previously absent), so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region
 ```
 
 ## Experiment 3: Surrogate-Connectome Reconstruction & Validation
@@ -3047,12 +3095,14 @@ combined suite.
   `beltrami_harmonics_notes.md` in the `mindmap` repo for that superseded
   decision). `lambda2` is the same SNR-adaptive value as every other
   surrogate's wCSET (CSET keeps its fixed `0.1`).
-- **CSET/wCSET only** - matches `degradation_reconstruction.py`'s
-  convention exactly.
+- **CSET/wCSET for every condition**, the true connectome included, plus
+  sLORETA/dSPM once per run (with the true connectome's run) as the
+  benchmark references - matches `degradation_reconstruction.py`'s
+  convention.
 - Reconstruction at quarter-rising-phase and peak-phase only, not the full
   cropped window - see ⚠ notes above.
-- **Output**: one checkpoint `MetricSuite` per surrogate, saved to
-  `results/simf/surrogates/_checkpoint/{surrogate}` - transient, see ⚠ note
+- **Output**: one checkpoint `MetricSuite` per condition, saved to
+  `results/simf/surrogates/_checkpoint/{condition}` - transient, see ⚠ note
   above; combined into the final `results/simf/surrogates` suite by
   `simf_assembly_surrogate.py` in the Suite Assembly section.
 - `n_threads_per_job=1` on the `run_parallel_pipeline` call - see project
@@ -3087,12 +3137,55 @@ n_reps_per_region = 8   # full flagship repetition count, not a subset
 
 n_jobs_solve = 25   # reconstruct+score, parallelized across probe-set runs
 
+# The true connectome is reconstructed here like any surrogate, so every condition is scored at the same per-run
+# qrp/pp samples (copying the flagship's values used other time points); sLORETA and dSPM, which don't use the
+# connectome, are solved once, with it, as the benchmark references.
+conditions = ["original"] + surrogates
+REFERENCE_METHODS = ["sloreta", "dspm"]
+
+FLAGSHIP_CROP = (-0.02, 0.15)  # s - solve_inverse.py's `crop`, where comparison.py picks qrp/pp
+
+def pick_qrp_pp(ave):
+  """qrp/pp sample indices in `ave`, picked within the flagship's crop window as comparison.py does: on the full
+  epoch, a noise peak outside the spike can outgrow it and move both time points."""
+  cropped = ave.copy().crop(*FLAGSHIP_CROP)
+  return tuple(ave.time_as_index(mm.analysis.eeg.get_rising_phase(cropped, ratio=r), use_rounding=True)[0]
+               for r in (0.25, 1))
+
+# CSET's sparse solutions can have near-tied peaks (two strongest dipoles within ~0.01%), where rounding differences
+# between single- and multi-threaded solves flip the peak: tolerate up to 1% of its runs
+CHECK_TOLERANCE = {"cset": 0.01}
+
+def check_against_flagship(metrics, filters):
+  """The unperturbed/true connectome and sLORETA/dSPM must reproduce the flagship run for run (same localization
+  errors per region), or the experiments aren't scored like Study I."""
+  flag = mm.metric.MetricSuite.load("../results/simf/flagship")
+  for m in ["wcset", "cset"] + REFERENCE_METHODS:
+    a = flag.to_df(metrics="localization_error", filters={"Method": m}).groupby("region")["Value"].apply(lambda v: np.sort(v.to_numpy()))
+    b = metrics.to_df(metrics="localization_error", filters={"Method": m, **filters}).groupby("region")["Value"].apply(lambda v: np.sort(v.to_numpy()))
+    # runs whose error has no match among the flagship's runs of that region (comparing the sorted lists
+    # position by position would count one flipped run several times)
+    n_diff = sum(sum(not np.isclose(a[r], x, atol=1e-6).any() for x in b[r]) for r in b.index)
+    n_runs = sum(len(b[r]) for r in b.index)
+    assert n_diff <= CHECK_TOLERANCE.get(m, 0) * n_runs, f"{m} differs from the flagship in {n_diff}/{n_runs} runs"
+
+def solve_references(data, fwd, ncov, lambda2):
+  """sLORETA and dSPM on `data`, as solve_inverse.py solves them (fixed orientation, no depth weighting, the
+  run's SNR-adaptive lambda2): connectome-agnostic references solved on the same samples as CSET/wCSET."""
+  inv_op = mne.minimum_norm.make_inverse_operator(
+    info=data.info, forward=fwd, noise_cov=ncov, fixed=True, depth=None, verbose="warning",
+  )
+  return {
+    m: mne.minimum_norm.apply_inverse(data, inv_op, lambda2, method=mne_name, verbose="warning")
+    for m, mne_name in {"sloreta": "sLORETA", "dspm": "dSPM"}.items()
+  }
+
 def run_surrogate_reconstruction(overwrite=False):
   # checkpoint folder - transient, see prose above. Not the final suite
   # (results/simf/surrogates), which simf_assembly_surrogate.py builds by
-  # concatenating these 5 plus the flagship's "original" values.
+  # concatenating these 6 (original + 5 surrogates).
   checkpoint_dir = Path("../results/simf/surrogates/_checkpoint")
-  fmetrics = {s: checkpoint_dir/s for s in surrogates}
+  fmetrics = {c: checkpoint_dir/c for c in conditions}
   if all(check_files([f/"meta.json"]) for f in fmetrics.values()) and not overwrite:
     print("Already exists, skipping.")
     return
@@ -3136,8 +3229,7 @@ def run_surrogate_reconstruction(overwrite=False):
   # doesn't depend on which connectome the run is later reconstructed with.
   def preprocess_qrp_pp(ctx):
     ave = ctx["ave"]
-    qrp_idx = mm.analysis.eeg.get_rising_phase(ave, ratio=0.25, as_idx=True)[0]
-    pp_idx = mm.analysis.eeg.get_rising_phase(ave, ratio=1, as_idx=True)[0]
+    qrp_idx, pp_idx = pick_qrp_pp(ave)
     phase_data = mne.EvokedArray(
       ave.data[:, [qrp_idx, pp_idx]], ave.info, tmin=0, nave=ave.nave, kind=ave.kind
     )
@@ -3171,6 +3263,8 @@ def run_surrogate_reconstruction(overwrite=False):
         "wcset": inv_wcset.solve(data, lambda2=lambda2_auto),
         "cset": inv_cset.solve(data, lambda2=0.1),
       }
+      if surrogate == "original":
+        solutions.update(solve_references(data, fwd, ncov, lambda2_auto))
       return {"solutions": solutions}
     return reconstruct
 
@@ -3198,12 +3292,12 @@ def run_surrogate_reconstruction(overwrite=False):
 
   # 3. One connectome (surrogate) at a time x parallel runs - no STC ever
   # written to disk, solutions discarded right after scoring
-  for surrogate in surrogates:
+  for surrogate in conditions:
     if check_files([fmetrics[surrogate]/"meta.json"]) and not overwrite:
       print(f"[{surrogate}] already exists, skipping.")
       continue
 
-    eig = dm.load(sub, "eig", desc=surrogate)
+    eig = dm.load(sub, "eig") if surrogate == "original" else dm.load(sub, "eig", desc=surrogate)
     eigvec, eigval = eig["vec"], eig["val"]
 
     # n_threads_per_job=1: n_jobs already saturates the 32-core budget, see
@@ -3218,112 +3312,36 @@ def run_surrogate_reconstruction(overwrite=False):
       for row in run_rows:
         method = row["method"]
         region = run2region[row["run"]]
-        metrics.register("correlation", row["correlation_qrp"], Method=method, region=region, Surrogate=surrogate, phase="qrp")
-        metrics.register("correlation", row["correlation_pp"], Method=method, region=region, Surrogate=surrogate, phase="pp")
-        metrics.register("localization_error", row["localization_error_qrp"], Method=method, region=region, Surrogate=surrogate, phase="qrp")
+        # sLORETA/dSPM don't use the connectome: tagged Surrogate="none", not "original"
+        condition = "none" if method in REFERENCE_METHODS else surrogate
+        metrics.register("correlation", row["correlation_qrp"], Method=method, region=region, Surrogate=condition, phase="qrp")
+        metrics.register("correlation", row["correlation_pp"], Method=method, region=region, Surrogate=condition, phase="pp")
+        metrics.register("localization_error", row["localization_error_qrp"], Method=method, region=region, Surrogate=condition, phase="qrp")
 
     metrics.save(fmetrics[surrogate], overwrite=overwrite)
+    if surrogate == "original":
+      check_against_flagship(metrics, {})
     print(f"[{surrogate}] done ({len(inverse_tasks)} runs x 2 methods).")
 
-run_surrogate_reconstruction(overwrite=True)  # must force-regen: wCSET now uses the SNR-adaptive lambda2 (was a fixed 0.1); beltrami's wCSET switched from depth=0.2/harm=30/"lowpass" to the GBF paper's depth=0/"logpass"/cutoff=150 mechanism (every other surrogate's depth=0.2/harm=5/"lowpass" is unaffected); switched from half- to quarter-rising-phase (ratio=0.25, "qrp" - was "hrp"/ratio=0.5); old metrics used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; ap_qrp/ap_pp dropped; correlation_qrp/correlation_pp/localization_error_qrp renamed to correlation/localization_error (+ phase= coord); now registers `Surrogate=`/`region=` coordinates per entry (were previously absent/implicit in the filename), so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region and select surrogates by filter instead of by file
+run_surrogate_reconstruction(overwrite=True)  # must force-regen: the true connectome ("original") and sLORETA/dSPM are now solved in the run at each run's own qrp/pp (were copied from the flagship at the median qrp/pp times); wCSET now uses the SNR-adaptive lambda2 (was a fixed 0.1); beltrami's wCSET switched from depth=0.2/harm=30/"lowpass" to the GBF paper's depth=0/"logpass"/cutoff=150 mechanism (every other surrogate's depth=0.2/harm=5/"lowpass" is unaffected); switched from half- to quarter-rising-phase (ratio=0.25, "qrp" - was "hrp"/ratio=0.5); old metrics used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; ap_qrp/ap_pp dropped; correlation_qrp/correlation_pp/localization_error_qrp renamed to correlation/localization_error (+ phase= coord); now registers `Surrogate=`/`region=` coordinates per entry (were previously absent/implicit in the filename), so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region and select surrogates by filter instead of by file
 ```
 
 # Suite Assembly
 
 Every statistic (tests, effect sizes, confidence intervals, medians, reference
 lines) is computed in `index.qmd` (and `annex/annex.qmd`), next to the figure
-or sentence that reports it. This document only produces metrics. The two
-chunks below finish that job for the experiments whose suite needs data from
-another one: the degradation suite gets the flagship's sLORETA and dSPM values as
-its connectome-agnostic baselines, and the surrogate suite is assembled from
-`surrogate_reconstruction.py`'s per-surrogate checkpoints plus the flagship's
-"original" (true-connectome) values. Both are guarded, so rerunning them never
-duplicates rows or fails on already-assembled data.
-
-## Connectome Degradation (Experiment 2)
-
-```{python filename="simf_assembly_degradation.py"}
-# | output: false
-from pathlib import Path
-import numpy as np
-import pandas as pd
-import mindmap as mm
-
-flag_metrics = mm.metric.MetricSuite.load("../results/simf/flagship")
-fdeg = Path("../results/simf/degradation")
-deg_metrics = mm.metric.MetricSuite.load(fdeg)
-
-# sLORETA and dSPM references, injected into deg_metrics itself: both are
-# connectome-agnostic, so degradation_reconstruction.py never recomputes them
-# per level - their flagship (undegraded, same noise level/probe set)
-# per-region values are reused as a flat "no connectome" baseline,
-# replicated at every percentage, so stat.cluster_permutation can test
-# CSET/wCSET against them with the same region-paired machinery (it needs the
-# comparison method present as its own `Method=` row in deg_metrics, not
-# just a plotted reference line). Each reference is skipped once injected.
-REFERENCES = ["sloreta", "dspm"]
-present = set(deg_metrics.to_df(metrics="localization_error")["Method"].unique())
-to_inject = [m for m in REFERENCES if m not in present]
-if not to_inject:
-  print("References already injected into the degradation suite - nothing to do.")
-else:
-  percentages = sorted(deg_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})["percentage"].unique())
-  deg_regions = set(deg_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})["region"].unique())
-  qrp_median = float(flag_metrics.to_df(metrics="qrp_time")["Value"].median())
-
-  for method in to_inject:
-    # localization_error: flagship already stores this as a raw per-run scalar
-    # at phase="qrp", tagged by region - same shape/semantics degradation
-    # itself uses, so reuse the raw values directly.
-    ref_loc = flag_metrics.to_df(metrics="localization_error", filters={"phase": "qrp", "Method": method})
-
-    # correlation: flagship stores this as a full per-run curve over `times`
-    # (no phase tag) - interpolate each run's own curve at the population median
-    # qrp time to get one qrp-comparable scalar per run, matching degradation's
-    # own correlation_qrp semantics.
-    ref_corr_curves = flag_metrics.to_df(metrics="correlation", filters={"Method": method})
-    ref_corr_rows = []
-    for (region, rep), curve in ref_corr_curves.groupby(["region", "rep"]):
-      curve = curve.sort_values("times")
-      value = np.interp(qrp_median, curve["times"].to_numpy(), curve["Value"].to_numpy())
-      ref_corr_rows.append({"region": region, "Value": value})
-    ref_corr = pd.DataFrame(ref_corr_rows)
-
-    missing_loc = deg_regions - set(ref_loc["region"].unique())
-    missing_corr = deg_regions - set(ref_corr["region"].unique())
-    if missing_loc or missing_corr:
-      raise ValueError(
-        f"flagship {method} data missing regions needed by degradation: "
-        f"localization_error missing {sorted(missing_loc)}, correlation missing {sorted(missing_corr)}."
-      )
-
-    # .to_numpy() on a pandas string column stays dtype=object (needs pickle to
-    # round-trip), unlike every other region array in this codebase (built via
-    # plain np.array(list_of_str), which numpy infers as fixed-width unicode) -
-    # .astype(str) matches that convention so MetricSuite.save()'s
-    # allow_pickle=False npz writer can serialize it.
-    ref_loc_regions = ref_loc["region"].to_numpy().astype(str)
-    ref_corr_regions = ref_corr["region"].to_numpy().astype(str)
-
-    for pct in percentages:
-      deg_metrics.register(
-        "localization_error", ref_loc["Value"].to_numpy(),
-        Method=method, percentage=pct, region=ref_loc_regions, phase="qrp",
-      )
-      deg_metrics.register(
-        "correlation", ref_corr["Value"].to_numpy(),
-        Method=method, percentage=pct, region=ref_corr_regions, phase="qrp",
-      )
-
-  deg_metrics.metadata["units"] = {"correlation": "r", "localization_error": "mm"}
-  deg_metrics.save(fdeg, overwrite=True)
-```
+or sentence that reports it. This document only produces metrics. The
+degradation and surrogate runs now solve every condition themselves (the true
+connectome, and sLORETA/dSPM as connectome-agnostic references), so no suite
+borrows values from another: copying the flagship's values used other time
+points than the runs they were paired with. Only the surrogate suite still needs
+assembling, from its per-condition checkpoints.
 
 ## Surrogate Connectomes (Experiment 3)
 
-Concatenates `surrogate_reconstruction.py`'s 5 per-surrogate checkpoints,
-merges in the flagship's "original" (true-connectome) values under
-`Surrogate="original"`, and saves the result as one combined
+Concatenates `surrogate_reconstruction.py`'s 6 per-condition checkpoints (the
+true connectome under `Surrogate="original"`, the 5 surrogates, and sLORETA/dSPM
+under `Surrogate="none"`) and saves the result as one combined
 `results/simf/surrogates` suite - `stat.wilcoxon(group_by="Surrogate", ...)`
 then tests original-vs-surrogate directly, region-paired, selecting a
 method/phase via `filters=` instead of loading a separate per-condition
@@ -3335,59 +3353,128 @@ runs again after `surrogate_reconstruction.py` has written new checkpoints.
 # | output: false
 import shutil
 from pathlib import Path
-import numpy as np
-import pandas as pd
 import mindmap as mm
 
-surrogates = ["beltrami", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin"]
-methods2 = ["cset", "wcset"]
+conditions = ["original", "beltrami", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin"]
 checkpoint_dir = Path("../results/simf/surrogates/_checkpoint")
 
 if not checkpoint_dir.exists():
   print("No surrogate checkpoints - the combined suite is already assembled.")
 else:
-  flag_metrics = mm.metric.MetricSuite.load("../results/simf/flagship")
-  flag_loc = flag_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})
-
-  # The flagship suite has no correlation phase-scalar for cset/wcset (only
-  # the continuous correlation-over-time curve), so build one: for each
-  # (region, rep), interpolate that run's own curve at the population median
-  # qrp/pp time.
-  phase_time = {
-    "qrp": float(flag_metrics.to_df(metrics="qrp_time")["Value"].median()),
-    "pp": float(flag_metrics.to_df(metrics="pp_time")["Value"].median()),
-  }
-  corr_cw_df = flag_metrics.to_df(metrics="correlation", filters={"Method": methods2})
-
-  def original_phase_scalar(method, t):
-    df = corr_cw_df[corr_cw_df["Method"] == method]
-    rows = []
-    for (region, rep), g in df.groupby(["region", "rep"]):
-      g = g.sort_values("times")
-      rows.append((region, np.interp(t, g["times"], g["Value"])))
-    return pd.DataFrame(rows, columns=["region", "Value"])
-
-  # -- build the "original" (undegraded, true-connectome) entries -----------
-  original = mm.metric.MetricSuite("original connectome (flagship)")
-  for method in methods2:
-    method_loc_df = flag_loc[flag_loc["Method"] == method]
-    original.register(
-      "localization_error", method_loc_df["Value"].values,
-      Method=method, region=method_loc_df["region"].values.astype(str), Surrogate="original", phase="qrp",
-    )
-    for phase in ["qrp", "pp"]:
-      orig_df = original_phase_scalar(method, phase_time[phase])
-      original.register(
-        "correlation", orig_df["Value"].values,
-        Method=method, region=orig_df["region"].values.astype(str), Surrogate="original", phase=phase,
-      )
-
-  # -- load the 5 per-surrogate checkpoints and concatenate everything ------
-  checkpoints = [mm.metric.MetricSuite.load(checkpoint_dir/s) for s in surrogates]
-  combined = mm.metric.MetricSuite.concat([original] + checkpoints, name="sub-10 simulation validation - surrogates")
+  checkpoints = [mm.metric.MetricSuite.load(checkpoint_dir/c) for c in conditions]
+  combined = mm.metric.MetricSuite.concat(checkpoints, name="sub-10 simulation validation - surrogates")
   combined.metadata["units"] = {"correlation": "r", "localization_error": "mm"}
   combined.save(Path("../results/simf/surrogates"), overwrite=True)
 
   # checkpoint contents are now fully redundant with the combined suite
   shutil.rmtree(checkpoint_dir)
+```
+
+# Prior Similarity
+
+How far is a surrogate connectome from the individual one, in units of the
+perturbation experiment? Edge counts differ between surrogates, so the share of
+swapped edges has no surrogate equivalent. wCSET, however, sees a connectome only
+through its prior covariance, Σ = U diag(w²) Uᵀ, where U are the harmonics and w
+the harmonic weights (`compute_harmonic_prior`, with the settings of the runs:
+the low-pass exp(−βλ) with β = 5 for connectome harmonics, GBF's log-decay with a
+cutoff of 150 for the geometric ones). This chunk compares priors directly, with
+the cosine similarity of the two covariance matrices:
+
+sim(Σ₁, Σ₂) = Σᵢⱼ w₁ᵢ² w₂ⱼ² (u₁ᵢ · u₂ⱼ)² / (‖w₁²‖ ‖w₂²‖)
+
+Every harmonic of one connectome is compared with every harmonic of the other,
+weighted by how much each prior trusts it, so the measure needs no harmonic
+matching or cutoff and each connectome keeps its own frequency scale. Depth
+weighting is left out: it is the same for every connectome and would only
+inflate the similarities. CSET is omitted (no harmonic weighting: the equal-weight
+version is 1 for any two complete bases).
+
+The similarity is computed twice: with every harmonic, and without the
+zero-frequency harmonics (λ = 0: one for a connected graph, one per hemisphere
+for the geometric harmonics). The λ = 0 harmonic of a normalized Laplacian only
+reflects the dipoles' degrees, which edge swaps preserve, yet it carries the
+largest prior weight (w = 1). For each connectome, the smallest nonzero
+eigenvalue and the share of the prior (‖w²‖²) held by the λ = 0 harmonics are
+saved too, to interpret the difference between the two versions.
+
+The individual prior is compared with each perturbed connectome (cached
+harmonics of `degradation_reconstruction.py`, `cst_cache/permutation_pct*.npz`)
+and with each surrogate. Only the similarities are saved; the equivalent
+perturbation of each surrogate is read off the curves in the Annex.
+
+```{python filename="prior_similarity.py"}
+# | output: false
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from mindmap.analysis.functional.inverse.utils import compute_harmonic_prior
+import sys
+sys.path.insert(0, "..")
+from scripts.data_manager import SimfManager
+from scripts.utils import check_files
+
+dm = SimfManager("simf.config.yml")
+sub = "10"
+percentages = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+surrogates = ["beltrami", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin"]
+ZERO_TOL = 1e-6  # eigenvalues below this are the λ = 0 harmonics
+
+def prior_variances(eigval, geometric=False):
+  """Diagonal of wCSET's prior covariance in the harmonic basis (w², with w from `compute_harmonic_prior`), with
+  the settings of the runs: GBF's log-decay (cutoff 150) for geometric harmonics, the low-pass (β = 5) otherwise."""
+  if geometric:
+    w = compute_harmonic_prior(eigval, method="logpass", cutoff=150)
+  else:
+    w = compute_harmonic_prior(eigval, relaxation=5, method="lowpass")
+  return w ** 2
+
+def prior_similarity(vec1, var1, vec2, var2):
+  """Cosine similarity of the priors U₁ diag(var1) U₁ᵀ and U₂ diag(var2) U₂ᵀ. Harmonics with zero variance are
+  dropped first: they don't contribute."""
+  k1, k2 = var1 > 0, var2 > 0
+  cos2 = (vec1[:, k1].T @ vec2[:, k2]) ** 2
+  return float(var1[k1] @ cos2 @ var2[k2] / (np.linalg.norm(var1) * np.linalg.norm(var2)))
+
+def similarity_row(connectome, kind, percentage, vec0, val0, vec, val, geometric=False):
+  """Similarity to the individual prior with every harmonic and without the λ = 0 harmonics, plus the smallest
+  nonzero eigenvalue and the share of the prior held by the λ = 0 harmonics."""
+  var0, var = prior_variances(val0), prior_variances(val, geometric)
+  nz0, nz = val0 > ZERO_TOL, val > ZERO_TOL
+  return {
+    "connectome": connectome, "kind": kind, "percentage": percentage,
+    "similarity": prior_similarity(vec0, var0, vec, var),
+    "similarity_nonzero": prior_similarity(vec0[:, nz0], var0[nz0], vec[:, nz], var[nz]),
+    "lambda_min_nonzero": float(val[nz].min()),
+    "zero_share": float(np.sum(var[~nz] ** 2) / np.sum(var ** 2)),
+  }
+
+def run_prior_similarity(overwrite=False):
+  fout = Path("../results/simf/prior_similarity/similarity.csv")
+  if check_files([fout]) and not overwrite:
+    print("Already exists, skipping.")
+    return
+
+  eig = dm.load(sub, "eig")
+  vec0, val0 = eig["vec"], eig["val"]
+  rows = [similarity_row("original", "perturbation", 0, vec0, val0, vec0, val0)]
+
+  cache_dir = dm.roots["mm"]/f"sub-{sub}"/"cst_cache"
+  for pct in percentages:
+    perturbed = np.load(cache_dir/f"permutation_pct{pct}.npz")
+    rows.append(similarity_row(f"permutation_pct{pct}", "perturbation", pct, vec0, val0, perturbed["vec"], perturbed["val"]))
+    print(rows[-1], flush=True)
+
+  for surrogate in surrogates:
+    eig_s = dm.load(sub, "eig", desc=surrogate)
+    rows.append(similarity_row(surrogate, "surrogate", np.nan, vec0, val0, eig_s["vec"], eig_s["val"],
+                               geometric=surrogate == "beltrami"))
+    print(rows[-1], flush=True)
+
+  fout.parent.mkdir(parents=True, exist_ok=True)
+  pd.DataFrame(rows).to_csv(fout, index=False)
+
+run_prior_similarity()
 ```

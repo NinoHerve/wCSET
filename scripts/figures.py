@@ -62,11 +62,12 @@ def fmt_num(value, digits=1):
     """Plain descriptive number (medians, mm, %, correlation units) for prose."""
     return f"{value:.{digits}f}"
 
-def fmt_ci(row, name, digits=1, unit=""):
-    """Estimate with its 95% CI from a `vs()` row, e.g. '-0.8 mm (95% CI -1.2 to -0.4)': a test's effect size
-    (`<name>_ci_low`/`_ci_high` columns) or an `EstimateResult`'s `"estimate"` (`ci_low`/`ci_high`)."""
+def fmt_ci(row, name, digits=1, unit="", level=0.95):
+    """Estimate with its CI from a `vs()` row, e.g. '-0.8 mm (95% CI -1.2 to -0.4)': a test's effect size
+    (`<name>_ci_low`/`_ci_high` columns) or an `EstimateResult`'s `"estimate"` (`ci_low`/`ci_high`). `level` is the
+    CI's coverage, as computed by the test (e.g. 0.99 for a Bonferroni-corrected family of five)."""
     low, high = (f"{name}_ci_low", f"{name}_ci_high") if f"{name}_ci_low" in row else ("ci_low", "ci_high")
-    return f"{row[name]:.{digits}f}{unit} (95% CI {row[low]:.{digits}f} to {row[high]:.{digits}f})"
+    return f"{row[name]:.{digits}f}{unit} ({level * 100:g}% CI {row[low]:.{digits}f} to {row[high]:.{digits}f})"
 
 def main_cluster(cluster_df):
     """Largest-mass cluster of one competitor's cluster table."""

@@ -453,183 +453,179 @@ import mindmap as mm
 
 noise_metrics = mm.metric.MetricSuite.load("../results/simf/noise_sweep")
 competitors = [m for m in METHODS if m != "wcset"]
+standard = ["sloreta", "dspm", "wmne"]
 
-# region-as-subject cluster-permutation summary vs. wCSET, every competitor
-# on one shared axes - "compact version" pattern from
-# mindmap/tutorials/analysis/metrics/metricsuite-noisesweep.ipynb. Region is
-# the repeated-measures unit (the same physical region at every SNR level;
-# repetitions aren't matched across levels, since each draws its own
-# independent seed), SNR level is the swept coordinate, tested via
-# mne.stats.permutation_cluster_1samp_test. noise_sweep_comparison.py
-# registers `region`. Unlike the tutorial's correlation_pp example,
-# localization_error_qrp is lower-is-better (mm to the true source), hence
-# higher_is_better=False. Identical call to the one already cached by
-# processing_simf.qmd's Statistics section.
-noise_loc_snr_order = sorted(
-    noise_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})["snr"].unique(), reverse=True
-)
+# Same tests as the main text (index.qmd, simf_noise_summary_stats.py), reloaded from its cache: cluster
+# permutation over SNR, wCSET vs. each competitor, region-paired (each region = the mean over its runs), Holm
+# across the 4 pairs (family="pair"). sign = +1 = wCSET better.
+def _snr_order(metric):
+    return sorted(noise_metrics.to_df(metrics=metric, filters={"phase": "qrp"})["snr"].unique(), reverse=True)
 
-noise_loc_results = noise_metrics.stat.cluster_permutation(
-    "localization_error", coord="snr", group_by="Method",
-    comparisons=noise_metrics.stat.build_comparisons(["wcset"], competitors), pairing_col="region",
-    coord_order=noise_loc_snr_order, higher_is_better=False, filters={"phase": "qrp"},
-    n_permutations=3000, seed=0,
-)
-
-# statistics quoted in the prose below. main_cluster() always returns the
-# largest-mass cluster regardless of significance, so its result must be
-# checked against "p_corrected" before being described as significant in
-# prose: wMNE and dSPM each have one cluster that survives FDR correction;
-# sLORETA's largest cluster does not. CSET is a further step down from
-# that: its clusters_by_pair table against wCSET is entirely empty (no
-# candidate cluster of either sign anywhere in the SNR range), so
-# main_cluster() can't be called on it at all - handled separately below
-# rather than assumed non-empty like the other three competitors.
-noise_loc_wmne = main_cluster(noise_loc_results.clusters_by_pair[("wcset", "wmne")])
-noise_loc_sloreta = main_cluster(noise_loc_results.clusters_by_pair[("wcset", "sloreta")])
-noise_loc_cset_clusters = noise_loc_results.clusters_by_pair[("wcset", "cset")]
-noise_loc_dspm = main_cluster(noise_loc_results.clusters_by_pair[("wcset", "dspm")])
-
-noise_loc_wmne_p = fmt_p(noise_loc_wmne["p_corrected"])
-noise_loc_wmne_dz = fmt_stat(noise_loc_wmne["effect_size"])
-noise_loc_wmne_snr_start = fmt_num(noise_loc_wmne["snr_start"], 0)
-
-noise_loc_sloreta_p = fmt_p(noise_loc_sloreta["p_corrected"])
-noise_loc_sloreta_dz = fmt_stat(noise_loc_sloreta["effect_size"])
-noise_loc_sloreta_snr = fmt_num(noise_loc_sloreta["snr_start"], 0)
-noise_loc_sloreta_snr_end = fmt_num(noise_loc_sloreta["snr_end"], 0)
-
-# No p_corrected/effect_size to quote when no cluster exists at all - the
-# prose below states this directly instead of quoting cluster statistics.
-noise_loc_cset_has_cluster = not noise_loc_cset_clusters.empty
-
-noise_loc_dspm_p = fmt_p(noise_loc_dspm["p_corrected"])
-noise_loc_dspm_dz = fmt_stat(noise_loc_dspm["effect_size"])
-noise_loc_dspm_snr_start = fmt_num(noise_loc_dspm["snr_start"], 0)
-noise_loc_dspm_snr_end = fmt_num(noise_loc_dspm["snr_end"], 0)
-
-_loc_medians = noise_metrics.metadata["derived"]["loc_median"]
-noise_loc_wmne_median20 = fmt_num(_loc_medians["wmne"][str(float(20))])
-noise_loc_wmne_median1 = fmt_num(_loc_medians["wmne"][str(float(1))])
-noise_loc_dspm_median1 = fmt_num(_loc_medians["dspm"][str(float(1))])
-noise_loc_wcset_median1 = fmt_num(_loc_medians["wcset"][str(float(1))])
-
-# Same region-as-subject cluster-permutation summary, once per phase -
-# correlation is higher-is-better (unlike localization error), matching the
-# tutorial's own correlation_pp example directly. Identical calls to the
-# ones already cached by processing_simf.qmd's Statistics section.
-noise_corr_snr_order = sorted(
-    noise_metrics.to_df(metrics="correlation", filters={"phase": "qrp"})["snr"].unique(), reverse=True
-)
-
-noise_corr_results = {}
-for phase in ["qrp", "pp"]:
-    noise_corr_results[phase] = noise_metrics.stat.cluster_permutation(
-        "correlation", coord="snr", group_by="Method",
+def _noise_test(metric, phase, higher_is_better):
+    return cached(
+        noise_metrics.stat.cluster_permutation, f"../results/simf/noise_sweep/stats/{metric}_{phase}_cluster",
+        metric, coord="snr", group_by="Method",
         comparisons=noise_metrics.stat.build_comparisons(["wcset"], competitors), pairing_col="region",
-        coord_order=noise_corr_snr_order, higher_is_better=True, filters={"phase": phase},
-        n_permutations=3000, seed=0,
+        coord_order=_snr_order(metric), higher_is_better=higher_is_better, filters={"phase": phase},
+        correction="holm", family="pair", n_permutations=3000, seed=0,
     )
 
-# statistics quoted in the prose below: largest-mass cluster per competitor
-# per phase (all share p_corrected=0.001, so a single formatted value covers
-# every one of them), plus the min/max effect size across all 8 (4
-# competitors x 2 phases) to state the range quoted in prose, and wCSET's
-# own median correlation at the SNR extremes.
-# Only clusters where wCSET is better (sign = +1): below SNR 3 the clusters reverse (wCSET slightly
-# lower while every correlation is near zero) and can have the larger mass.
-def _better_cluster(phase, comp):
-    clusters = noise_corr_results[phase].clusters_by_pair[("wcset", comp)]
-    return main_cluster(clusters[clusters["sign"] == 1])
+noise_loc_results = _noise_test("localization_error", "qrp", higher_is_better=False)
 
-def _worse_cluster(phase, comp):
-    clusters = noise_corr_results[phase].clusters_by_pair[("wcset", comp)]
-    rows = clusters[clusters["sign"] == -1]
+# Medians as in the main text: one value per region (the mean over its runs), then the median across regions.
+def _noise_medians(metric, phase):
+    df = noise_metrics.to_df(metrics=metric, filters={"phase": phase})
+    return df.groupby(["Method", "snr", "region"])["Value"].mean().groupby(["Method", "snr"]).median()
+
+_loc_medians = _noise_medians("localization_error", "qrp")
+noise_corr_results = {phase: _noise_test("correlation", phase, higher_is_better=True) for phase in ["qrp", "pp"]}
+
+def _cluster(result, competitor, sign):
+    """Largest cluster of the given sign (+1 = wCSET better) against `competitor`, or None."""
+    clusters = result.clusters_by_pair[("wcset", competitor)]
+    rows = clusters[clusters["sign"] == sign] if not clusters.empty else clusters
     return None if rows.empty else main_cluster(rows)
 
-_all_dz = {}
-for phase in ["qrp", "pp"]:
-    for comp in competitors:
-        _all_dz[(phase, comp)] = _better_cluster(phase, comp)["effect_size"]
+CI_LEVEL = 0.99  # as in the main text: CIs Bonferroni-corrected for families of up to five comparisons
 
-noise_corr_p_all = fmt_p(max(_better_cluster(ph, c)["p_corrected"] for ph in ["qrp", "pp"] for c in competitors))
-noise_corr_end_std = fmt_num(max(_better_cluster(ph, c)["snr_end"] for ph in ["qrp", "pp"] for c in ["sloreta", "dspm", "wmne"]), 0)
-noise_corr_end_cset = fmt_num(max(_better_cluster(ph, "cset")["snr_end"] for ph in ["qrp", "pp"]), 0)
-_worse = [w for w in (_worse_cluster(ph, c) for ph in ["qrp", "pp"] for c in competitors) if w is not None]
-noise_corr_worse_p_max = f'{max(w["p_corrected"] for w in _worse):.3f}'
-noise_corr_dz_min_key = min(_all_dz, key=lambda k: _all_dz[k])
-noise_corr_dz_max_key = max(_all_dz, key=lambda k: _all_dz[k])
-noise_corr_dz_min = fmt_stat(_all_dz[noise_corr_dz_min_key])
-noise_corr_dz_max = fmt_stat(_all_dz[noise_corr_dz_max_key])
-_phase_name = lambda p: "quarter rising phase" if p == "qrp" else "peak phase"
-noise_corr_dz_min_label = f"{METHOD_LABELS[noise_corr_dz_min_key[1]]} at {_phase_name(noise_corr_dz_min_key[0])}"
-noise_corr_dz_max_label = f"{METHOD_LABELS[noise_corr_dz_max_key[1]]} at {_phase_name(noise_corr_dz_max_key[0])}"
+def _cluster_diff(metric, phase, competitor, cluster, higher_is_better):
+    """Paired difference over a cluster's SNR span, positive = wCSET better, with its 99% CI: the Hodges-Lehmann
+    estimate for localization error and the mean for correlation, as in the main text."""
+    snrs = [v for v in _snr_order(metric) if cluster["snr_end"] <= v <= cluster["snr_start"]]
+    estimator = noise_metrics.estimate.hodges_lehmann if metric == "localization_error" else noise_metrics.estimate.mean_diff
+    return estimator(
+        metric, group_by="Method", comparisons=[("wcset", competitor)], pairing_col="region",
+        filters={"phase": phase, "snr": snrs}, alpha=1 - CI_LEVEL,
+    ).vs("wcset", higher_is_better=higher_is_better).loc[competitor]
 
-_corr_medians_qrp = noise_metrics.metadata["derived"]["corr_qrp_median"]
-_corr_medians_pp = noise_metrics.metadata["derived"]["corr_pp_median"]
-noise_corr_wcset_qrp20 = fmt_num(_corr_medians_qrp["wcset"][str(float(20))], 2)
-noise_corr_wcset_qrp1 = fmt_num(_corr_medians_qrp["wcset"][str(float(1))], 2)
-noise_corr_wcset_pp20 = fmt_num(_corr_medians_pp["wcset"][str(float(20))], 2)
-noise_corr_wcset_pp1 = fmt_num(_corr_medians_pp["wcset"][str(float(1))], 2)
+def _p(p_corrected):
+    """"≤" at the smallest p that 3000 permutations (Holm-corrected) can return, as in the main text."""
+    return f"≤ {p_corrected:.3f}" if p_corrected < 0.002 else fmt_p(p_corrected)
+
+_df_loc = noise_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})
+noise_n_regions = _df_loc["region"].nunique()
+noise_n_runs = int(_df_loc[_df_loc["Method"] == "wcset"].groupby(["snr", "region"]).size().unique().item())
+noise_snr_levels = ", ".join(f"{v:g}" for v in _snr_order("localization_error"))
+
+# Localization error. The prose: wMNE worse than wCSET over the whole range; sLORETA and dSPM worse at high SNR
+# only; dSPM better at one low SNR without significance; no cluster at all against CSET.
+_loc_better = {c: _cluster(noise_loc_results, c, 1) for c in competitors}
+_loc_worse = {c: _cluster(noise_loc_results, c, -1) for c in competitors}
+assert _loc_better["cset"] is None and _loc_worse["cset"] is None
+assert all(_loc_better[c]["significant"] for c in ["wmne", "sloreta", "dspm"])
+assert (_loc_better["wmne"]["snr_start"], _loc_better["wmne"]["snr_end"]) == (20, 1)
+assert all(w is None or not w["significant"] for w in _loc_worse.values()) and _loc_worse["dspm"] is not None
+# "25.0 mm (99% CI 21.2 to 28.7; p_corrected ≤ 0.001)", and each cluster's SNR span
+noise_loc = {
+    c: f'{fmt_ci(_cluster_diff("localization_error", "qrp", c, _loc_better[c], False), "estimate", unit=" mm", level=CI_LEVEL)[:-1]}'
+       f'; p_corrected {_p(_loc_better[c]["p_corrected"])})'
+    for c in ["wmne", "sloreta", "dspm"]
+}
+noise_loc_wmne, noise_loc_sloreta, noise_loc_dspm = (noise_loc[c] for c in ["wmne", "sloreta", "dspm"])
+noise_loc_sloreta_end, noise_loc_dspm_end = (fmt_num(_loc_better[c]["snr_end"], 0) for c in ["sloreta", "dspm"])
+assert all(_loc_better[c]["snr_start"] == 20 for c in ["sloreta", "dspm"])
+noise_loc_dspm_worse_snr = fmt_num(_loc_worse["dspm"]["snr_start"], 0)
+noise_loc_dspm_worse_p = fmt_p(_loc_worse["dspm"]["p_corrected"])
+_cset_by_snr = [
+    noise_metrics.estimate.hodges_lehmann(
+        "localization_error", group_by="Method", comparisons=[("wcset", "cset")], pairing_col="region",
+        filters={"phase": "qrp", "snr": [v]},
+    ).vs("wcset", higher_is_better=False).loc["cset"]
+    for v in _snr_order("localization_error")
+]
+assert all(r["ci_low"] <= 0 <= r["ci_high"] for r in _cset_by_snr)
+noise_loc_cset_lo = f'{min(r["estimate"] for r in _cset_by_snr):.1f}'
+noise_loc_cset_hi = f'{max(r["estimate"] for r in _cset_by_snr):+.1f}'
+
+# Median localization error (mm) per method and SNR
+_four = ["wcset", "cset", "sloreta", "dspm"]
+noise_loc_four_20_lo, noise_loc_four_20_hi = (fmt_num(f(_loc_medians[m, 20] for m in _four)) for f in [min, max])
+noise_loc_four_1_lo, noise_loc_four_1_hi = (fmt_num(f(_loc_medians[m, 1] for m in _four)) for f in [min, max])
+noise_loc_wmne_median20, noise_loc_wmne_median5, noise_loc_wmne_median1 = (fmt_num(_loc_medians["wmne", v]) for v in [20, 5, 1])
+noise_loc_wcset_median10, noise_loc_wcset_median5 = (fmt_num(_loc_medians["wcset", v]) for v in [10, 5])
+noise_loc_wcset_median3, noise_loc_dspm_median3 = (fmt_num(_loc_medians[m, 3]) for m in ["wcset", "dspm"])
+noise_loc_dspm_median_lo, noise_loc_dspm_median_hi = (fmt_num(f(_loc_medians["dspm"].loc[5:])) for f in [min, max])
+
+# Spatial correlation, both phases. The prose: wCSET better than every competitor down to some SNR, then
+# slightly worse (all significant); the minimum-norm methods level off above wCSET and CSET at the lowest SNRs.
+_corr_medians_qrp, _corr_medians_pp = (_noise_medians("correlation", ph) for ph in ["qrp", "pp"])
+_corr_medians = {"qrp": _corr_medians_qrp, "pp": _corr_medians_pp}
+noise_corr_wcset_qrp20, noise_corr_wcset_qrp1 = (fmt_num(_corr_medians_qrp["wcset", v], 2) for v in [20, 1])
+noise_corr_wcset_pp20, noise_corr_wcset_pp1 = (fmt_num(_corr_medians_pp["wcset", v], 2) for v in [20, 1])
+noise_corr_cset_pp20 = fmt_num(_corr_medians_pp["cset", 20], 2)
+noise_corr_std_lo, noise_corr_std_hi = (
+    fmt_num(f(_corr_medians[ph][m].loc[v] for ph in _corr_medians for m in standard for v in _snr_order("correlation")), 2)
+    for f in [min, max])
+noise_corr_std_1_lo, noise_corr_std_1_hi = (fmt_num(f(_corr_medians[ph][m, 1] for ph in _corr_medians for m in standard), 2) for f in [min, max])
+noise_corr_cw_1_hi = fmt_num(max(_corr_medians[ph][m, 1] for ph in _corr_medians for m in ["wcset", "cset"]), 2)
+
+_corr_better = {(ph, c): _cluster(noise_corr_results[ph], c, 1) for ph in noise_corr_results for c in competitors}
+_corr_worse = {(ph, c): _cluster(noise_corr_results[ph], c, -1) for ph in noise_corr_results for c in competitors}
+assert all(b is not None and b["significant"] and b["snr_start"] == 20 for b in _corr_better.values())
+assert all(w is not None and w["significant"] and w["snr_start"] < _corr_better[k]["snr_end"] for k, w in _corr_worse.items())
+noise_corr_end_std = fmt_num(max(_corr_better[(ph, c)]["snr_end"] for ph in noise_corr_results for c in standard), 0)
+noise_corr_end_cset = fmt_num(max(_corr_better[(ph, "cset")]["snr_end"] for ph in noise_corr_results), 0)
+noise_corr_p_max = _p(max(b["p_corrected"] for b in _corr_better.values()))
+_corr_d = {k: _cluster_diff("correlation", k[0], k[1], b, True)["estimate"] for k, b in _corr_better.items()}
+noise_corr_std_d_lo, noise_corr_std_d_hi = (fmt_num(f(d for (_, c), d in _corr_d.items() if c in standard), 2) for f in [min, max])
+noise_corr_cset_d_qrp, noise_corr_cset_d_pp = (fmt_num(_corr_d[(ph, "cset")], 2) for ph in ["qrp", "pp"])
+_worse_d = {k: -_cluster_diff("correlation", k[0], k[1], w, True)["estimate"] for k, w in _corr_worse.items()}
+noise_corr_worse_std_lo, noise_corr_worse_std_hi = (fmt_num(f(d for (_, c), d in _worse_d.items() if c in standard), 2) for f in [min, max])
+assert all(d < 0.01 for (_, c), d in _worse_d.items() if c == "cset")
+noise_corr_worse_p_max = f'{max(w["p_corrected"] for w in _corr_worse.values()):.3f}'
 ```
 
-To assess whether the improvements shown above survive noisier measurement conditions, we swept the simulated target SNR from 20 down to 1 and repeated source reconstruction with each method (Section 2.2.1), re-evaluating localization error and spatial correlation with the ground truth as before.
+We repeated the Study I simulation for `{python} noise_n_regions` of its 100 regions at single-spike SNRs of `{python} noise_snr_levels`, with `{python} noise_n_runs` runs per region at each SNR (Section 2.2.1). The tests are those of the main text: each region is summarized by the mean over its runs, and a cluster-based permutation test over SNR compares wCSET with each competitor, region-paired and Holm-corrected across the four competitors. Over each cluster's SNR span, differences in localization error are Hodges–Lehmann shifts and differences in spatial correlation are mean paired differences, both positive when wCSET is better. The figures show the median across regions.
 
-Localization error increased for every method as SNR decreased (@fig-noise-localization), but wMNE alone accounts for most of that pattern: already above wCSET's error at the highest SNR tested (median `{python} noise_loc_wmne_median20` mm at SNR=20), it climbed steadily worse from there and was significantly worse than wCSET across the entire SNR range tested (region-paired cluster-permutation, p_corrected `{python} noise_loc_wmne_p`, Cohen's dz = `{python} noise_loc_wmne_dz`), reaching `{python} noise_loc_wmne_median1` mm by SNR=1. The other four methods (wCSET, CSET, sLORETA, dSPM) instead behaved similarly to one another, staying low until roughly SNR=3–5 before climbing. sLORETA's and dSPM's high-SNR plateaus did reach significance against wCSET (SNR=`{python} noise_loc_sloreta_snr`–`{python} noise_loc_sloreta_snr_end`, p_corrected `{python} noise_loc_sloreta_p`; SNR=`{python} noise_loc_dspm_snr_start`–`{python} noise_loc_dspm_snr_end`, p_corrected `{python} noise_loc_dspm_p`), but with modest effect sizes (dz = `{python} noise_loc_sloreta_dz` and `{python} noise_loc_dspm_dz` respectively) that didn't extend to lower SNR; CSET's own curve never diverged from wCSET's enough to register even a candidate cluster anywhere in the range tested — a stronger statement than "not significant," since no cluster (and so no p-value or effect size) exists to report.
+At SNR 20, wCSET, CSET, sLORETA and dSPM all localized well, with median errors of `{python} noise_loc_four_20_lo`–`{python} noise_loc_four_20_hi` mm (@fig-annex-noise-loc). wMNE started at `{python} noise_loc_wmne_median20` mm but degraded first: its median rose to `{python} noise_loc_wmne_median5` mm at SNR 5 and `{python} noise_loc_wmne_median1` mm at SNR 1, and wCSET localized more accurately than wMNE at every SNR, by `{python} noise_loc_wmne`. The other four methods degraded later and reached `{python} noise_loc_four_1_lo`–`{python} noise_loc_four_1_hi` mm at SNR 1. At high SNR, wCSET localized more accurately than sLORETA from SNR 20 to `{python} noise_loc_sloreta_end`, by `{python} noise_loc_sloreta`, and than dSPM from SNR 20 to `{python} noise_loc_dspm_end`, by `{python} noise_loc_dspm`. Its median error rose from `{python} noise_loc_wcset_median10` mm at SNR 10 to `{python} noise_loc_wcset_median5` mm at SNR 5, whereas dSPM's stayed at `{python} noise_loc_dspm_median_lo`–`{python} noise_loc_dspm_median_hi` mm from SNR 20 down to 5. At SNR `{python} noise_loc_dspm_worse_snr`, dSPM's median error (`{python} noise_loc_dspm_median3` mm) was below wCSET's (`{python} noise_loc_wcset_median3` mm), but this reversal was not significant (p_corrected `{python} noise_loc_dspm_worse_p`). wCSET and CSET did not differ at any SNR: no cluster formed, and the per-SNR differences ranged from `{python} noise_loc_cset_lo` to `{python} noise_loc_cset_hi` mm (positive = wCSET better), with every 95% CI including zero.
+
+Spatial correlation separated the methods more clearly (@fig-annex-noise-corr). wCSET's median correlation fell from `{python} noise_corr_wcset_qrp20` at the quarter rising phase and `{python} noise_corr_wcset_pp20` at the peak at SNR 20 to `{python} noise_corr_wcset_qrp1` at SNR 1. CSET followed the same course at lower values (`{python} noise_corr_cset_pp20` at the peak at SNR 20), whereas the minimum-norm methods stayed between `{python} noise_corr_std_lo` and `{python} noise_corr_std_hi` across the whole range. From SNR 20, wCSET's correlation was higher than the minimum-norm methods' down to SNR `{python} noise_corr_end_std` and than CSET's down to SNR `{python} noise_corr_end_cset`, at both phases (all p_corrected `{python} noise_corr_p_max`). Over these clusters, it exceeded the minimum-norm methods' by Δr = `{python} noise_corr_std_d_lo`–`{python} noise_corr_std_d_hi` and CSET's by Δr = `{python} noise_corr_cset_d_qrp` at the quarter rising phase and `{python} noise_corr_cset_d_pp` at the peak. At the lowest SNRs, the spike could no longer be distinguished from the noise. wCSET's and CSET's correlations fell to at most `{python} noise_corr_cw_1_hi`, whereas the minimum-norm methods' leveled off at `{python} noise_corr_std_1_lo`–`{python} noise_corr_std_1_hi`, so wCSET's was slightly lower than theirs (Δr = `{python} noise_corr_worse_std_lo`–`{python} noise_corr_worse_std_hi`) and differed from CSET's by less than 0.01 (all p_corrected ≤ `{python} noise_corr_worse_p_max`).
 
 ```{python filename="simf_localization_noise_plot.py"}
 #| echo: false
-#| label: fig-noise-localization
-#| fig-cap: "Localization error (mm) versus single-trial SNR (quarter rising phase), median curve with thin IQR whiskers across the 100 simulated regions. Markers are filled/solid where wCSET's error is significantly lower than the competitor's (region-paired cluster-permutation); wCSET is the reference."
+#| label: fig-annex-noise-loc
+#| fig-cap: "Localization error (mm) at the quarter rising phase versus single-spike SNR. Median across the 50 regions (each region = the mean over its runs), whiskers = IQR. Solid lines and filled markers: wCSET significantly better than that method (cluster-based permutation, region-paired, Holm-corrected across the four competitors); dashed lines and open markers elsewhere."
 import matplotlib.pyplot as plt
 
+NOISE_LABELS = {**METHOD_LABELS, "wcset": f"{METHOD_LABELS['wcset']} (ref.)"}
+
+def snr_axis(ax):
+    """Log SNR axis labelled at the tested SNR levels."""
+    ax.set_xscale("log")
+    ax.set_xticks(_snr_order("localization_error"), [f"{v:g}" for v in _snr_order("localization_error")])
+    ax.minorticks_off()
+    ax.set_xlabel("Single-spike SNR")
+
 noise_loc_fig, noise_loc_ax = plt.subplots(figsize=(7, 5))
-noise_loc_fig, noise_loc_ax = noise_metrics.plot.cluster_permutation(
-    noise_loc_results, colors=COLORS, marker="o", markersize=5, ax=noise_loc_ax,
+noise_metrics.plot.cluster_permutation(
+    noise_loc_results, palette=COLORS, center="median", interval="iqr", labels=NOISE_LABELS,
+    center_kws={"marker": "o", "markersize": 5}, ax=noise_loc_ax,
 )
-mark_reference(noise_loc_ax, "wcset")
-noise_loc_ax.set_xscale("log")
-noise_loc_ax.set_xlabel("Target SNR")
+snr_axis(noise_loc_ax)
 noise_loc_ax.set_ylabel("Localization error (mm)")
 noise_loc_ax.spines[["top", "right"]].set_visible(False)
 plt.tight_layout()
 ```
 
-For spatial correlation with the ground truth (@fig-noise-correlation), wCSET significantly outperformed all four competitors at both the quarter rising phase and the peak, down to SNR=`{python} noise_corr_end_std` (SNR=`{python} noise_corr_end_cset` against CSET; region-paired cluster-permutation, all p_corrected `{python} noise_corr_p_all`; effect sizes ranging from dz = `{python} noise_corr_dz_min` vs. `{python} noise_corr_dz_min_label` to dz = `{python} noise_corr_dz_max` vs. `{python} noise_corr_dz_max_label`) , even as correlation declined monotonically for every method (e.g. wCSET: `{python} noise_corr_wcset_qrp20`→`{python} noise_corr_wcset_qrp1` at quarter rising phase and `{python} noise_corr_wcset_pp20`→`{python} noise_corr_wcset_pp1` at peak, from SNR=20 to SNR=1). Below that, correlations for every method had collapsed toward zero, and wCSET's was slightly but significantly lower (all p_corrected ≤ `{python} noise_corr_worse_p_max`).
 
 ```{python filename="simf_correlation_noise_plot.py"}
 #| echo: false
-#| label: fig-noise-correlation
-#| fig-cap: "Spatial correlation versus single-trial SNR at the quarter rising phase (left) and peak phase (right), median curve with thin IQR whiskers across the 100 simulated regions. Markers are filled/solid where wCSET's correlation is significantly higher than the competitor's (region-paired cluster-permutation); wCSET is the reference."
+#| label: fig-annex-noise-corr
+#| fig-cap: "Spatial correlation with the ground truth versus single-spike SNR, at the quarter rising phase (left) and at the peak (right). Median across the 50 regions (each region = the mean over its runs), whiskers = IQR. Solid lines and filled markers: wCSET significantly better than that method (cluster-based permutation, region-paired, Holm-corrected across the four competitors); dashed lines and open markers elsewhere."
 import matplotlib.pyplot as plt
 
-noise_corr_fig, noise_corr_axes = plt.subplots(1, 2, figsize=(13, 5))
-noise_corr_panels = [("qrp", "Quarter rising phase", 0), ("pp", "Peak phase", 1)]
-
-for phase, title, col in noise_corr_panels:
-    ax = noise_corr_axes[col]
-    noise_corr_fig, ax = noise_metrics.plot.cluster_permutation(
-        noise_corr_results[phase], colors=COLORS, marker="o", markersize=5, ax=ax,
+noise_corr_fig, noise_corr_axes = plt.subplots(1, 2, figsize=(13, 5), sharey=True)
+for ax, (phase, title) in zip(noise_corr_axes, [("qrp", "Quarter rising phase"), ("pp", "Peak")]):
+    # one legend, on the right panel
+    noise_metrics.plot.cluster_permutation(
+        noise_corr_results[phase], palette=COLORS, center="median", interval="iqr", labels=NOISE_LABELS,
+        center_kws={"marker": "o", "markersize": 5}, legend=ax is noise_corr_axes[-1], ax=ax,
     )
-    # cluster_permutation() builds its own legend from synthetic
-    # proxy artists (not real plotted lines), so it can't be harvested via
-    # get_legend_handles_labels() the way the old seaborn-based .plot() call
-    # could - keep only the rightmost panel's legend rather than trying to
-    # merge into one shared figure-level legend.
-    if col == 0:
-        ax.get_legend().remove()
-    else:
-        mark_reference(ax, "wcset")
-    ax.set_xscale("log")
-    ax.set_xlabel("Target SNR")
-    ax.set_ylabel("")  # set once, explicitly, on axes[0] below
+    snr_axis(ax)
+    ax.set_ylabel("")
     ax.set_title(title)
     ax.spines[["top", "right"]].set_visible(False)
-
-noise_corr_axes[0].set_ylabel("Spatial correlation (ground truth vs. reconstruction)")
-# axes[1]'s legend (built internally by plot.cluster_permutation() above)
-# stays as the figure's only legend.
-
+noise_corr_axes[0].set_ylabel("Spatial correlation")
 plt.tight_layout()
 ```
 
@@ -638,189 +634,90 @@ plt.tight_layout()
 ```{python filename="simf_degradation_stats.py"}
 #| output: false
 import mindmap as mm
-
-# per explicit instruction, only the permutation experiment is shown here
-# (deletion/addition still computed and saved by processing_simf.qmd's
-# Statistics section, just not plotted or discussed in this document).
-operator = "permutation"
+import numpy as np
 
 deg_metrics = mm.metric.MetricSuite.load("../results/simf/degradation")
 
-# --- localization error --- reference=sLORETA (doesn't degrade),
-# competitors=CSET/wCSET: tests when a corrupted connectome makes CSET/
-# wCSET perform significantly worse than using no connectome at all,
-# rather than a relative CSET-vs-wCSET comparison. Identical call to the
-# one already cached by processing_simf.qmd's Statistics section.
-# phase="qrp" always (no pp counterpart exists for this metric).
-deg_comparisons = deg_metrics.stat.build_comparisons(["sloreta"], ["cset", "wcset"])
-pct_order = sorted(deg_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})["percentage"].unique())
-loc_result = deg_metrics.stat.cluster_permutation(
-    "localization_error", coord="percentage", group_by="Method", comparisons=deg_comparisons,
-    pairing_col="region", coord_order=pct_order, higher_is_better=False, filters={"phase": "qrp"},
-    n_permutations=3000, seed=0,
-)
-loc_clusters_cset = loc_result.clusters_by_pair[("sloreta", "cset")]
-loc_clusters_wcset = loc_result.clusters_by_pair[("sloreta", "wcset")]
+# Same tests as the main text (index.qmd, simf_degradation_summary_stats.py), reloaded from its cache: cluster
+# permutation over perturbation level, CSET/wCSET vs. each connectome-agnostic reference (sLORETA, dSPM),
+# region-paired (each region = the mean over its runs), Holm across the 4 pairs (family="pair"). Localization
+# error at the quarter rising phase, spatial correlation at the peak. The reference comes first in each pair, so
+# sign = -1 means CSET/wCSET is better.
+DEG_PHASE = {"localization_error": "qrp", "correlation": "pp"}
+DEG_REFERENCES = ["sloreta", "dspm"]
 
-# --- spatial correlation --- same sLORETA-reference comparison as
-# above. phase="qrp" always (no pp counterpart is computed for
-# degradation, see degradation_reconstruction.py).
-pct_order_c = sorted(deg_metrics.to_df(metrics="correlation", filters={"phase": "qrp"})["percentage"].unique())
-corr_result = deg_metrics.stat.cluster_permutation(
-    "correlation", coord="percentage", group_by="Method", comparisons=deg_comparisons,
-    pairing_col="region", coord_order=pct_order_c, higher_is_better=True, filters={"phase": "qrp"},
-    n_permutations=3000, seed=0,
-)
-corr_clusters_cset = corr_result.clusters_by_pair[("sloreta", "cset")]
-corr_clusters_wcset = corr_result.clusters_by_pair[("sloreta", "wcset")]
+def _deg_test(metric, higher_is_better):
+    phase = DEG_PHASE[metric]
+    order = sorted(deg_metrics.to_df(metrics=metric, filters={"phase": phase})["percentage"].unique())
+    return cached(
+        deg_metrics.stat.cluster_permutation, f"../results/simf/degradation/stats/{metric}_{phase}_cluster",
+        metric, coord="percentage", group_by="Method",
+        comparisons=deg_metrics.stat.build_comparisons(DEG_REFERENCES, ["cset", "wcset"]),
+        pairing_col="region", coord_order=order, higher_is_better=higher_is_better, filters={"phase": phase},
+        correction="holm", family="pair", n_permutations=3000, seed=0,
+    )
 
-# --- statistics quoted in the prose below --- dz is negated so that positive = CSET/wCSET better
-# (the main text's convention). Clusters are selected by sign rather
-# than by cluster position/count: how many clusters exist (and where)
-# depends on the current simulation parameters (see
-# parameter_estimates_review.md) and isn't safe to hard-code - a prior
-# version of this cell assumed fixed counts per pair and broke (IndexError)
-# once results/simf/degradation was regenerated under retuned physical
-# parameters. Per cluster_permutation_mne's sign convention, sign=-1 means
-# the competitor (CSET/wCSET) significantly beats sLORETA, sign=+1 means
-# sLORETA significantly beats the competitor; `cluster_where` returns None
-# when no cluster of that sign exists (currently the case for loc/wcset's
-# "worse" cluster - see prose, wCSET no longer becomes significantly worse
-# than sLORETA on localization error at any tested degradation level).
-# main_cluster()'s own significance caveat applies to each cluster
-# individually here too - corr/wcset's "worse" cluster does NOT survive FDR
-# correction (p_corrected `0.069` > 0.05), so the prose below must describe
-# it as a trend, not a significant effect.
-
-def cluster_where(cluster_df, sign):
-    """The cluster (if any) where the competitor significantly beats
-    sLORETA (sign=-1) or sLORETA significantly beats the competitor
-    (sign=1) - None if no such cluster exists in the current result."""
-    rows = cluster_df[cluster_df["sign"] == sign]
-    return rows.iloc[0] if not rows.empty else None
-
-deg_loc_cset_better = cluster_where(loc_clusters_cset, -1)
-deg_loc_cset_better_end = fmt_num(deg_loc_cset_better["percentage_end"], 0)
-deg_loc_cset_better_p, deg_loc_cset_better_dz = fmt_p(deg_loc_cset_better["p_corrected"]), fmt_stat(-deg_loc_cset_better["effect_size"])
-
-deg_loc_cset_c = cluster_where(loc_clusters_cset, 1)
-deg_loc_cset_p, deg_loc_cset_dz = fmt_p(deg_loc_cset_c["p_corrected"]), fmt_stat(-deg_loc_cset_c["effect_size"])
-deg_loc_cset_start = fmt_num(deg_loc_cset_c["percentage_start"], 0)
-
-deg_loc_wcset_early = cluster_where(loc_clusters_wcset, -1)
-deg_loc_wcset_early_end = fmt_num(deg_loc_wcset_early["percentage_end"], 0)
-deg_loc_wcset_early_p, deg_loc_wcset_early_dz = fmt_p(deg_loc_wcset_early["p_corrected"]), fmt_stat(-deg_loc_wcset_early["effect_size"])
-deg_loc_wcset_worse = cluster_where(loc_clusters_wcset, 1)  # None under current results - see prose
-
-deg_corr_cset_early = cluster_where(corr_clusters_cset, -1)
-deg_corr_cset_early_p, deg_corr_cset_early_dz = fmt_p(deg_corr_cset_early["p_corrected"]), fmt_stat(-deg_corr_cset_early["effect_size"])
-deg_corr_cset_early_end = fmt_num(deg_corr_cset_early["percentage_end"], 0)
-deg_corr_cset_late = cluster_where(corr_clusters_cset, 1)
-deg_corr_cset_late_p, deg_corr_cset_late_dz = fmt_p(deg_corr_cset_late["p_corrected"]), fmt_stat(-deg_corr_cset_late["effect_size"])
-deg_corr_cset_late_start = fmt_num(deg_corr_cset_late["percentage_start"], 0)
-
-deg_corr_wcset_early = cluster_where(corr_clusters_wcset, -1)
-deg_corr_wcset_early_p, deg_corr_wcset_early_dz = fmt_p(deg_corr_wcset_early["p_corrected"]), fmt_stat(-deg_corr_wcset_early["effect_size"])
-deg_corr_wcset_early_end = fmt_num(deg_corr_wcset_early["percentage_end"], 0)
-deg_corr_wcset_late = cluster_where(corr_clusters_wcset, 1)
-deg_corr_wcset_late_p = fmt_p(deg_corr_wcset_late["p_corrected"])  # does not survive correction - quoted as a trend only
-
-# localization/correlation medians quoted in prose - read from
-# processing_simf.qmd's precomputed metadata["derived"], not recomputed here.
-_perm_d = deg_metrics.metadata["derived"]
-deg_loc_perm_wcset_lo, deg_loc_perm_wcset_hi = _perm_d["loc_wcset_0_60"]
-deg_loc_perm_wcset_70 = _perm_d["loc_wcset_70"]
-deg_loc_perm_wcset_100 = _perm_d["loc_wcset_100"]
-
-deg_loc_perm_wcset_lo_s = fmt_num(deg_loc_perm_wcset_lo)
-deg_loc_perm_wcset_hi_s = fmt_num(deg_loc_perm_wcset_hi)
-deg_loc_perm_wcset_70_s = fmt_num(deg_loc_perm_wcset_70)
-deg_loc_perm_wcset_100_s = fmt_num(deg_loc_perm_wcset_100)
-
-deg_corr_perm_wcset_0 = fmt_num(_perm_d["corr_wcset_0"], 2)
-deg_corr_perm_wcset_100 = fmt_num(_perm_d["corr_wcset_100"], 2)
-_cset_lo, _cset_hi = _perm_d["corr_cset_0_60"]
-deg_corr_perm_cset_lo = fmt_num(_cset_lo, 2)
-deg_corr_perm_cset_hi = fmt_num(_cset_hi, 2)
-deg_corr_perm_cset_100 = fmt_num(_perm_d["corr_cset_100"], 2)
+deg_results = {"localization_error": _deg_test("localization_error", False), "correlation": _deg_test("correlation", True)}
+deg_n_regions = deg_metrics.to_df(metrics="localization_error")["region"].nunique()
 ```
 
-Using the connectome-perturbation procedure of Section 2.2.1, we re-evaluated localization error (@fig-degradation-localization) and spatial correlation (@fig-degradation-correlation) for CSET and wCSET, benchmarked directly against sLORETA rather than against each other: sLORETA is connectome-agnostic, so its performance cannot be affected by connectome corruption, making it a natural floor — the degradation level at which a connectivity-informed method becomes significantly worse than sLORETA is the point past which using the (corrupted) connectome is actively counterproductive, rather than merely less helpful. dSPM remains connectome-agnostic too and is shown only as a flat, untested reference line.
+```{python filename="simf_degradation_plot.py"}
+#| echo: false
+import matplotlib.pyplot as plt
 
-wCSET's localization error remained essentially flat under permutation up to 60% (`{python} deg_loc_perm_wcset_lo_s`–`{python} deg_loc_perm_wcset_hi_s` mm), only climbing noticeably beyond that point (`{python} deg_loc_perm_wcset_70_s` mm at 70%, `{python} deg_loc_perm_wcset_100_s` mm at 100%). Benchmarked against sLORETA (region-paired cluster-permutation; positive dz = CSET/wCSET better), wCSET was significantly *more* accurate across low-to-moderate degradation (0–`{python} deg_loc_wcset_early_end`%, p_corrected `{python} deg_loc_wcset_early_p`, Cohen's dz = `{python} deg_loc_wcset_early_dz`), and never became significantly worse than sLORETA at any degradation level tested, including full (100%) permutation. CSET showed the same early advantage over a comparable range (0–`{python} deg_loc_cset_better_end`%, p_corrected `{python} deg_loc_cset_better_p`, dz = `{python} deg_loc_cset_better_dz`), but unlike wCSET this advantage reversed: CSET became significantly worse than sLORETA from `{python} deg_loc_cset_start`% onward (p_corrected `{python} deg_loc_cset_p`, dz = `{python} deg_loc_cset_dz`) — a degradation level at which wCSET's own localization error never reached a significant deficit, even under full connectome permutation.
+DEG_METHODS = ["wcset", "cset", "sloreta", "dspm"]
+DEG_PAIRS = [("sloreta", "wcset"), ("dspm", "wcset"), ("sloreta", "cset"), ("dspm", "cset")]
+
+def degradation_figure(metric, ylabel):
+    """Median across regions (each region = the mean over its runs) with an IQR band per method, and below it one
+    row of significant clusters per pair (colored: CSET/wCSET better than the reference, gray: worse)."""
+    fig, ax = plt.subplots(figsize=(7, 5))
+    deg_metrics.plot.line(
+        metric, "percentage", hue="Method", unit="region", hue_order=DEG_METHODS, center="median", interval="iqr",
+        highlight="wcset", palette=COLORS, fill_alpha=0.15, labels=METHOD_LABELS, filters={"phase": DEG_PHASE[metric]},
+        ax=ax,
+    )
+    ax.legend(*ax.get_legend_handles_labels(), loc="center left", bbox_to_anchor=(1.0, 0.6), fontsize=8, frameon=False)
+    result = deg_results[metric]
+    levels = np.asarray(result.coord_order, dtype=float)
+    step = (levels[1] - levels[0]) / 2
+    dy = np.ptp(ax.get_ylim())
+    row_h, row0 = 0.035 * dy, ax.get_ylim()[0] - 0.04 * dy
+    for k, (ref, method) in enumerate(DEG_PAIRS):
+        y = row0 - (k + 1) * 1.4 * row_h
+        cl = result.clusters_by_pair[(ref, method)]
+        for _, row in cl[cl["significant"].astype(bool)].iterrows():
+            better = row["sign"] < 0
+            ax.fill_between([row["percentage_start"] - step, row["percentage_end"] + step], y, y + row_h,
+                            color=matte(COLORS[method]) if better else "#c3c2b7", linewidth=0, zorder=2)
+        ax.text(levels[0] - 2 * step, y + row_h / 2, f"{METHOD_LABELS[method]} vs. {METHOD_LABELS[ref]}", fontsize=7,
+                ha="right", va="center", color="#444444")
+    yticks = [v for v in ax.get_yticks() if row0 <= v <= ax.get_ylim()[1]]
+    ax.set_ylim(row0 - (len(DEG_PAIRS) + 0.6) * 1.4 * row_h, ax.get_ylim()[1])
+    ax.set_yticks(yticks)
+    ax.set_xticks(levels)
+    ax.set_xlabel("Connectome edges swapped (%)")
+    ax.set_ylabel(ylabel)
+    ax.spines[["top", "right"]].set_visible(False)
+    fig.tight_layout()
+    return fig
+```
 
 ```{python filename="simf_localization_degradation_plot.py"}
 #| echo: false
-#| label: fig-degradation-localization
-#| fig-cap: "Localization error (mm) versus percentage of connectome edges randomly permuted (quarter rising phase), for CSET and wCSET; median curve with thin IQR whiskers across the 100 simulated regions. Markers are filled/solid where significantly different from sLORETA, tested at each degradation level (region-paired cluster-permutation). Dashed line: dSPM's undegraded-connectome reference level."
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
-
-# flat reference: dSPM is connectome-agnostic (not recomputed per
-# degradation level), so its flagship (undegraded) median is reused as-is
-# by processing_simf.qmd's Statistics section, plot-only (not quoted in the
-# prose above).
-deg_ref_loc = deg_metrics.metadata["derived"]["ref_loc"]
-
-# two-pair result (sLORETA vs CSET, sLORETA vs wCSET) -> plot.cluster_permutation()
-# dispatches to the compact multi-competitor overlay (same pattern as the
-# noise-sweep figures above, simf_noise_stats.py), reference (sLORETA)
-# auto-inferred from the group shared by both pairs.
-deg_loc_fig, deg_loc_ax = plt.subplots(figsize=(6, 5))
-deg_loc_fig, deg_loc_ax = deg_metrics.plot.cluster_permutation(
-    loc_result, colors=COLORS, marker="o", markersize=4, ax=deg_loc_ax,
-)
-mark_reference(deg_loc_ax, "sloreta")
-# dSPM stays a flat, untested reference line (still connectome-agnostic,
-# just not part of this comparison) - sLORETA no longer needs one, it's
-# plotted as its own tested curve above.
-deg_loc_ax.axhline(deg_ref_loc["dspm"], color=COLORS["dspm"], linestyle="--", linewidth=1.5, zorder=0.5)
-deg_loc_ax.set_xlabel("Connectome degradation (%)")
-deg_loc_ax.set_ylabel("Localization error (mm)")
-deg_loc_ax.spines[["top", "right"]].set_visible(False)
-
-legend_handles = [
-    Line2D([0], [0], color=COLORS["dspm"], linestyle="--", linewidth=1.5, label="dspm (undegraded)"),
-]
-deg_loc_fig.legend(handles=legend_handles, loc="lower center", ncol=1, bbox_to_anchor=(0.5, -0.04))
-
-deg_loc_fig.tight_layout()
+#| label: fig-annex-deg-loc
+#| fig-cap: "Localization error (mm) at the quarter rising phase versus the share of connectome edges swapped. Median across the 100 regions (each region = the mean over its runs), band = IQR; sLORETA and dSPM do not use the connectome and are flat. Bars below: significant clusters (cluster-based permutation over perturbation level, region-paired, Holm-corrected across the four pairs), colored where CSET or wCSET is better than the reference method, gray where it is worse."
+deg_loc_fig = degradation_figure("localization_error", "Localization error (mm)")
 ```
-
-
-Spatial correlation with the ground truth showed a similar but more pronounced pattern: permutation slowly degraded wCSET's correlation (`{python} deg_corr_perm_wcset_0` at 0% down to `{python} deg_corr_perm_wcset_100` at 100%), while CSET's own correlation stayed comparatively flat through 60% (`{python} deg_corr_perm_cset_lo`–`{python} deg_corr_perm_cset_hi`) before also declining sharply thereafter (`{python} deg_corr_perm_cset_100` at 100%). Against sLORETA, both methods started out significantly better (region-paired cluster-permutation: CSET 0–`{python} deg_corr_cset_early_end`%, p_corrected `{python} deg_corr_cset_early_p`, dz = `{python} deg_corr_cset_early_dz`; wCSET 0–`{python} deg_corr_wcset_early_end`%, p_corrected `{python} deg_corr_wcset_early_p`, dz = `{python} deg_corr_wcset_early_dz`), but only CSET's advantage reversed into a significant deficit, from `{python} deg_corr_cset_late_start`% onward (p_corrected `{python} deg_corr_cset_late_p`, dz = `{python} deg_corr_cset_late_dz`). wCSET's correlation, by contrast, never became significantly worse than sLORETA's, even at full permutation — its apparent dip at 100% did not reach significance (p_corrected `{python} deg_corr_wcset_late_p`).
-
 
 ```{python filename="simf_correlation_degradation_plot.py"}
 #| echo: false
-#| label: fig-degradation-correlation
-#| fig-cap: "Spatial correlation versus percentage of connectome edges randomly permuted (quarter rising phase only), for CSET and wCSET; median curve with thin IQR whiskers across the 100 simulated regions. Markers are filled/solid where significantly different from sLORETA, tested at each degradation level (region-paired cluster-permutation). Dashed line: dSPM's undegraded-connectome reference level."
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
-
-# sLORETA's flagship values were injected into deg_metrics itself
-# (replicated at every percentage) so it can be the tested baseline above;
-# dSPM stays a flat, untested reference line, plot-only (not quoted in the
-# prose above).
-deg_ref_corr = deg_metrics.metadata["derived"]["ref_corr"]
-
-deg_corr_fig, deg_corr_ax = plt.subplots(figsize=(6, 5))
-deg_corr_fig, deg_corr_ax = deg_metrics.plot.cluster_permutation(
-    corr_result, colors=COLORS, marker="o", markersize=4, ax=deg_corr_ax,
-)
-mark_reference(deg_corr_ax, "sloreta")
-deg_corr_ax.axhline(deg_ref_corr["dspm"], color=COLORS["dspm"], linestyle="--", linewidth=1.5, zorder=0.5)
-deg_corr_ax.set_xlabel("Connectome degradation (%)")
-deg_corr_ax.set_ylabel("Spatial correlation (ground truth vs. reconstruction)")
-deg_corr_ax.spines[["top", "right"]].set_visible(False)
-
-legend_handles = [
-    Line2D([0], [0], color=COLORS["dspm"], linestyle="--", linewidth=1.5, label="dspm (undegraded)"),
-]
-deg_corr_fig.legend(handles=legend_handles, loc="lower center", ncol=1, bbox_to_anchor=(0.5, -0.04))
-
-deg_corr_fig.tight_layout()
+#| label: fig-annex-deg-corr
+#| fig-cap: "Spatial correlation with the ground truth at the peak versus the share of connectome edges swapped. Median across the 100 regions (each region = the mean over its runs), band = IQR; sLORETA and dSPM do not use the connectome and are flat. Bars below: significant clusters (cluster-based permutation over perturbation level, region-paired, Holm-corrected across the four pairs), colored where CSET or wCSET is better than the reference method, gray where it is worse."
+deg_corr_fig = degradation_figure("correlation", "Spatial correlation")
 ```
+
+<!-- TODO: Annex prose for the new degradation analysis (correlation at the peak, sLORETA and dSPM as references, Holm across the four pairs) -->
 
 ### Surrogate alternatives — Full Results (Section 3.1.4)
 
@@ -894,7 +791,7 @@ for _phase, _key in [("qrp", "qrp_time_median"), ("pp", "pp_time_median")]:
     surr_ref_corr_full[_phase] = _curves_full[_curves_full["times"] == _tg].groupby("Method")["Value"].median().to_dict()
 ```
 
-This section reports CSET's full surrogate-connectome breakdown (@fig-surrogate-cset), summarized qualitatively in the main text alongside wCSET's own (Section 3.1.4), which is reported there in full.
+This section reports CSET's full surrogate-connectome breakdown (@fig-annex-surrogate-cset), summarized qualitatively in the main text alongside wCSET's own (Section 3.1.4), which is reported there in full.
 
 For localization error, CSET was significantly less accurate with the Laplace-Beltrami surrogate (GBF; p_corrected `{python} loc_cset_p['beltrami']`, r = `{python} loc_cset_r['beltrami']`) and the local surrogate (p_corrected `{python} loc_cset_p['geom-atlas']`, r = `{python} loc_cset_r['geom-atlas']`); the atlas, atlas-bin, and local-bin surrogates did not differ significantly from the original connectome (p_corrected `{python} loc_cset_p['fused']`, `{python} loc_cset_p['fused-bin']`, and `{python} loc_cset_p['geom-atlas-bin']` respectively).
 
@@ -902,7 +799,7 @@ For spatial correlation, CSET was significantly lower than the original connecto
 
 ```{python filename="simf_surrogate_cset_plot.py"}
 #| echo: false
-#| label: fig-surrogate-cset
+#| label: fig-annex-surrogate-cset
 #| fig-cap: "CSET accuracy using the true structural connectome versus five dMRI-free connectome surrogates (box = IQR, line = median). (a) Localization error (mm) at the quarter rising phase. (b, c) Spatial correlation with ground truth at the quarter rising phase (b) and peak phase (c). Dashed lines mark dSPM's and sLORETA's values as connectome-free benchmarks, summarized like the boxes (mean over repetitions per region, median across regions). Stars mark significance vs. the original (true) connectome (Wilcoxon signed-rank, region-paired, FDR-corrected). wCSET's equivalent comparisons are reported in Figure 4 of the main text."
 import matplotlib.pyplot as plt
 
@@ -954,11 +851,11 @@ surr_cset_fig.legend(*ax_loc_cset.get_legend_handles_labels(), loc="lower center
 plt.tight_layout()
 ```
 
-**wCSET at the quarter rising phase.** The main text reports wCSET's spatial correlation at the peak (Figure 4 of the main text). At the quarter rising phase, before activity spreads, the surrogates' effects were small (@fig-surrogate-wcset-qrp).
+**wCSET at the quarter rising phase.** The main text reports wCSET's spatial correlation at the peak (Figure 4 of the main text). At the quarter rising phase, before activity spreads, the surrogates' effects were small (@fig-annex-surrogate-early).
 
 ```{python filename="simf_surrogate_wcset_qrp_plot.py"}
 #| echo: false
-#| label: fig-surrogate-wcset-qrp
+#| label: fig-annex-surrogate-early
 #| fig-cap: "wCSET's spatial correlation with ground truth at the quarter rising phase, using the true structural connectome versus five dMRI-free connectome surrogates; the peak phase is shown in Figure 4 of the main text. (a) Per condition (box = IQR, line = median); dashed lines mark dSPM's and sLORETA's values as connectome-free benchmarks, summarized like the boxes (mean over repetitions per region, median across regions). (b) Paired difference vs. the original connectome, one value per region (mean over repetitions; violin = distribution, thick line = median, thin line = IQR), positive = surrogate better. Above each violin: significance (Wilcoxon signed-rank, region-paired, FDR-corrected), rank-biserial r (positive = surrogate better), and the number of regions where the surrogate is better/tied/worse."
 surr_qrp_fig, (surr_qrp_ax, surr_qrp_dax) = plt.subplots(1, 2, figsize=(len(conditions_full) * 1.3 * 1.8, 5.5))
 surr_metrics_full.plot.group_comparison(
@@ -986,174 +883,177 @@ surr_qrp_fig.legend(*surr_qrp_ax.get_legend_handles_labels(), loc="lower center"
 plt.tight_layout()
 ```
 
-## Study III: Clinical Dynamics (Simultaneous iEEG/EEG)
+### Prior Similarity of Surrogate and Perturbed Connectomes (Sections 3.1.3–3.1.4)
 
-### Spatial Correlation Analysis — Full Results, All Subjects (Section 3.3.1)
-
-<!-- TODO: the peak signed r and peak AUC (results/intra/bootstrap, *_peak and *_peak_boot) must be recomputed before they are reported here. The bootstrap (processing_intra.qmd, intra_spike_bootstrap.py) still centres the peak on the recorded iEEG's GFP maximum, which sits at 2.065 s in sub-34 and 1.980 s in sub-12. The peak must instead be the PEAK_SAMPLES centred on 2.0 s, where the spikes are aligned. This needs a full bootstrap rerun, because only the window and peak summaries were saved per draw, not the time courses. Save the per-draw time courses on the rerun. The window-mean results are unaffected. -->
-
-This section reports both polarity-invariant spatial metrics of Study III (amplitude rank correlation and AUC on |amplitude|; Sections 2.3.2 and 2.3.3) for all four Clinical Dataset B subjects, with the per-method AUC that the main text leaves out (Figure 6 of the main text shows Subjects 1 and 2, sub-48 and sub-34). Subjects 3 and 4 (sub-12 and sub-50) had deep sources, far from the cortical source space (Section 2.2.3): their EEG-derived reconstruction, and the virtual iEEG projected from it, is inherently less reliable, so their results are reported here rather than pooled into the main comparison. Statistics are the same autocorrelation-corrected paired tests as in the main text (Section 2.4.2).
-
-```{python filename="intra_spatial_full_stats.py"}
+```{python filename="simf_prior_similarity_stats.py"}
 #| output: false
 import numpy as np
 import pandas as pd
-import mindmap as mm
 
-# Self-contained, like the other Annex sections above: reloads the suite written by
-# processing_intra.qmd ("Spatial pattern metrics") and repeats index.qmd's own
-# stat.ttest_ess() calls (disk-cache hit).
-SPATIAL_DIR = "../results/intra/spatial_metrics"
-full_metrics = mm.metric.MetricSuite.load(SPATIAL_DIR)
-full_null = pd.read_csv(f"{SPATIAL_DIR}/null.csv", dtype={"Subject": str})
-COMPETITORS = ["sloreta", "cset", "dspm", "wmne", "beltrami"]
-FULL_ORDER = ["wcset"] + COMPETITORS
-FULL_SUBJECTS = ["48", "34", "12", "50"]
-FULL_TITLES = {"48": "Subject 1 (sub-48)", "34": "Subject 2 (sub-34)",
-               "12": "Subject 3 (sub-12, deep source)", "50": "Subject 4 (sub-50, deep source)"}
-FULL_METRICS = {"correlation_spatial_absrank": ("amplitude rank correlation", 0.0), "auc_spatial": ("AUC on |amplitude|", 0.5)}
+# Similarities computed by processing_simf.qmd ("Prior Similarity"): the individual prior against each perturbed
+# connectome and each surrogate, with every harmonic ("similarity") and without the λ = 0 harmonics
+# ("similarity_nonzero"), plus each connectome's smallest nonzero eigenvalue and the share of its prior held by the
+# λ = 0 harmonics.
+prior_sim = pd.read_csv("../results/simf/prior_similarity/similarity.csv")
+_pert = prior_sim[prior_sim["kind"] == "perturbation"].set_index("percentage").sort_index()
+_surr = prior_sim[prior_sim["kind"] == "surrogate"].set_index("connectome")
+PRIOR_SIM_VERSIONS = ["similarity", "similarity_nonzero"]
 
-full_wide, full_results = {}, {}
-for metric in FULL_METRICS:
-    for subject in FULL_SUBJECTS:
-        wide = (full_metrics.to_df(metrics=metric, filters={"Subject": subject})
-                .pivot_table(index="times", columns="Method", values="Value").dropna())
-        full_wide[(subject, metric)] = wide
-        full_results[(subject, metric)] = full_metrics.stat.ttest_ess(
-            metric, group_by="Method", comparisons=full_metrics.stat.build_comparisons(["wcset"], COMPETITORS),
-            pairing_col="times", subject_order=wide.index.tolist(), filters={"Subject": subject},
-        )
+# Equivalent perturbation: the share of swapped edges at which the perturbation curve reaches the surrogate's
+# similarity, by linear interpolation between the tested levels. Both curves decrease monotonically.
+for col in PRIOR_SIM_VERSIONS:
+    assert (np.diff(_pert[col]) < 0).all()
+prior_sim_equiv = pd.DataFrame({
+    col: np.interp(-_surr[col], -_pert[col].to_numpy(), _pert.index.to_numpy()) for col in PRIOR_SIM_VERSIONS
+}, index=_surr.index)
 
-# one row per competitor: p-values and Cohen's dz (positive = wCSET better)
-full_vs = {k: r.vs("wcset") for k, r in full_results.items()}
+# The surrogates split into the same two groups in both versions: atlas and the two local surrogates are closest
+# to the individual prior, atlas-bin and GBF further away.
+prior_sim_close, prior_sim_far = ["fused", "geom-atlas", "geom-atlas-bin"], ["fused-bin", "beltrami"]
+for col in PRIOR_SIM_VERSIONS:
+    assert _surr.loc[prior_sim_close, col].min() > _surr.loc[prior_sim_far, col].max()
 
-def full_effect(subject, metric, competitor):
-    return full_vs[(subject, metric)].loc[competitor, "effect"]
+def _range(values, digits, scale=1):
+    lo, hi = fmt_num(min(values) * scale, digits), fmt_num(max(values) * scale, digits)
+    return lo if lo == hi else f"{lo}–{hi}"
 
-def full_p(subject, metric, competitor):
-    return full_vs[(subject, metric)].loc[competitor, "p_corrected"]
+def _sim(col, pct):
+    return fmt_num(_pert.loc[pct, col], 2)
 
-# statistics quoted in the prose below: every significant comparison for the two deep-source subjects
-_sig = [(s, m, c) for s in ["12", "50"] for m in FULL_METRICS for c in COMPETITORS if full_p(s, m, c) < 0.05]
-full_deep_sig = "; ".join(
-    f"sub-{s_}, {FULL_METRICS[m][0]}, wCSET vs. {METHOD_LABELS[c]}: p_corrected {fmt_p(full_p(s_, m, c))}, dz = {fmt_stat(full_effect(s_, m, c))}"
-    for s_, m, c in _sig
-) or "none"
-full_deep_n_sig = len(_sig)
-full_50_p_min = fmt_p(min(full_p("50", m, c) for m in FULL_METRICS for c in COMPETITORS))
-full_12_auc_wcset = fmt_num(full_wide[("12", "auc_spatial")]["wcset"].median(), 2)
-full_12_auc_std_lo = fmt_num(min(full_wide[("12", "auc_spatial")][c].median() for c in ["sloreta", "cset", "dspm", "wmne"]), 2)
-full_12_auc_std_hi = fmt_num(max(full_wide[("12", "auc_spatial")][c].median() for c in ["sloreta", "cset", "dspm", "wmne"]), 2)
+ps_all, ps_nz = "similarity", "similarity_nonzero"
+# curves: with every harmonic, the similarity falls fast and levels off; without λ = 0, it falls slowly, then to ~0
+ps_all_10, ps_all_30, ps_all_100 = _sim(ps_all, 10), _sim(ps_all, 30), _sim(ps_all, 100)
+ps_nz_40, ps_nz_70, ps_nz_100 = _sim(ps_nz, 40), _sim(ps_nz, 70), _sim(ps_nz, 100)
+assert (np.diff(_pert.loc[50:, ps_all]) > -0.05).all()  # levels off from 50% on
+
+# mechanism: swaps open a spectral gap, pushing the prior's weight onto the λ = 0 harmonic
+ps_lambda_orig = fmt_num(_pert.loc[0, "lambda_min_nonzero"], 3)
+ps_lambda_10, ps_lambda_50 = fmt_num(_pert.loc[10, "lambda_min_nonzero"], 2), fmt_num(_pert.loc[50, "lambda_min_nonzero"], 2)
+ps_share_orig = fmt_num(_pert.loc[0, "zero_share"] * 100, 0)
+ps_share_10, ps_share_30 = fmt_num(_pert.loc[10, "zero_share"] * 100, 0), fmt_num(_pert.loc[30, "zero_share"] * 100, 0)
+ps_share_50 = fmt_num(_pert.loc[50, "zero_share"] * 100, 1)
+ps_share_graph = _range(_surr.loc[["fused", "fused-bin", "geom-atlas", "geom-atlas-bin"], "zero_share"], 0, 100)
+ps_share_gbf = fmt_num(_surr.loc["beltrami", "zero_share"] * 100, 0)
+ps_floor = fmt_num(np.sqrt(_pert.loc[0, "zero_share"]), 2)  # the λ = 0 harmonic's contribution alone: 1 / ‖w₀²‖
+assert abs(float(ps_floor) - _pert.loc[100, ps_all]) < 0.01
+
+# surrogates: similarities and equivalent perturbation per version and group
+ps_close_all, ps_close_nz = _range(_surr.loc[prior_sim_close, ps_all], 2), _range(_surr.loc[prior_sim_close, ps_nz], 2)
+ps_far_all, ps_far_nz = _range(_surr.loc[prior_sim_far, ps_all], 2), _range(_surr.loc[prior_sim_far, ps_nz], 2)
+ps_close_all_eq, ps_close_nz_eq = _range(prior_sim_equiv.loc[prior_sim_close, ps_all], 0), _range(prior_sim_equiv.loc[prior_sim_close, ps_nz], 0)
+ps_far_all_eq, ps_far_nz_eq = _range(prior_sim_equiv.loc[prior_sim_far, ps_all], 0), _range(prior_sim_equiv.loc[prior_sim_far, ps_nz], 0)
+ps_eq_min, ps_eq_max = fmt_num(prior_sim_equiv.to_numpy().min(), 0), fmt_num(prior_sim_equiv.to_numpy().max(), 0)
+
+# where those levels fall in the perturbation experiment (the degradation tests reloaded above): wCSET's correlation
+# advantage over both references, and its localization advantage over sLORETA
+def _better_end(metric, refs):
+    ends = []
+    for ref in refs:
+        cl = deg_results[metric].clusters_by_pair[(ref, "wcset")]
+        cl = cl[cl["significant"].astype(bool) & (cl["sign"] < 0)]
+        assert len(cl) == 1 and cl["percentage_start"].iloc[0] == 0
+        ends.append(cl["percentage_end"].iloc[0])
+    return min(ends)
+
+def _worse_start(metric, ref):
+    cl = deg_results[metric].clusters_by_pair[(ref, "wcset")]
+    cl = cl[cl["significant"].astype(bool) & (cl["sign"] > 0)]
+    assert len(cl) == 1
+    return cl["percentage_start"].iloc[0]
+
+ps_corr_end = fmt_num(_better_end("correlation", DEG_REFERENCES), 0)
+ps_loc_end = fmt_num(_better_end("localization_error", ["sloreta"]), 0)
+ps_loc_worse = fmt_num(_worse_start("localization_error", "sloreta"), 0)
+assert prior_sim_equiv.to_numpy().max() < float(ps_corr_end)
+assert prior_sim_equiv[ps_all].max() <= float(ps_loc_end)
+assert prior_sim_equiv.loc[prior_sim_close, ps_nz].max() < float(ps_loc_end)
+assert float(ps_loc_end) <= prior_sim_equiv.loc[prior_sim_far, ps_nz].min() < prior_sim_equiv.loc[prior_sim_far, ps_nz].max() < float(ps_loc_worse)
 ```
 
-For Subject 3, wCSET had the highest median AUC of all methods (median `{python} full_12_auc_wcset`, sLORETA, CSET, dSPM, and wMNE `{python} full_12_auc_std_lo`–`{python} full_12_auc_std_hi`; @fig-intra-full), but only its advantage over CSET reached significance. For Subject 4, every method stayed close to zero rank correlation and 0.5 AUC, and no comparison was significant (smallest p_corrected `{python} full_50_p_min`). Across both deep-source subjects, `{python} full_deep_n_sig` comparison(s) reached significance (`{python} full_deep_sig`), all in wCSET's favor, and wCSET was never significantly worse than any other method. This matches the Discussion's framing: for these subjects, no method's reconstruction tracked the recording well enough to clearly distinguish one from another.
+The perturbation experiment (Section 3.1.3) measures connectome errors as a share of swapped edges, which has no equivalent for the surrogates (Section 3.1.4): they differ from the individual connectome in edge count, weights and topology at once. To place them on the same scale, we compared the priors themselves. wCSET uses a connectome only through its prior covariance, Σ = U diag(w²) Uᵀ, with U the connectome's harmonics and w their weights (the low-pass exp(−5λ) for connectome harmonics and GBF's log-decay with a cutoff of 150 for the geometric ones, as in the runs). We measured the similarity of two priors as the cosine similarity of their covariance matrices, sim(Σ₁, Σ₂) = Σᵢⱼ w₁ᵢ² w₂ⱼ² (u₁ᵢ · u₂ⱼ)² / (‖w₁²‖ ‖w₂²‖). It compares every harmonic of one connectome with every harmonic of the other, weighted by how much each prior trusts them, so it needs no harmonic matching and lets each connectome keep its own frequency scale; it equals 1 for identical priors. Depth weighting, the same for every connectome, was left out, and so was CSET, whose unweighted prior makes the measure 1 for any connectome. We compared the individual prior with the prior of each perturbed connectome and of each surrogate, and read each surrogate's equivalent perturbation off the perturbation curve by linear interpolation. Since the λ = 0 harmonic carries the largest weight (w = 1) but only reflects the dipoles' degrees, which edge swaps preserve, we computed the similarity twice: with every harmonic, and without the λ = 0 harmonics.
 
-```{python filename="intra_spatial_full_plot.py"}
+The two versions describe perturbation differently (@fig-annex-prior-sim). With every harmonic, the similarity fell from 1 to `{python} ps_all_10` at 10% perturbation and `{python} ps_all_30` at 30%, then levelled off at `{python} ps_all_100`. Without the λ = 0 harmonic, it stayed above `{python} ps_nz_40` up to 40% and only fell steeply afterwards, to `{python} ps_nz_70` at 70% and `{python} ps_nz_100` at 100%. The difference comes from the spectrum: random swaps add long-range shortcuts, which raise the smallest nonzero eigenvalue from `{python} ps_lambda_orig` in the individual connectome to `{python} ps_lambda_10` at 10% and `{python} ps_lambda_50` at 50%. The low-pass weights then switch off nearly every harmonic except λ = 0, whose share of the prior grew from `{python} ps_share_orig`% to `{python} ps_share_10`% at 10%, `{python} ps_share_30`% at 30% and `{python} ps_share_50`% at 50%. With every harmonic, the similarity therefore mostly tracks this collapse of the prior onto the λ = 0 harmonic, and its floor (`{python} ps_all_100`) is that harmonic's contribution alone. Without it, the similarity tracks how much the shapes of the remaining harmonics change, which happens later.
+
+The surrogates fell into the same two groups in both versions. The atlas and both local surrogates were closest to the individual prior (similarity `{python} ps_close_all` with every harmonic, `{python} ps_close_nz` without λ = 0), and atlas-bin and GBF were further away (`{python} ps_far_all` and `{python} ps_far_nz`). Their equivalent perturbation, however, depended on the version: `{python} ps_close_all_eq`% for the close group and `{python} ps_far_all_eq`% for atlas-bin and GBF with every harmonic, against `{python} ps_close_nz_eq`% and `{python} ps_far_nz_eq`% without λ = 0. The graph surrogates keep a spectrum close to the individual one (`{python} ps_share_graph`% of the prior in the λ = 0 harmonic, against `{python} ps_share_orig`% for the individual connectome), so they score well when the spectral collapse dominates the measure, and less well when only the shapes of the harmonics count. GBF's λ = 0 harmonics, one constant per hemisphere, hold `{python} ps_share_gbf`% of its prior, which is why it gains the most when they are removed.
+
+The equivalent perturbation is therefore only a rough bracket, between `{python} ps_eq_min`% and `{python} ps_eq_max`% depending on the surrogate and the version. In both versions, every surrogate falls well short of the `{python} ps_corr_end`% up to which wCSET kept its correlation advantage over sLORETA and dSPM in the perturbation experiment, and the close group falls within the range where wCSET was more accurate than sLORETA in localization (up to `{python} ps_loc_end`%). Atlas-bin and GBF fall within that range with every harmonic, but between `{python} ps_loc_end`% and `{python} ps_loc_worse`% without λ = 0, where wCSET was neither significantly better nor worse than sLORETA. The similarity compares priors, not reconstructions, so these equivalents locate the surrogates on the perturbation scale but do not predict their accuracy.
+
+```{python filename="simf_prior_similarity_plot.py"}
 #| echo: false
-#| label: fig-intra-full
-#| fig-cap: "Spatial agreement between virtual and recorded iEEG for all four Clinical Dataset B subjects (columns); Subjects 1 and 2 are the main-text subjects, Subjects 3 and 4 had deep sources, far from the cortical source space. Rows 1–2: amplitude rank correlation (Spearman ρ across contacts between recorded and virtual absolute amplitude); rows 3–4: AUC on |amplitude| (spatial overlap, active contacts = at least 30% of the recorded maximum). Both ignore the sign of the contacts; the signed correlation is shown in @fig-intra-signed. Rows 1 and 3: value per method at each timepoint of the comparison window (box = IQR, line = median, outliers hidden); dotted line = chance value (ρ = 0, AUC = 0.5). Rows 2 and 4: paired difference, wCSET minus each other method, one value per timepoint (violin = distribution, thick line = median, thin line = IQR); positive = wCSET better. Above each violin: significance from a paired t-test with an autocorrelation-corrected effective sample size (FDR-corrected; *p<0.05, **p<0.01, ***p<0.001), Cohen's dz (positive = wCSET better), and the percentage of timepoints at which wCSET's value exceeds the other method's, relative to 50%."
-import matplotlib.pyplot as plt
-
-full_fig, full_axes = plt.subplots(2 * len(FULL_METRICS), len(FULL_SUBJECTS), figsize=(4.4 * len(FULL_SUBJECTS), 16),
-                                   gridspec_kw={"hspace": 0.55, "wspace": 0.3}, squeeze=False)
-for m_i, (metric, (label, chance)) in enumerate(FULL_METRICS.items()):
-    for col, subject in enumerate(FULL_SUBJECTS):
-        result = full_results[(subject, metric)]
-
-        # value per method
-        ax = full_axes[2 * m_i, col]
-        full_metrics.plot.group_comparison(
-            result, order=FULL_ORDER, palette=COLORS, points=False, showfliers=False, width=0.55, alpha=0,
-            saturation=1, fill_alpha=FILL_ALPHA, chance_value=chance, tick_labels=METHOD_LABELS, reference_suffix=" (ref.)", ax=ax,
-        )
-        plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=8)
-        ax.set_xlabel("")
-        ax.set_ylabel(label if col == 0 else "", fontsize=8)
-        ax.set_title(f"{FULL_TITLES[subject]}:\n{label} per method", loc="left", fontsize=9)
-        ax.spines[["top", "right"]].set_visible(False)
-
-        # paired differences, positive = wCSET better
-        dax = full_axes[2 * m_i + 1, col]
-        full_metrics.plot.paired_differences(
-            result, reference="wcset", order=COMPETITORS, palette=COLORS,
-            annotate=("stars", "effect", "winrate"), tick_labels=METHOD_LABELS, ax=dax,
-        )
-        plt.setp(dax.get_xticklabels(), rotation=45, ha="right", fontsize=8)
-        dax.set_title(f"{FULL_TITLES[subject]}:\n{label}, wCSET − method", loc="left", fontsize=9)
-        if col == 0:
-            dax.set_ylabel(f"wCSET − method\n({label})", fontsize=8)
-    share_ylim(full_axes[2 * m_i])  # per-method row comparable across subjects
-plt.show()
-```
-
-**Signed spatial correlation.** The main text compares virtual and recorded iEEG with sign-free measures only, because the polarity of intracranial contacts is not interpreted. @grova_intracranial_2016 and @afnan_assessing_2026 report the signed (Pearson) spatial correlation across contacts instead; @fig-intra-signed shows that measure for all four subjects, with the same paired tests and the permutation chance range of Section 2.4.1, for direct comparison with their work.
-
-```{python filename="intra_signed_full_stats.py"}
-#| output: false
-# Signed Pearson correlation across contacts, computed by processing_intra.qmd alongside the
-# sign-free metrics; same per-subject paired tests as above.
-SIGNED = "correlation_spatial_signed"
-STANDARD = ["sloreta", "cset", "dspm", "wmne"]
-
-signed_wide, signed_results = {}, {}
-for subject in FULL_SUBJECTS:
-    wide = (full_metrics.to_df(metrics=SIGNED, filters={"Subject": subject})
-            .pivot_table(index="times", columns="Method", values="Value").dropna())
-    signed_wide[subject] = wide
-    signed_results[subject] = full_metrics.stat.ttest_ess(
-        SIGNED, group_by="Method", comparisons=full_metrics.stat.build_comparisons(["wcset"], COMPETITORS),
-        pairing_col="times", subject_order=wide.index.tolist(), filters={"Subject": subject},
-    )
-signed_vs = {s_: r.vs("wcset") for s_, r in signed_results.items()}
-
-def signed_chance(subject):
-    d = full_null[(full_null["Metric"] == SIGNED) & (full_null["Subject"] == subject)]
-    return d["null_lo"].mean(), d["null_hi"].mean()
-
-# statistics quoted in the prose (Subject 1 = sub-48; positive dz = wCSET better)
-signed_48_wcset = fmt_num(signed_wide["48"]["wcset"].median(), 2)
-signed_48_std_lo = fmt_num(min(signed_wide["48"][c].median() for c in STANDARD), 2)
-signed_48_std_hi = fmt_num(max(signed_wide["48"][c].median() for c in STANDARD), 2)
-signed_48_chance = fmt_num(signed_chance("48")[1], 2)
-signed_48_p_max = fmt_p(signed_vs["48"].loc[STANDARD, "p_corrected"].max())
-signed_48_dz_lo = fmt_stat(signed_vs["48"].loc[STANDARD, "effect"].min())
-signed_48_dz_hi = fmt_stat(signed_vs["48"].loc[STANDARD, "effect"].max())
-signed_48_p_beltrami = fmt_p(signed_vs["48"].loc["beltrami", "p_corrected"])
-signed_others_p_min = fmt_p(min(signed_vs[s_]["p_corrected"].min() for s_ in ["34", "12", "50"]))
-```
-
-In Subject 1, wCSET's virtual iEEG correlated with the recording above the chance range (median r = `{python} signed_48_wcset`, chance range up to `{python} signed_48_chance`), whereas sLORETA, dSPM, wMNE, and CSET did not (medians `{python} signed_48_std_lo` to `{python} signed_48_std_hi`). wCSET's correlation was significantly higher than these four methods' (largest p_corrected `{python} signed_48_p_max`, dz = `{python} signed_48_dz_lo`–`{python} signed_48_dz_hi`), and did not differ from GBF's (p_corrected `{python} signed_48_p_beltrami`). No comparison was significant in the other three subjects (smallest p_corrected `{python} signed_others_p_min`). These are the same conclusions as with the sign-free measures of the main text, with larger effects in Subject 1.
-
-```{python filename="intra_signed_full_plot.py"}
-#| echo: false
-#| label: fig-intra-signed
-#| fig-cap: "Signed spatial correlation (Pearson r across contacts, as reported by Grova et al. 2016 and Afnan et al. 2026) between virtual and recorded iEEG, for all four Clinical Dataset B subjects (columns). Row 1: value per method at each timepoint of the comparison window (box = IQR, line = median, outliers hidden); gray band = chance range, the 2.5–97.5th percentiles after randomly permuting contact labels (1000 permutations, averaged over timepoints and methods); dotted line = 0. Row 2: paired difference, wCSET minus each other method, one value per timepoint (violin = distribution, thick line = median, thin line = IQR); positive = wCSET better. Above each violin: significance from a paired t-test with an autocorrelation-corrected effective sample size (FDR-corrected; *p<0.05, **p<0.01, ***p<0.001), Cohen's dz (positive = wCSET better), and the percentage of timepoints at which wCSET's value exceeds the other method's, relative to 50%."
-import matplotlib.pyplot as plt
-
-signed_fig, signed_axes = plt.subplots(2, len(FULL_SUBJECTS), figsize=(4.4 * len(FULL_SUBJECTS), 8),
-                                       gridspec_kw={"hspace": 0.55, "wspace": 0.3}, squeeze=False)
-for col, subject in enumerate(FULL_SUBJECTS):
-    ax = signed_axes[0, col]
-    full_metrics.plot.group_comparison(
-        signed_results[subject], order=FULL_ORDER, palette=COLORS, points=False, showfliers=False, width=0.55,
-        alpha=0, saturation=1, fill_alpha=FILL_ALPHA, chance=signed_chance(subject), chance_value=0,
-        tick_labels=METHOD_LABELS, reference_suffix=" (ref.)", ax=ax,
-    )
-    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=8)
-    ax.set_xlabel("")
-    ax.set_ylabel("Signed spatial correlation (r)" if col == 0 else "", fontsize=8)
-    ax.set_title(f"{FULL_TITLES[subject]}:\nsigned spatial correlation per method", loc="left", fontsize=9)
+#| label: fig-annex-prior-sim
+#| fig-cap: "Similarity between wCSET's prior built on the individual connectome and on perturbed or surrogate connectomes (cosine similarity of the prior covariance matrices; 1 = identical priors), (a) with every harmonic and (b) without the λ = 0 harmonics. Black line: perturbed connectomes versus the share of edges swapped. Colored dashed lines: surrogates; each ends at its equivalent perturbation (dot), read off the black line by linear interpolation."
+fig, axes = plt.subplots(1, 2, figsize=(10, 4.2), sharey=True)
+titles = {ps_all: "a. Every harmonic", ps_nz: "b. Without the λ = 0 harmonics"}
+for ax, col in zip(axes, PRIOR_SIM_VERSIONS):
+    ax.plot(_pert.index, _pert[col], color="#333333", marker="o", markersize=4, label="Perturbed connectome", zorder=3)
+    for s in surrogates_full:
+        y, x = _surr.loc[s, col], prior_sim_equiv.loc[s, col]
+        color = CONDITION_COLORS_FULL[s]
+        ax.plot([0, x], [y, y], color=color, linestyle="--", linewidth=1.2, label=SURROGATE_LABELS_FULL[s])
+        ax.plot(x, y, "o", color=color, markersize=6, zorder=4)
+    ax.set_xticks(_pert.index)
+    ax.set_xlabel("Connectome edges swapped (%)")
+    ax.set_title(titles[col], loc="left", fontsize=10)
     ax.spines[["top", "right"]].set_visible(False)
+axes[0].set_ylabel("Prior similarity to the individual connectome")
+axes[0].set_ylim(0, 1.03)
+axes[1].legend(loc="upper right", fontsize=8, frameon=False)
+fig.tight_layout()
+```
 
-    dax = signed_axes[1, col]
-    full_metrics.plot.paired_differences(
-        signed_results[subject], reference="wcset", order=COMPETITORS, palette=COLORS,
-        annotate=("stars", "effect", "winrate"), tick_labels=METHOD_LABELS, ax=dax,
-    )
-    plt.setp(dax.get_xticklabels(), rotation=45, ha="right", fontsize=8)
-    dax.set_title(f"{FULL_TITLES[subject]}:\nsigned spatial correlation, wCSET − method", loc="left", fontsize=9)
-    if col == 0:
-        dax.set_ylabel("wCSET − method\n(signed spatial correlation)", fontsize=8)
-share_ylim(signed_axes[0])
-plt.show()
+## Study III: Clinical Dynamics (Simultaneous iEEG/EEG)
+
+### Spatial Correlation — Full Results, All Patients
+
+<!-- TODO: add the peak summaries for comparison with Grova et al. 2016 and Afnan et al. 2026: the signed spatial correlation averaged over the 5 samples centred on 2.0 s, where the spikes are aligned, and the AUC at that peak. The saved bootstrap (results/intra/bootstrap, *_peak and *_peak_boot) still centres the peak on the recorded iEEG's GFP maximum (2.065 s in Patient 2, 1.980 s in Patient 3), so it needs a full rerun before these are reported. -->
+
+```{python filename="intra_window_full_stats.py"}
+#| output: false
+import mindmap as mm
+from IPython.display import Markdown
+
+# Same test as the main text (index.qmd, results_intra_vieeg_significance.py), for every patient and competitor: the
+# window mean of the signed spatial correlation, wCSET vs. each competitor, paired bootstrap over bursts of spikes
+# (processing_intra.qmd, "Spike-level bootstrap"), Holm across the 5 competitors, mean difference with its basic CI
+# at CI_LEVEL (99%, as in the main text).
+S3_SUBJECTS = ["48", "34", "12", "50"]
+S3_PATIENTS = {"48": "1", "34": "2", "12": "3 (deep source)", "50": "4 (deep source)"}
+S3_COMPETITORS = ["sloreta", "cset", "dspm", "wmne", "beltrami"]
+S3_WINDOW = "correlation_spatial_signed_window"
+
+s3_boot = mm.metric.MetricSuite.load("../results/intra/bootstrap")
+s3_vs = {
+    sub: s3_boot.stat.bootstrap(
+        S3_WINDOW, group_by="Method", comparisons=s3_boot.stat.build_comparisons(["wcset"], S3_COMPETITORS),
+        pairing_col="Subject", filters={"Subject": sub}, replicates=f"{S3_WINDOW}_boot", replicate_col="draw",
+        estimator="mean_diff", correction="holm", ci_method="basic", ci_level=CI_LEVEL,
+    ).vs("wcset")  # positive = wCSET better
+    for sub in S3_SUBJECTS
+}
+
+def _s3_level(sub, method):
+    return s3_boot.to_df(metrics=S3_WINDOW, filters={"Subject": sub, "Method": method})["Value"].item() + 0.0
+
+# @tbl-annex-s3-window: one block per patient, wCSET first, then each competitor with its difference and p_corrected
+_rows = []
+for sub in S3_SUBJECTS:
+    _rows.append([S3_PATIENTS[sub], METHOD_LABELS["wcset"], fmt_num(_s3_level(sub, "wcset"), 2), "", ""])
+    for c in S3_COMPETITORS:
+        v = s3_vs[sub].loc[c]
+        _rows.append(["", METHOD_LABELS[c], fmt_num(round(_s3_level(sub, c), 2) + 0.0, 2),  # + 0.0: no "-0.00"
+                      f"{v['mean_diff']:.2f} ({v['mean_diff_ci_low']:.2f} to {v['mean_diff_ci_high']:.2f})",
+                      f"{v['p_corrected']:.3f}" + (" *" if v["significant"] else "")])
+s3_table = "\n".join(
+    [f"| Patient | Method | r (window mean) | wCSET − method ({CI_LEVEL * 100:g}% CI) | p_corrected |",
+     "|:--|:--|--:|:--|--:|"] + ["| " + " | ".join(r_) + " |" for r_ in _rows])
+s3_n_boot = f'{s3_boot.metadata["bootstrap"]["n_boot"]:,}'
+```
+
+This section reports the main text's Study III comparison in full: the signed spatial correlation between virtual and recorded iEEG, averaged over the comparison window, for every patient and method, with every difference from wCSET (@tbl-annex-s3-window). The tests are those of the main text: a paired bootstrap over bursts of spikes (`{python} s3_n_boot` draws), Holm-corrected across the five competitors within each patient, with Bonferroni-corrected 99% basic CIs. The main text quotes the ranges of these values. Patients 3 and 4 had deep sources, far from the cortical source space, so no method's virtual iEEG agreed with their recordings.
+
+```{python filename="intra_window_full_table.py"}
+#| echo: false
+#| label: tbl-annex-s3-window
+#| tbl-cap: "Window-mean signed spatial correlation (Pearson r across contacts) between virtual and recorded iEEG, per patient and method, and the difference wCSET − method (positive = wCSET better) with its 99% basic bootstrap CI and Holm-corrected p-value (paired bootstrap over bursts of spikes; * p_corrected < 0.05)."
+Markdown(s3_table)
 ```

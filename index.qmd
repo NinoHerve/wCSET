@@ -41,7 +41,7 @@ execute:
   freeze: true
 
 abstract: >-
-  Most EEG source imaging methods assume brain activity arises from independent, focal sources and are validated mainly on their ability to localize a single generator, overlooking the brain's network structure and the co-activation of regions along it. We introduce weighted Connectome Spectrum Electromagnetic Tomography (wCSET), which replaces its predecessor CSET's L1 sparsity prior with a smooth, exponentially weighted L2 prior over the connectome-harmonic spectrum. We validate wCSET, CSET, three standard connectivity-agnostic methods, and a geometry-based alternative (GBF) across three complementary studies that probe source reconstruction beyond localization. The first simulates activity propagating across a structural connectome, providing an exact network-level ground truth. The second uses a clinical cohort of 26 seizure-free patients with epilepsy, with the resected volume as ground truth. The third uses simultaneous scalp and intracranial EEG recordings, a rare direct electrophysiological benchmark. In simulation, wCSET matched standard methods at localizing a source's onset but substantially outperformed them at reconstructing the distributed co-activation patterns that follow as activity spreads, an advantage robust to moderate noise and to considerable connectome corruption. In the resection cohort, wCSET's localization did not differ significantly from any other method. Against intracranial recordings, wCSET outperformed the standard methods and CSET in one of two evaluable subjects on two polarity-invariant measures, and did not differ from them in the other. A purely geometric alternative matched wCSET's own performance throughout, suggesting cortical geometry alone may capture much of what drives accurate distributed reconstruction. Together, these results establish wCSET as a principled step beyond localization-only source imaging, and introduce a validation framework for evaluating such methods against a source's full co-activation pattern rather than its location alone.
+  Most EEG source imaging methods assume brain activity arises from independent, focal sources and are validated mainly on their ability to localize a single generator, overlooking the brain's network structure and the co-activation of regions along it. We introduce weighted Connectome Spectrum Electromagnetic Tomography (wCSET), which replaces its predecessor CSET's L1 sparsity prior with a smooth, exponentially weighted L2 prior over the connectome-harmonic spectrum. We validate wCSET, CSET, three standard connectivity-agnostic methods, and a geometry-based alternative (GBF) across three complementary studies that probe source reconstruction beyond localization. The first simulates activity propagating across a structural connectome, providing an exact network-level ground truth. The second uses a clinical cohort of 26 seizure-free patients with epilepsy, with the resected volume as ground truth. The third uses simultaneous scalp and intracranial EEG recordings, a rare direct electrophysiological benchmark. In simulation, wCSET localized a source's onset comparably to the standard methods, though less precisely than dSPM, but substantially outperformed them at reconstructing the distributed co-activation patterns that follow as activity spreads, an advantage robust to moderate noise and to considerable connectome corruption. In the resection cohort, wCSET's localization did not differ significantly from any other method. Against intracranial recordings, wCSET's signed spatial correlation exceeded that of the standard methods and CSET in one of the two patients with cortical sources, and did not differ from them in the other. Connectome surrogates that require no diffusion MRI performed as well as the individual connectome, and a purely geometric alternative matched wCSET in patients but localized less accurately in simulation. Together, these results establish wCSET as a principled step beyond localization-only source imaging, and introduce a validation framework for evaluating such methods against a source's full co-activation pattern rather than its location alone.
 
 keywords:
   - Source Imaging
@@ -63,27 +63,26 @@ This structure can be encoded in the prior itself. In the Gaussian Bayesian fram
 
 The structural connectome offers a fourth source of structure. It combines long-range white-matter connections, reconstructed from diffusion MRI by tractography, with short-range connections within gray matter [@atasoy_human_2016; @ruequeralt_connectome_2024]. This network captures the long-range links that proximity priors miss, reflects anatomy rather than hemodynamics, and adds no parameters to estimate from the EEG. Recent work on structure–function coupling shows that the eigenvectors of the connectome's graph Laplacian, known as connectome harmonics, define a graph Fourier basis for brain activity [@shuman_emerging_2013; @atasoy_human_2016; @huang_graph_2016], and that brain activity concentrates in a few low-frequency harmonics [@atasoy_human_2016; @rue-queralt_connectome_2021]. Connectome Spectrum Electromagnetic Tomography (CSET) builds on this basis [@ruequeralt_connectome_2024]. It applies a sparse prior to the graph Fourier coefficients of the source activity, so that the reconstructed activity is represented by a small number of connectome harmonics.
 
-Other methods apply the same graph Fourier approach to the cortical surface instead of the connectome [@siu_structural_2026; @wang_geometry_2026]. They replace the connectome's graph Laplacian with the Laplace–Beltrami operator of the cortical mesh, whose eigenvectors, known as geometric harmonics, explain brain activity about as well as connectome harmonics in the structure–function coupling literature [@mansour_eigenmodes_2024]. Geometric harmonics require only the T1-weighted image [@pang_geometric_2023], which subject-level source reconstruction already uses to build the head model, but they ignore the long-range white-matter connections that the connectome captures. The most recent of these methods, Geometric Basis Functions (GBF) [@wang_geometry_2026], places a Gaussian prior on the graph Fourier coefficients and assigns each harmonic a weight, the prior standard deviation of its coefficient. A structure–function coupling study reports that the spectrum of brain activity decays exponentially with harmonic frequency [@abdelnour_functional_2018]. GBF's authors tested exponentially decaying weights but chose, empirically, logarithmically decaying weights truncated after the first 300 harmonics. Unlike CSET's sparse prior, these weights explicitly favour low-frequency harmonics, so the reconstructed spectrum concentrates in the low-frequency range, as observed experimentally [@atasoy_human_2016; @rue-queralt_connectome_2021].
+Other methods apply the same graph Fourier approach to the cortical surface instead of the connectome, either by filtering reconstructed activity [@siu_structural_2026] or through a prior [@wang_geometry_2026]. They replace the connectome's graph Laplacian with the Laplace–Beltrami operator of the cortical mesh, whose eigenvectors, known as geometric harmonics, explain brain activity about as well as connectome harmonics in the structure–function coupling literature [@mansour_eigenmodes_2024]. Geometric harmonics require only the T1-weighted image [@pang_geometric_2023], which subject-level source reconstruction already uses to build the head model, but they ignore the long-range white-matter connections that the connectome captures. The most recent of these methods, Geometric Basis Functions (GBF) [@wang_geometry_2026], places a Gaussian prior on the graph Fourier coefficients and assigns each harmonic a weight, the prior standard deviation of its coefficient. A structure–function coupling study reports that the spectrum of brain activity decays exponentially with harmonic frequency [@abdelnour_functional_2018]. GBF's authors tested exponentially decaying weights but chose, empirically, logarithmically decaying weights truncated after the first 300 harmonics. Unlike CSET's sparse prior, these weights explicitly favour low-frequency harmonics, so the reconstructed spectrum concentrates in the low-frequency range, as observed experimentally [@atasoy_human_2016; @rue-queralt_connectome_2021].
 
 We propose weighted CSET, which combines the connectome harmonics of CSET with the harmonic weighting of GBF. Weighted CSET places a Gaussian prior on the graph Fourier coefficients of the connectome harmonics, with harmonic weights that decay exponentially with harmonic frequency. The reconstructed spectrum therefore follows the exponential decay reported in this structure–function coupling study [@abdelnour_functional_2018].
 
-Evaluating such connectivity-informed methods, which model co-activation between sources, requires different benchmarks. Most methods are evaluated on how accurately they recover the location and extent of a source [@grova_evaluation_2006; @carboni_linear_2022], metrics that assume brain activity consists of focal sources. For a focal source, however, the independence assumption holds, because the source has no co-active regions to model. Localization benchmarks therefore cannot reveal what connectivity-informed priors add. We hypothesize that these priors bring little benefit for localizing a source at its onset but improve the reconstruction of activity after onset, as it propagates through the cortex.
+Evaluating such connectivity-informed methods, which model co-activation between sources, requires different benchmarks. Most methods are evaluated on how accurately they recover the location and extent of a source at its onset [@grova_evaluation_2006; @carboni_linear_2022], when activity is still focal. A focal source, however, has few co-active regions to model, so these benchmarks capture only a small part of what connectivity-informed priors add. Their largest gain should come beyond the focal source, as activity propagates through the cortex and reaches connected regions. We therefore hypothesize that these priors bring little benefit for localizing a source but reconstruct the spatial pattern of activity more accurately, with a gain that grows as activity spreads beyond its onset.
 
-Testing this hypothesis is difficult because no single benchmark provides a complete ground truth for co-activation: simulations are exact but idealized, surgical resections are clinically grounded but spatially coarse, and intracranial EEG (iEEG) is direct but sparsely sampled. We therefore combine three complementary studies, each comparing CSET and weighted CSET (wCSET) with standard methods:
-
--   **Study I (simulations).** We simulate activity propagating across the structural connectome, which provides an exact and fully known ground truth for co-activation that no recording can offer. We test whether connectivity-informed methods reconstruct the co-activation patterns that follow a source's onset, and how robust they are to errors in the connectome.
+Testing this hypothesis is difficult because no single benchmark provides a complete ground truth for the spatial pattern of activity: simulations are exact but idealized, surgical resections are clinically grounded but spatially coarse, and intracranial EEG (iEEG) is direct but sparsely sampled. We therefore combine three complementary studies, each comparing CSET and wCSET with GBF and three standard methods (wMNE, dSPM and sLORETA):
+-   **Study I (simulations).** We simulate activity propagating across the structural connectome, which provides an exact and fully known ground truth for the spatial pattern of activity that no recording can offer. We test whether connectivity-informed methods reconstruct the spatial pattern of activity as it spreads from a source’s onset, and how robust they are to errors in the connectome.
 
 -   **Study II (epilepsy surgery).** In a clinical epilepsy cohort, the resected zone serves as the reference, and seizure freedom after surgery confirms that it contained the epileptogenic source [@rosenow_presurgical_2001; @carboni_linear_2022; @vorderwulbecke_high-density_2020]. We test whether connectivity-informed methods localize this source as accurately as standard methods.
 
--   **Study III (simultaneous EEG–iEEG).** As a proof of concept in a small cohort, we use simultaneous scalp EEG and iEEG recordings, following the framework of @grova_intracranial_2016 and @afnan_assessing_2026, who compared magnetoencephalography (MEG) source reconstructions with iEEG. iEEG provides a direct electrophysiological reference, free from neurovascular coupling, skull attenuation and temporal blurring [@nunez_electric_2006]. By projecting the EEG reconstructions onto the iEEG electrode locations, we compare reconstructed and recorded co-activation patterns at each time point.
+-   **Study III (simultaneous EEG–iEEG).** As a proof of concept in a small cohort, we use simultaneous scalp EEG and iEEG recordings, following the framework of @grova_intracranial_2016 and @afnan_assessing_2026, who compared magnetoencephalography (MEG) source reconstructions with iEEG. iEEG provides a direct electrophysiological reference, free from neurovascular coupling, skull attenuation and temporal blurring [@nunez_electric_2006]. By projecting the EEG reconstructions onto the iEEG electrode locations, we compare the reconstructed and recorded spatial patterns of activity at each time point.
 
 Together, these studies form a multi-level evaluation framework that moves the evaluation of source reconstruction beyond localization alone.
 
 # Materials and Methods
 
-We evaluate wCSET in three complementary studies (@fig-overview). All three reconstruct the EEG with the same pipeline and compare the same six methods: three minimum-norm baselines that assume independent sources (wMNE, dSPM and sLORETA), the geometry-based method GBF, and the two connectome-based methods CSET and wCSET. This section describes, in turn, the shared pipeline (@sec-pipeline), the datasets and their study-specific settings (@sec-datasets), the metrics that compare each reconstruction with its study's reference (the simulated activity, the resected zone or the iEEG recordings) (@sec-metrics), and the statistical analysis (@sec-stats).
+We evaluate wCSET in three complementary studies (@fig-overview). All three reconstruct the EEG with the same pipeline and compare the same six methods: three standard methods that assume independent sources (wMNE, dSPM and sLORETA), the geometry-based method GBF, and the two connectome-based methods CSET and wCSET. This section describes, in turn, the shared pipeline (@sec-pipeline), the datasets and their study-specific settings (@sec-datasets), the metrics that compare each reconstruction with its study's reference (the simulated activity, the resected zone or the iEEG recordings) (@sec-metrics), and the statistical analysis (@sec-stats).
 
-![*Shared reconstruction pipeline and three complementary validation studies.* Top: all studies reconstruct the EEG with the same pipeline. Red marks brain activity; green marks the reference against which each reconstruction is evaluated. **Study I (left), simulations:** activity propagates from a focal source across the structural connectome. Each reconstruction is compared with the simulated activity by spatial correlation over time; the example shows wCSET and sLORETA at onset (t₁) and after propagation (t₂). Onset localization is evaluated separately (@sec-metric-loc). **Study II (middle), epilepsy surgery:** in patients seizure-free after surgery, localization error is the Euclidean distance between the peak of the reconstructed activity and the resected zone (0 mm if the peak lies inside it). **Study III (right), simultaneous EEG–iEEG:** reconstructions are projected onto the intracranial contacts ("virtual iEEG") and compared with the recorded iEEG by the rank correlation of amplitudes and the area under the ROC curve (AUC) across contacts.](results/overview_method.png){#fig-overview fig-alt="Schematic of the shared source reconstruction pipeline (MRI and electrode positions, source space, forward model, connectome and harmonics, inverse solution, reconstructed activity) branching into three study panels: simulation with ground-truth and reconstructed brain maps at two time points, resection cohort with the distance between estimated location and resection volume, and simultaneous EEG/iEEG with reconstructed sources projected onto intracranial electrodes."}
+![*Shared reconstruction pipeline and three complementary validation studies.* Top: all studies reconstruct the EEG with the same pipeline. Red marks brain activity; green marks the reference against which each reconstruction is evaluated. **Study I (left), simulations:** activity propagates from a focal source across the structural connectome. Each reconstruction is compared with the simulated activity by spatial correlation over time; the example shows wCSET and sLORETA at onset (t₁) and after propagation (t₂). Onset localization is evaluated separately (@sec-metric-loc). **Study II (middle), epilepsy surgery:** in patients seizure-free after surgery, localization error is the Euclidean distance between the peak of the reconstructed activity and the resected zone (0 mm if the peak lies inside it). **Study III (right), simultaneous EEG–iEEG:** reconstructions are projected onto the intracranial contacts ("virtual iEEG") and compared with the recorded iEEG by the signed spatial correlation across contacts.](results/overview_method.png){#fig-overview fig-alt="Schematic of the shared source reconstruction pipeline (MRI and electrode positions, source space, forward model, connectome and harmonics, inverse solution, reconstructed activity) branching into three study panels: simulation with ground-truth and reconstructed brain maps at two time points, resection cohort with the distance between estimated location and resection volume, and simultaneous EEG/iEEG with reconstructed sources projected onto intracranial electrodes."}
 
 ## Source Reconstruction Pipeline {#sec-pipeline}
 
@@ -121,8 +120,6 @@ When diffusion MRI is unavailable, a surrogate must replace the individual conne
 
 **Graph Fourier transform**
 
-<!-- To add in annex: We used inverse-distance weights for simplicity; since binarized connectomes perform as well as weighted ones (@sec-results-surrogates), the choice of weighting function is unlikely to affect the results. -->
-
 Because edge weights are lengths, we invert them to obtain an adjacency matrix $\mathbf A$ whose entries describe connection strength, so that shorter connections couple more strongly, in line with the decay of connection strength with distance [@ercsey-ravasz_predictive_2013]. From $\mathbf A$, we build the normalized graph Laplacian
 
 $$
@@ -139,7 +136,7 @@ yields the graph harmonics, the columns $u_1, \ldots, u_N$ of $\mathbf U$, and t
 
 ### Inverse Problem and Methods {#sec-inverse}
 
-All three studies compare six methods: three minimum-norm baselines, wMNE [@hamalainen_interpreting_1994], dSPM [@dale_dynamic_2000] and sLORETA [@pascual-marqui_standardized_2002]; the connectome-based methods CSET and wCSET; and the geometry-based method GBF. Before reconstruction, the data and gain matrix were whitened with a noise covariance estimated from baseline epochs [@dale_dynamic_2000; @knosche_eegmeg_2022]. Study II provides only averaged responses, without baseline epochs, so we whitened its data and gain matrix with a diagonal noise covariance built from the sensor variances (@sec-data-resection).
+All three studies compare six methods: three standard methods, wMNE [@hamalainen_interpreting_1994], dSPM [@dale_dynamic_2000] and sLORETA [@pascual-marqui_standardized_2002]; the connectome-based methods CSET and wCSET; and the geometry-based method GBF. Before reconstruction, the data and gain matrix were whitened with a noise covariance estimated from baseline epochs [@dale_dynamic_2000; @knosche_eegmeg_2022]. Study II provides only averaged responses, without baseline epochs, so we whitened its data and gain matrix with a diagonal noise covariance built from the sensor variances (@sec-data-resection).
 
 **Common formulation.** All six methods estimate the source activity $\mathbf s \in \mathbb R^n$ from the EEG $\mathbf y \in \mathbb R^m$ and the gain matrix $\mathbf L$ (@sec-bem) by solving
 
@@ -153,9 +150,9 @@ $$
 \mathbf s^* = \mathbf\Sigma_{\mathbf s}\mathbf L^\top\left(\mathbf L\mathbf\Sigma_{\mathbf s}\mathbf L^\top + \alpha\mathbf I\right)^{-1}\mathbf y, \tag{2}
 $$
 
-which we compute efficiently through a singular value decomposition, as in MNE-Python [@gramfort_meg_2013] (@sec-annex-solvers). For $p = 1$, Eq. (1) has no closed form, and we solve it by proximal gradient descent. For every method, we normalize the prior covariance $\mathbf\Sigma_{\mathbf s}$ to unit trace, so that $\alpha$ has the same scale across methods. For every method, we normalize the prior covariance $\mathbf\Sigma_{\mathbf s}$ to unit trace, so that $\alpha$ has the same scale across methods.
+which we compute efficiently through a singular value decomposition, as in MNE-Python [@gramfort_meg_2013] (@sec-annex-solvers). For $p = 1$, Eq. (1) has no closed form, and we solve it by proximal gradient descent. For every method, we normalize the prior covariance $\mathbf\Sigma_{\mathbf s}$ to unit trace, so that $\alpha$ has the same scale across methods.
 
-**Independent-source priors.** The three baselines use $p = 2$ with a diagonal $\mathbf C$. For dSPM and sLORETA it is the identity, and the solution is standardized afterward. For wMNE it is a depth-weighting matrix $\mathbf W_d^{-1}$, which counteracts the bias toward superficial dipoles (@sec-annex-baselines). Because $\mathbf C$ is diagonal, so is $\mathbf\Sigma_{\mathbf s}$. The sources are therefore independent a priori, and nothing in the prior encodes which regions co-activate.
+**Independent-source priors.** The three standard methods use $p = 2$ with a diagonal $\mathbf C$. For dSPM and sLORETA it is the identity, and the solution is standardized afterward. For wMNE it is a depth-weighting matrix $\mathbf W_d^{-1}$, which counteracts the bias toward superficial dipoles (@sec-annex-baselines). Because $\mathbf C$ is diagonal, so is $\mathbf\Sigma_{\mathbf s}$. The sources are therefore independent a priori, and nothing in the prior encodes which regions co-activate.
 
 **Connectome-based priors.** CSET and wCSET instead apply the prior to the graph Fourier coefficients of the depth-weighted activity, $\mathbf U^\top \mathbf W_d^{-1} \mathbf s$. The matrix $\mathbf C$ is then no longer diagonal, and the connectome harmonics couple the sources. CSET [@ruequeralt_connectome_2024] uses a sparse prior ($p = 1$), which favors activity represented by a few connectome harmonics, whatever their frequency. wCSET uses a Gaussian prior ($p = 2$) and adds harmonic weights that decay exponentially with graph frequency:
 
@@ -221,53 +218,57 @@ Study III uses a cohort of four patients with epilepsy, recorded with the protoc
 
 **Reference: recorded and virtual iEEG.** The iEEG epochs were averaged, without further preprocessing, into the reference evoked response. Because iEEG samples the potential only at a sparse set of contacts, we compared each reconstruction with the recorded iEEG at those contacts only, following @grova_intracranial_2016 and @afnan_assessing_2026. For this comparison, we projected each reconstruction onto the contacts, which gives a virtual iEEG. We calculated the potential that each reconstructed dipole produces at each contact, assuming an infinite homogeneous conductor, and summed these potentials over dipoles. Where a dipole lay closer than 3 mm to a contact, the assumed accuracy of the iEEG–MRI co-registration, we set the distance to 3 mm, which prevents the potential from growing without bound near the source.
 
-**Comparison window.** @grova_intracranial_2016 compared virtual and recorded iEEG over a few samples around the spike peak, which mainly captures the onset of activity. Because we expect connectivity-informed methods to improve the reconstruction mostly after onset, we compared the two signals over a longer window. For each patient, this window covers the samples where the global field power (GFP) of the recorded iEEG exceeds a threshold set from its baseline, so that the data define the window (@sec-annex-ieeg).
+**Comparison window.** @grova_intracranial_2016 compared virtual and recorded iEEG over a few samples around the spike peak, which mainly captures the onset of activity. Because we expect connectivity-informed methods to improve the reconstruction mostly as activity spreads beyond its onset, we compared the two signals over a longer window. For each patient, this window covers the samples where the global field power (GFP) of the recorded iEEG exceeds a threshold set from its baseline, so that the data define the window (@sec-annex-ieeg).
 
-**Patients reported.** The main text reports two of the four patients. In the other two, the spikes originate from deep sources, far from the cortical source space (@sec-source-space). Because the reconstruction cannot place activity there, the virtual iEEG at the contacts near these sources is unreliable, so their results appear in the Annex. With two patients in the main analysis, Study III serves as a proof of concept rather than a statistical validation.
+**Patients reported.** All four patients are reported. In two of them, the spikes originate from deep sources, far from the cortical source space (@sec-source-space). Because the reconstruction cannot place activity there, the virtual iEEG at the contacts near these sources is unreliable, so we report these two patients separately. With two patients with cortical sources, Study III serves as a proof of concept rather than a statistical validation.
 
 ## Evaluation Metrics {#sec-metrics}
 
-Each study compares the reconstructions with its ground truth or reference using one or two of three metrics (@tbl-metrics).
+Source reconstruction is most often used to localize a source, so we first test whether connectivity-informed methods localize it as accurately as standard methods. Their priors, however, encode co-activation between sources, so they should also reconstruct which regions are active together at each time point. We therefore also test whether they reconstruct the spatial pattern of activity more accurately (@tbl-metrics). The localization error measures how far the reconstruction places the source from the reference. The spatial correlation measures how well the reconstruction matches the spatial pattern of activity in the reference.
 
-| Metric | Study I (simulations) | Study II (epilepsy surgery) | Study III (simultaneous EEG–iEEG) |
-|------------------|------------------|------------------|------------------|
-| Localization error | 25% of the rising phase | 50% of the rising phase | — |
-| Spatial correlation | Pearson, across dipoles, over time | — | Pearson, across contacts, averaged over the comparison window |
-| Spatial overlap (AUC) | — | — | Annex only |
+| Metric | Evaluates | Study I (simulations) | Study II (epilepsy surgery) | Study III (simultaneous EEG–iEEG) |
+|------------------|------------------|------------------|------------------|------------------|
+| Localization error | Source localization | At 25% of the spike's peak amplitude | At 50% of the spike's peak amplitude; proportion of peaks inside the resection volume | — |
+| Spatial correlation | Spatial pattern of activity | Across dipoles, at each time point | — | Across contacts, averaged over the comparison window |
 
 : Metrics used in each study. {#tbl-metrics}
 
 ### Localization Error {#sec-metric-loc}
 
-The localization error is the Euclidean distance from the dipole with the largest absolute reconstructed amplitude to the boundary of the target region, which is the initial patch in Study I and the resection volume in Study II. The error is 0 mm if this dipole lies inside the target region [@wang_geometry_2026].
+At a given time point, the localization error is the Euclidean distance from the dipole with the largest absolute reconstructed amplitude to the nearest point of the target region: the initial patch in Study I and the resection volume in Study II. Following @wang_geometry_2026, the error is 0 mm if this dipole lies inside the target region.
 
-We measured it during the rising phase of the spike rather than at its peak, by which time activity has usually spread. Early in the rising phase, activity is still focal but the SNR is low. Later, the SNR is higher but activity has begun to spread. In Study I, we used the time point at which the spike reaches 25% of its peak amplitude, when the simulated activity is still confined to the initial patch. In Study II, we used the time point at which it reaches 50%, which @vorderwulbecke_high-density_2020 found most accurate on this dataset.
+Choosing when to measure the error involves a trade-off. Early in the rising phase of the spike, activity is still focal but the SNR is low; at the spike peak, when the EEG reaches its highest amplitude, the SNR is highest but activity has usually spread. We therefore measured the error when the spike, on the channel where it peaks, reaches a set fraction of its peak amplitude (@sec-annex-loc): 25% in Study I, when the simulated activity is still confined to the initial patch, and 50% in Study II, the fraction that @vorderwulbecke_high-density_2020 found most accurate on this dataset.
 
 ### Spatial Correlation {#sec-metric-corr}
 
-At each time point, the spatial correlation measures how well the pattern of reconstructed activity matches the ground truth or reference. In Study I, it is the Pearson correlation, across dipoles, between the reconstructed and simulated activity. In Study III, it is the Pearson correlation, across intracranial contacts, between the virtual and recorded iEEG (@sec-data-ieeg). Previous studies comparing source reconstructions with simultaneous intracranial recordings used the same measure [@grova_intracranial_2016; @afnan_assessing_2026]. Like any correlation, it ignores the different amplitude scales of the two signals.
+At each time point, the spatial correlation measures how well the pattern of reconstructed activity matches the reference. In Study I, it is the Pearson correlation, across dipoles, between the reconstructed and simulated activity. In Study III, it is the Pearson correlation, across intracranial contacts, between the virtual and recorded iEEG (@sec-data-ieeg), the measure used by previous studies that compared source reconstructions with simultaneous intracranial recordings [@grova_intracranial_2016; @afnan_assessing_2026]. Because correlation is insensitive to amplitude scale, it can compare methods whose outputs have different units, such as the standardized dSPM and sLORETA estimates.
 
-@grova_intracranial_2016 and @afnan_assessing_2026 evaluated this correlation at the spike peak. Because co-activation develops over the course of the spike, not only at its peak, we instead averaged the correlation over the comparison window, which covers all time points at which the activity rises above the noise (@sec-data-ieeg). For direct comparison with their results, the Annex also reports the correlation at the peak, averaged over five samples as in @grova_intracranial_2016, and the AUC used by @afnan_assessing_2026 (@sec-metric-auc).
+In Study III, we averaged the correlation over the comparison window rather than evaluating it at a single instant, as @grova_intracranial_2016 and @afnan_assessing_2026 did, because the spatial pattern of activity changes over the whole spike. The comparison window covers the samples where the GFP of the recorded iEEG exceeds a threshold set from its baseline (@sec-data-ieeg). For direct comparison with these studies, the Annex also reports the correlation around the spike detection time and the AUC (@sec-annex-iEEG-metrics).
 
-### Area Under the ROC Curve {#sec-metric-auc}
+<!--
+### Additional iEEG Metrics {#sec-annex-iEEG-metrics}
 
-For direct comparison with @afnan_assessing_2026, the Annex also reports the area under the ROC curve (AUC), a measure of spatial overlap [@grova_evaluation_2006]. At the spike peak, contacts whose recorded absolute amplitude reached at least 30% of the maximum were labeled active, as in @afnan_assessing_2026. The AUC is the probability that the virtual iEEG has a larger absolute amplitude at an active contact than at an inactive one. It equals 0.5 at chance and 1 for perfect separation.
+For direct comparison with previous studies, we report two further metrics in Study III. The first is the spatial correlation (@sec-metric-corr) averaged over the five samples centered on the time at which Delphos detected the spike, as in @grova_intracranial_2016.
+
+The second is the area under the ROC curve (AUC) used by @afnan_assessing_2026, which measures how well the virtual iEEG separates active from inactive contacts [@grova_evaluation_2006]. Following @afnan_assessing_2026, we labeled a contact active if its absolute recorded amplitude at the spike peak reached at least 30% of the maximum across contacts. The AUC is then the probability that the virtual iEEG has a larger absolute amplitude at an active contact than at an inactive one. It equals 0.5 at chance and 1 for perfect separation.
+-->
 
 ## Statistical Analysis {#sec-stats}
 
 ### Method Comparisons {#sec-stats-tests}
 
-All method comparisons are paired, and each method is compared with wCSET. We report every effect in the units of its outcome (millimeters of localization error, difference in correlation Δr, or difference in the proportion of patients), with its 95% confidence interval (CI), so that its size can be judged directly. p-values were corrected with the Holm procedure [@holm_simple_1979] within each family of comparisons, formed by one outcome in one study (or one patient in Study III) across the methods compared with wCSET (α = 0.05).
+We compared every method with wCSET in paired tests and report each effect in the units of its outcome (millimeters of localization error, difference in correlation Δr, or difference in the proportion of patients), with its confidence interval (CI). A family of comparisons contains one outcome in one study (or one patient in Study III), across all methods compared with wCSET. Within each family, we corrected p-values with the Holm procedure [@holm_simple_1979] (α = 0.05). For source localization and for the surrogate connectomes, we also tested non-inferiority. To control the family-wise error rate of these decisions, which rest on the CIs, we Bonferroni-corrected the CIs for the number of comparisons in each family (99% CIs for five comparisons).
 
-**Studies I and II.** Outcomes with one value per pair were compared with the Wilcoxon signed-rank test [@wilcoxon_individual_1945], keeping zero differences [@pratt_remarks_1959]. Pairs are regions in Study I, each the mean over its eight runs, and patients in Study II. As the effect size, we report the Hodges–Lehmann estimate of the paired difference with its distribution-free CI [@hodges_estimates_1963]. The figures also give the rank-biserial correlation [@kerby_simple_2014]. Whether the peak fell inside the resection volume (Study II) is binary, so we compared it with the exact McNemar test [@mcnemar_note_1947] and report the difference in the proportion of patients, with Newcombe's CI [@newcombe_improved_1998]. Outcomes that vary along a continuous dimension (time, SNR or perturbation severity) were compared with cluster-based permutation tests on the paired differences [@maris_nonparametric_2007], with 3,000 permutations and Holm correction across methods applied to each method's most significant cluster. For each significant cluster, we report the paired difference averaged over its extent, with the same effect size as above: the Hodges–Lehmann estimate for localization error and the mean, with a t-based CI, for spatial correlation.
+**Outcomes with one value per pair.** In Studies I and II, each pair is a region (Study I) or a patient (Study II), and we averaged each region's outcome over its eight runs. We compared these outcomes with the Wilcoxon signed-rank test, keeping zero differences [@wilcoxon_individual_1945; @pratt_remarks_1959], and report the Hodges–Lehmann estimate of the paired difference with its distribution-free CI [@hodges_estimates_1963]. The figures also give the rank-biserial correlation [@kerby_simple_2014], an effect size that can be compared across outcomes and studies.
 
-**Non-inferiority.** A method was considered non-inferior to its comparator when the 95% CI of the reported effect ruled out being worse by more than a margin δ. For localization error, δ = 5 mm, the error that the head model alone introduces in EEG source localization [@akalin_acar_effects_2013]. For spatial correlation, δ = 0.1, which corresponds to Cohen's smallest effect for a difference between two correlations (q = 0.1) at the correlation levels observed here [@cohen_statistical_1988]. These margins apply to wCSET against the other methods and to the surrogate connectomes against the individual connectome (@sec-s1-surrogates).
+**Binary outcome.** We compared whether the peak fell inside the resection volume (Study II, @sec-metric-loc) with the exact McNemar test [@mcnemar_note_1947] and report the difference in the proportion of patients, with Newcombe's CI [@newcombe_improved_1998].
 
-**Study III.** In each patient, the outcome is computed on a single averaged spike, so its uncertainty depends on which spikes enter that average. The time points within the average cannot serve as independent samples, because successive time points are strongly correlated. We therefore analyzed each patient separately with a paired bootstrap over spikes [@field_bootstrapping_2007; @cameron_bootstrap-based_2008]. In each of 1,000 draws, we resampled the spikes with replacement, averaged them, and recomputed every method's virtual iEEG and its spatial correlation with the recorded iEEG over the comparison window. Spikes close enough in time to share samples were resampled together. The draws give the 95% CI of the difference between wCSET and each method, and the corresponding p-value (@sec-annex-bootstrap).
+**Outcomes along a continuous dimension.** We compared outcomes that vary with time, SNR or perturbation severity using cluster-based permutation tests on the paired differences, with 3,000 permutations [@maris_nonparametric_2007]. We formed clusters from adjacent points whose paired t-test reached p < 0.05 and measured each cluster by the sum of its t-values. For each method, we kept its most significant cluster and corrected these clusters' p-values across methods with the Holm procedure. For each significant cluster, we report the paired difference averaged over its extent: the Hodges–Lehmann estimate for localization error, and the mean with a t-based CI for spatial correlation.
 
-### Chance Level {#sec-metric-chance}
+**Non-inferiority.** We tested non-inferiority in two cases: whether wCSET localizes sources as accurately as the other methods, and whether each surrogate connectome can replace the individual connectome (@sec-s1-surrogates). In both cases, we declared non-inferiority when the CI of the difference excluded a disadvantage, for wCSET or for the surrogate, larger than a margin δ. For localization error, δ = 5 mm, the error that the head model alone introduces in EEG source localization [@akalin_acar_effects_2013]. For spatial correlation, δ = 0.1. For correlations between [r_min] and [r_max], the range observed in [Study I / pilot simulations], this margin corresponds to a Cohen's q between [q_min] and [q_max], a small effect for a difference between two correlations [@cohen_statistical_1988].
 
-For the spatial correlation of Study III, we estimated chance levels as in @afnan_assessing_2026. We randomly permuted the contact labels of the virtual iEEG 1,000 times, recomputed the correlation at every time point, and took the 2.5th and 97.5th percentiles of the resulting null distribution.
+**Study III.** Because each patient contributes a single averaged spike, whose successive time points are strongly correlated, we analyzed each patient separately with a paired bootstrap over spikes [@field_bootstrapping_2007; @cameron_bootstrap-based_2008]. In each of 1,000 draws, we resampled the spikes with replacement, keeping together spikes that share samples, averaged them, and recomputed every method's spatial correlation with the recorded iEEG over the comparison window. We obtained the CI of the difference between wCSET and each method, and its p-value, from the basic bootstrap interval, which corrects for the bias of resampled averages toward zero correlation [@davison_bootstrap_1997] (@sec-annex-bootstrap).
+
 
 # Results
 
@@ -281,19 +282,14 @@ from scripts.figures import *
 
 ## Study I: Simulations {#sec-study1}
 
-### Localization vs. Co-Activation {#sec-s1-localization}
-
-We tested both parts of our hypothesis (@sec-introduction) on the simulation described in @sec-data-synthetic, in which activity spreads from a single known source and the ground truth is fully known (@fig-flagship-example).
-
-At 25% of the peak amplitude (@sec-metric-loc), wCSET's localization error was significantly lower than sLORETA's and wMNE's, but significantly higher than CSET's and dSPM's (@fig-s1-localization a; all p_corrected < 0.001). By the Hodges–Lehmann estimate, it was lower than sLORETA's by 8.6 mm (95% CI 5.3 to 11.6) and wMNE's by 45.2 mm (95% CI 41.0 to 49.3), but higher than CSET's by 5.2 mm (95% CI 2.3 to 7.8) and dSPM's by 6.2 mm (95% CI 2.8 to 9.4). The upper bounds of both deficits (7.8 and 9.4 mm) exceed 5 mm, the localization error that the head model alone introduces [@akalin_acar_effects_2013], so wCSET was not shown to localize the onset as well as CSET and dSPM at this SNR. wCSET's errors were bimodal. It placed its peak inside the initial patch in 27% of regions, more often than any other method (CSET 24%, dSPM 9%), but more than 30 mm away from it in 24% (CSET 13%, dSPM 4%). @sec-s1-data-noise shows how this pattern changes with SNR.
-
-In spatial correlation, wCSET outperformed every other method throughout the spike, from onset (0 ms) until 80–88 ms depending on the method (@fig-s1-localization b; all p_corrected ≤ 0.001). Its advantage was larger over the standard methods than over CSET, and it grew as activity spread from the initial patch. As mean paired differences across regions, wCSET's correlation exceeded the standard methods' by Δr = 0.16–0.17 (all lower CI bounds ≥ `{python} corr1_std_ci_lo_25`) and CSET's by Δr = 0.07 (95% CI 0.05 to 0.09) at 25% of the peak amplitude. At the peak, these differences reached Δr = 0.28–0.29 (all lower CI bounds ≥ `{python} corr1_std_ci_lo_pp`) and 0.10 (95% CI 0.08 to 0.12). The gap between connectivity-informed and standard methods was largest at 16 ms, close to the peak. Before onset and after the spike, the averaged EEG contains only noise, so all correlations stay near zero there and are not interpreted.
+### wCSET improves activity patterns more than localization {#sec-s1-localization}
 
 ```{python filename="simf_localization_stats.py"}
 #| output: false
 import mindmap as mm
 
 DELTA_LOC_MM = 5.0  # non-inferiority margin: the head model's own localization error floor [@akalin_acar_effects_2013]
+CI_LEVEL = 0.99  # CIs Bonferroni-corrected for families of up to five comparisons (@sec-stats-tests)
 
 simf_metrics = mm.metric.MetricSuite.load("./results/simf/flagship")
 competitors = [m for m in METHODS if m != "wcset"]
@@ -301,11 +297,11 @@ comparisons = simf_metrics.stat.build_comparisons(["wcset"], competitors)
 
 # Localization error at qrp: Wilcoxon signed-rank vs. wCSET, paired by region (mean over its repetitions),
 # ties kept (Pratt), Holm across the 4 competitors. Hodges-Lehmann shift (mm) and rank-biserial r, each
-# with its 95% CI.
+# with its 99% CI.
 loc1_results = simf_metrics.stat.wilcoxon(
     "localization_error", group_by="Method", comparisons=comparisons, pairing_col="region",
     filters={"phase": "qrp"}, correction="holm", zero_method="pratt",
-    effect_sizes=("hodges_lehmann", "rank_biserial"), ci_seed=0,
+    effect_sizes=("hodges_lehmann", "rank_biserial"), ci_seed=0, ci_level=CI_LEVEL,
 )
 _loc1 = loc1_results.vs("wcset", higher_is_better=False)  # positive = wCSET better (lower error)
 
@@ -323,9 +319,10 @@ def _flip(row, name):
     return {name: -row[name], f"{name}_ci_low": -row[f"{name}_ci_high"], f"{name}_ci_high": -row[f"{name}_ci_low"]}
 
 loc1_p_max = fmt_p(_loc1["p_corrected"].max())
-loc1_sloreta_hl, loc1_wmne_hl = (fmt_ci(_loc1.loc[c], "hodges_lehmann", unit=" mm") for c in ["sloreta", "wmne"])
-loc1_cset_hl, loc1_dspm_hl = (fmt_ci(_flip(_loc1.loc[c], "hodges_lehmann"), "hodges_lehmann", unit=" mm") for c in ["cset", "dspm"])
-loc1_small_r = fmt_num(_loc1.loc[["cset", "dspm"], "rank_biserial"].abs().mean(), 1)  # size of wCSET's deficits (Discussion)
+loc1_sloreta_hl, loc1_wmne_hl = (fmt_ci(_loc1.loc[c], "hodges_lehmann", unit=" mm", level=CI_LEVEL) for c in ["sloreta", "wmne"])
+loc1_cset_hl, loc1_dspm_hl = (fmt_ci(_flip(_loc1.loc[c], "hodges_lehmann"), "hodges_lehmann", unit=" mm", level=CI_LEVEL)
+                              for c in ["cset", "dspm"])
+loc1_dspm_hl_p = f"{loc1_dspm_hl[:-1]}; all p_corrected {loc1_p_max})"  # last of the sentence: p inside its parentheses
 loc1_delta = fmt_num(DELTA_LOC_MM, 0)
 loc1_cset_hi, loc1_dspm_hi = (fmt_num(-_loc1.loc[c, "hodges_lehmann_ci_low"]) for c in ["cset", "dspm"])  # upper CI bounds of the deficits
 _loc_trials = simf_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})
@@ -336,7 +333,7 @@ simf_loc_trial_median_wcset = fmt_num(_loc_trials.loc[_loc_trials["Method"] == "
 # than 30 mm away. The prose says wCSET hits the patch most often.
 _exact = _loc_trials.groupby("Method")["Value"].apply(lambda v: (v == 0).mean() * 100)
 _far = _loc_trials.groupby("Method")["Value"].apply(lambda v: (v > 30).mean() * 100)
-assert _exact.idxmax() == "wcset"
+assert _exact.idxmax() == "wcset" and (_far["wcset"] > _far[["cset", "dspm"]]).all()  # Discussion: misses by > 30 mm more often than CSET and dSPM
 loc1_exact = {m: fmt_num(_exact[m], 0) for m in METHODS}
 loc1_far = {m: fmt_num(_far[m], 0) for m in METHODS}
 loc1_exact_wcset, loc1_exact_cset, loc1_exact_dspm = (loc1_exact[m] for m in ["wcset", "cset", "dspm"])
@@ -369,7 +366,7 @@ corr1_window_start = fmt_num(round(min(c["times_start"] for c in _better_cluster
 corr1_window_end_lo = fmt_num(min(c["times_end"] for c in _better_clusters) * 1000, digits=0)
 corr1_window_end_hi = fmt_num(max(c["times_end"] for c in _better_clusters) * 1000, digits=0)
 
-# Effect size: mean paired difference in correlation (wCSET - competitor, t 95% CI, like the t-based
+# Effect size: mean paired difference in correlation (wCSET - competitor, t 99% CI, like the t-based
 # cluster test) at the median qrp and peak times, which fall on the 4 ms time grid.
 qrp_median = float(simf_metrics.to_df(metrics="qrp_time")["Value"].median())
 pp_median = float(simf_metrics.to_df(metrics="pp_time")["Value"].median())
@@ -381,17 +378,21 @@ def _on_grid(t):
     return tg
 
 phase_times = {"qrp": _on_grid(qrp_median), "pp": _on_grid(pp_median)}
+corr1_pp_median_ms = fmt_num(pp_median * 1000, 0)  # median peak time, quoted next to the largest gap
 corr1_at = {
     phase: simf_metrics.estimate.mean_diff(
         "correlation", group_by="Method", comparisons=comparisons, pairing_col="region", filters={"times": t},
+        alpha=1 - CI_LEVEL,
     ).vs("wcset")
     for phase, t in phase_times.items()
 }
-corr1_dr = {phase: {c: fmt_ci(est.loc[c], "estimate", digits=2) for c in competitors} for phase, est in corr1_at.items()}
+corr1_dr = {phase: {c: fmt_ci(est.loc[c], "estimate", digits=2, level=CI_LEVEL) for c in competitors} for phase, est in corr1_at.items()}
 _std = ["sloreta", "dspm", "wmne"]
 corr1_std_dr_qrp_lo, corr1_std_dr_qrp_hi, corr1_std_dr_pp_lo, corr1_std_dr_pp_hi = (
     fmt_num(f(corr1_at[phase].loc[_std, "estimate"]), 2) for phase in ["qrp", "pp"] for f in [min, max])
 corr1_cset_dr_qrp, corr1_cset_dr_pp = corr1_dr["qrp"]["cset"], corr1_dr["pp"]["cset"]
+# smallest lower CI bound over the standard methods, per phase
+corr1_std_ci_lo_25, corr1_std_ci_lo_pp = (fmt_num(corr1_at[phase].loc[_std, "ci_low"].min(), 2) for phase in ["qrp", "pp"])
 
 # Per-region curves (mean over repetitions), summarized across regions for panel b1, and the time of the
 # largest gap between connectivity-informed and standard methods.
@@ -404,6 +405,11 @@ corr_gap = corr_pivot[["wcset", "cset"]].mean(axis=1) - corr_pivot[["sloreta", "
 corr1_gap_peak_time = fmt_num(corr_gap.idxmax() * 1000, digits=0)
 ```
 
+We tested both parts of our hypothesis (@sec-introduction) on the simulation (@sec-data-synthetic), in which activity spreads from a single source and the ground truth is fully known (@fig-flagship-example). wCSET localized the source more accurately than sLORETA and wMNE but less accurately than CSET and dSPM. It reconstructed the spatial pattern of activity more accurately than every other method throughout the spike.
+
+At 25% of the peak amplitude (@sec-metric-loc; @fig-s1-localization a), wCSET's localization error was lower than sLORETA's by `{python} loc1_sloreta_hl` and wMNE's by `{python} loc1_wmne_hl`, but higher than CSET's by `{python} loc1_cset_hl` and dSPM's by `{python} loc1_dspm_hl_p`. Because the upper CI bounds against CSET and dSPM exceed the `{python} loc1_delta` mm margin (@sec-stats-tests), wCSET was not shown to be non-inferior to them at this SNR. This disadvantage reflects bimodal errors: wCSET placed its peak inside the initial patch more often than CSET and dSPM (`{python} loc1_exact_wcset`% of runs vs. `{python} loc1_exact_cset`% and `{python} loc1_exact_dspm`%), but also more often placed it more than 30 mm away (`{python} loc1_far_wcset`% vs. `{python} loc1_far_cset`% and `{python} loc1_far_dspm`%; see @sec-s1-data-noise for other SNRs).
+
+In spatial correlation, wCSET outperformed every other method throughout the spike, from onset (`{python} corr1_window_start` ms) until `{python} corr1_window_end_lo`–`{python} corr1_window_end_hi` ms depending on the method (@fig-s1-localization b; all p_corrected `{python} corr1_p_max`). It was larger over the standard methods than over CSET, and it grew as activity spread from the initial patch. At 25% of the peak amplitude, wCSET’s correlation exceeded the standard methods’ by Δr = `{python} corr1_std_dr_qrp_lo`–`{python} corr1_std_dr_qrp_hi` (all lower CI bounds ≥ `{python} corr1_std_ci_lo_25`) and CSET's by Δr = `{python} corr1_cset_dr_qrp`. At the peak, these advantages reached Δr = `{python} corr1_std_dr_pp_lo`–`{python} corr1_std_dr_pp_hi` (all lower CI bounds ≥ `{python} corr1_std_ci_lo_pp`) over the standard methods and Δr = `{python} corr1_cset_dr_pp` over CSET. wCSET’s advantage over the standard methods was largest at `{python} corr1_gap_peak_time` ms, close to the peak (`{python} corr1_pp_median_ms` ms).
 
 ```{python filename="simf_flagship_example.py"}
 #| label: fig-flagship-example
@@ -583,13 +589,7 @@ column_headers(s1_fig, [(loc1_ax, "LOCALIZATION ERROR (quarter rising phase)"),
 ```
 
 
-### Robustness to Data Noise {#sec-s1-data-noise}
-
-We swept the single-spike SNR from 20 down to 1 (@sec-data-synthetic).
-
-Localization error rose for every method as the SNR decreased (@fig-annex-noise-loc). wMNE degraded first, while the other four methods stayed accurate down to roughly SNR 3–5. wCSET was more accurate than wMNE across the whole range and never differed significantly from CSET. Against the other two standard methods, its advantage depended on the SNR. It was more accurate than sLORETA down to SNR 14 (p_corrected = 0.046) and than dSPM down to SNR 10 (p_corrected = 0.012). By the Hodges–Lehmann estimate, its error was lower than wMNE's by 25.0 mm (95% CI 22.1 to 27.9; p_corrected ≤ 0.001), and lower than sLORETA's and dSPM's by 3.3 mm (95% CI 1.6 to 5.2) and 6.2 mm (95% CI 3.3 to 9.1) over their clusters. Between SNR 10 and 5, wCSET's median error rose from 3.5 to 16.8 mm, while dSPM's stayed at 11.6–12.3 mm. At SNR 3, the difference reversed in dSPM's favor, though not significantly (p_corrected = 0.085). The SNR of the main simulation (5) thus lies where wCSET loses its advantage over dSPM, consistent with its deficit in @sec-s1-localization.
-
-Spatial correlation was more robust. wCSET's advantage held down to SNR 3 against the standard methods and down to SNR 2 against CSET, both at 25% of the peak amplitude and at the peak (@fig-annex-noise-corr; all p_corrected ≤ 0.001). As mean paired differences over each cluster, wCSET's correlation exceeded the other methods' by Δr = 0.12–0.42. Below these SNRs, the spike could no longer be distinguished from the noise. Every method's correlation fell close to zero, and wCSET's was slightly lower (all p_corrected ≤ 0.038).
+### wCSET remains usable at low SNR {#sec-s1-data-noise}
 
 ```{python filename="simf_noise_summary_stats.py"}
 #| output: false
@@ -618,32 +618,59 @@ def _cluster(clusters, sign):
     rows = clusters[clusters["sign"] == sign] if not clusters.empty else clusters
     return None if rows.empty else main_cluster(rows)
 
+noise_snr_max, noise_snr_min = (fmt_num(f(_snr_order("localization_error")), 0) for f in [max, min])
+
 noise_loc = _noise_test("localization_error", "qrp", higher_is_better=False)
 noise_corr = {phase: _noise_test("correlation", phase, higher_is_better=True) for phase in ["qrp", "pp"]}
 
 def _cluster_diff(metric, phase, competitor, cluster, higher_is_better):
     """Paired difference over a cluster's SNR span (one value per region, averaged over the span and the
-    repetitions), oriented so that positive = wCSET better, with its 95% CI: the Hodges-Lehmann estimate for
+    repetitions), oriented so that positive = wCSET better, with its 99% CI: the Hodges-Lehmann estimate for
     localization error and the mean for correlation, as in @sec-s1-localization."""
     snrs = [s for s in _snr_order(metric) if cluster["snr_end"] <= s <= cluster["snr_start"]]
     estimator = noise_metrics.estimate.hodges_lehmann if metric == "localization_error" else noise_metrics.estimate.mean_diff
     return estimator(
         metric, group_by="Method", comparisons=[("wcset", competitor)], pairing_col="region",
-        filters={"phase": phase, "snr": snrs},
+        filters={"phase": phase, "snr": snrs}, alpha=1 - CI_LEVEL,
     ).vs("wcset", higher_is_better=higher_is_better).loc[competitor]
 
 # Localization error: wCSET-better clusters per competitor (CSET: no cluster at all), and against dSPM a
 # non-significant wCSET-worse cluster at low SNR.
 _loc = {c: _cluster(noise_loc.clusters_by_pair[("wcset", c)], 1) for c in competitors}
+# The prose says wCSET never differed significantly from CSET and beat wMNE across the whole range.
+assert not noise_loc.clusters_by_pair[("wcset", "cset")]["significant"].any() if not noise_loc.clusters_by_pair[("wcset", "cset")].empty else True
 assert _loc["cset"] is None
+assert (_loc["wmne"]["snr_start"], _loc["wmne"]["snr_end"]) == (max(_snr_order("localization_error")), min(_snr_order("localization_error")))
 _loc_d = {c: _cluster_diff("localization_error", "qrp", c, _loc[c], False) for c in ["wmne", "dspm", "sloreta"]}
-noise_loc_wmne_d, noise_loc_wmne_p = fmt_ci(_loc_d["wmne"], "estimate", unit=" mm"), f"≤ {_loc['wmne']['p_corrected']:.3f}"  # "≤": ~0.001 is the smallest p of 3000 permutations
+noise_loc_wmne_d, noise_loc_wmne_p = fmt_ci(_loc_d["wmne"], "estimate", unit=" mm", level=CI_LEVEL), f"≤ {_loc['wmne']['p_corrected']:.3f}"  # "≤": ~0.001 is the smallest p of 3000 permutations
+# p inside the CI's parentheses: "25.0 mm (99% CI 22.1 to 27.9; p_corrected ≤ 0.001)"
+noise_loc_wmne_d_p = f"{noise_loc_wmne_d[:-1]}; p_corrected {noise_loc_wmne_p})"
 noise_loc_dspm_end, noise_loc_sloreta_end = fmt_num(_loc["dspm"]["snr_end"], 0), fmt_num(_loc["sloreta"]["snr_end"], 0)
-noise_loc_dspm_d, noise_loc_sloreta_d = (fmt_ci(_loc_d[c], "estimate", unit=" mm") for c in ["dspm", "sloreta"])
+noise_loc_dspm_start, noise_loc_sloreta_start = fmt_num(_loc["dspm"]["snr_start"], 0), fmt_num(_loc["sloreta"]["snr_start"], 0)
+noise_n_regions = noise_metrics.to_df(metrics="localization_error")["region"].nunique()
+noise_loc_dspm_d, noise_loc_sloreta_d = (fmt_ci(_loc_d[c], "estimate", unit=" mm", level=CI_LEVEL) for c in ["dspm", "sloreta"])
 noise_loc_dspm_p, noise_loc_sloreta_p = fmt_p(_loc["dspm"]["p_corrected"]), fmt_p(_loc["sloreta"]["p_corrected"])
+noise_loc_dspm_d_p, noise_loc_sloreta_d_p = (f"{d[:-1]}; p_corrected {p_})" for d, p_ in
+                                             [(noise_loc_dspm_d, noise_loc_dspm_p), (noise_loc_sloreta_d, noise_loc_sloreta_p)])
 _dspm_worse = _cluster(noise_loc.clusters_by_pair[("wcset", "dspm")], -1)
 assert _dspm_worse is not None and not _dspm_worse["significant"] and _dspm_worse["snr_start"] == _dspm_worse["snr_end"]
 noise_loc_dspm_worse_snr, noise_loc_dspm_worse_p = fmt_num(_dspm_worse["snr_start"], 0), fmt_p(_dspm_worse["p_corrected"])
+# The prose says wCSET was never significantly less accurate than another method in this analysis.
+assert all(w is None or not w["significant"]
+           for w in (_cluster(noise_loc.clusters_by_pair[("wcset", c)], -1) for c in competitors))
+
+# wCSET vs. CSET: no cluster, so the range of the Hodges-Lehmann differences at single SNRs (positive = wCSET
+# better); every per-SNR 99% CI includes zero.
+_cset_by_snr = [
+    noise_metrics.estimate.hodges_lehmann(
+        "localization_error", group_by="Method", comparisons=[("wcset", "cset")], pairing_col="region",
+        filters={"phase": "qrp", "snr": [snr]}, alpha=1 - CI_LEVEL,
+    ).vs("wcset", higher_is_better=False).loc["cset"]
+    for snr in _snr_order("localization_error")
+]
+assert all(r["ci_low"] <= 0 <= r["ci_high"] for r in _cset_by_snr)
+noise_loc_cset_lo = f'{min(r["estimate"] for r in _cset_by_snr):.1f}'
+noise_loc_cset_hi = f'{max(r["estimate"] for r in _cset_by_snr):+.1f}'
 
 # Median localization error per SNR (one value per region, the mean over its repetitions): wCSET's rises
 # sharply between SNR 10 and 5, dSPM's stays flat down to SNR 5.
@@ -653,19 +680,41 @@ noise_loc_wcset_med_10, noise_loc_wcset_med_5 = fmt_num(_loc_med["wcset", 10]), 
 noise_loc_dspm_med_lo = fmt_num(_loc_med["dspm"].loc[5:].min())
 noise_loc_dspm_med_hi = fmt_num(_loc_med["dspm"].loc[5:].max())
 
+# At SNR 5 (the main simulation's), the prose says the medians are close to the main analysis' and show the same
+# order (wCSET below sLORETA, above dSPM), without a significant cluster against either.
+_main_med = (simf_metrics.to_df(metrics="localization_error", filters={"phase": "qrp"})
+             .groupby(["Method", "region"])["Value"].mean().groupby("Method").median())
+assert all(abs(_loc_med[m, 5] - _main_med[m]) < DELTA_LOC_MM for m in ["wcset", "sloreta", "dspm"])
+assert _loc_med["sloreta", 5] > _loc_med["wcset", 5] > _loc_med["dspm", 5]
+assert _main_med["sloreta"] > _main_med["wcset"] > _main_med["dspm"]
+assert all(_loc[c]["snr_end"] > 5 for c in ["sloreta", "dspm"])
+
 # Spatial correlation, both phases: wCSET-better clusters down to some SNR, wCSET-worse clusters below it.
 _better = {(ph, c): _cluster(noise_corr[ph].clusters_by_pair[("wcset", c)], 1) for ph in noise_corr for c in competitors}
 _worse = {(ph, c): _cluster(noise_corr[ph].clusters_by_pair[("wcset", c)], -1) for ph in noise_corr for c in competitors}
 noise_corr_end_std = fmt_num(max(_better[(ph, c)]["snr_end"] for ph in noise_corr for c in standard), 0)
 noise_corr_end_cset = fmt_num(max(_better[(ph, "cset")]["snr_end"] for ph in noise_corr), 0)
-_better_d = [_cluster_diff("correlation", ph, c, b, True)["estimate"] for (ph, c), b in _better.items()]
-noise_corr_d_lo, noise_corr_d_hi = fmt_num(min(_better_d), 2), fmt_num(max(_better_d), 2)
+_better_d = {k: _cluster_diff("correlation", k[0], k[1], b, True)["estimate"] for k, b in _better.items()}
+noise_corr_d_lo, noise_corr_d_hi = fmt_num(min(_better_d.values()), 2), fmt_num(max(_better_d.values()), 2)
+noise_corr_std_d_lo, noise_corr_std_d_hi = (fmt_num(f(d for (_, c), d in _better_d.items() if c in standard), 2) for f in [min, max])
+noise_corr_cset_d_lo, noise_corr_cset_d_hi = (fmt_num(f(d for (_, c), d in _better_d.items() if c == "cset"), 2) for f in [min, max])
+# wCSET-worse clusters, as deficits (positive numbers): against the standard methods, and below 0.01 against CSET
+_worse_d = {k: -_cluster_diff("correlation", k[0], k[1], w, True)["estimate"] for k, w in _worse.items() if w is not None}
+noise_corr_worse_std_lo, noise_corr_worse_std_hi = (fmt_num(f(d for (_, c), d in _worse_d.items() if c in standard), 2) for f in [min, max])
+assert all(d < 0.01 for (_, c), d in _worse_d.items() if c == "cset")
 noise_corr_p_max = f"≤ {max(b['p_corrected'] for b in _better.values()):.3f}"  # "≤": ~0.001 is the smallest p of 3000 permutations
 noise_corr_worse_p_max = f'{max(w["p_corrected"] for w in _worse.values() if w is not None):.3f}'
+# The prose says the wCSET-worse correlation clusters are significant and lie below the wCSET-better ones.
+assert all(w["significant"] and w["snr_start"] < _better[k]["snr_end"] for k, w in _worse.items() if w is not None)
 ```
 
+We repeated the simulation at single-spike SNRs from `{python} noise_snr_max` down to `{python} noise_snr_min` (@sec-data-synthetic) to test whether wCSET remains usable on noisier data. Like every method, wCSET lost accuracy as the SNR decreased. In localization, it was more accurate than wMNE at every SNR and more accurate than sLORETA and dSPM at high SNR, and at the SNR of the main simulation (5) it reproduced the results of @sec-s1-localization. In spatial correlation, it kept its advantage down to SNR `{python} noise_corr_end_std` and fell behind only below that, where the spike could no longer be distinguished from the noise and every method's correlation was close to zero.
 
-### Robustness to Prior Noise {#sec-s1-prior-noise}
+Localization error rose for every method as the SNR decreased, and wMNE degraded first (@fig-annex-noise-loc). Because this analysis used `{python} noise_n_regions` regions rather than `{python} simf_n_regions` (@sec-data-synthetic), it detects only larger differences than the main analysis: the SNR ranges below mark where differences reached significance, not where they end. wCSET was more accurate than wMNE across the whole range, by `{python} noise_loc_wmne_d_p`. Its advantage reached significance against sLORETA from SNR `{python} noise_loc_sloreta_start` to `{python} noise_loc_sloreta_end`, by `{python} noise_loc_sloreta_d_p`, and against dSPM from SNR `{python} noise_loc_dspm_start` to `{python} noise_loc_dspm_end`, by `{python} noise_loc_dspm_d_p`. Between SNR 10 and 5, wCSET's median error rose from `{python} noise_loc_wcset_med_10` to `{python} noise_loc_wcset_med_5` mm, while dSPM's stayed at `{python} noise_loc_dspm_med_lo`–`{python} noise_loc_dspm_med_hi` mm. At SNR 5, the median errors were close to those of the main analysis, so the differences found there, wCSET more accurate than sLORETA and less accurate than dSPM, are also present here but do not reach significance. wCSET did not differ significantly from CSET at any SNR (per-SNR differences from `{python} noise_loc_cset_lo` to `{python} noise_loc_cset_hi` mm, positive = wCSET better).
+
+Spatial correlation was more robust. wCSET's advantage held down to SNR `{python} noise_corr_end_std` against the standard methods and down to SNR `{python} noise_corr_end_cset` against CSET, both at 25% of the peak amplitude and at the peak (@fig-annex-noise-corr; all p_corrected `{python} noise_corr_p_max`). Over each cluster, wCSET's correlation exceeded the standard methods' by Δr = `{python} noise_corr_std_d_lo`–`{python} noise_corr_std_d_hi` and CSET's by Δr = `{python} noise_corr_cset_d_lo`–`{python} noise_corr_cset_d_hi`. Below these SNRs, every method's correlation fell close to zero, and wCSET's was slightly lower (Δr = `{python} noise_corr_worse_std_lo`–`{python} noise_corr_worse_std_hi` against the standard methods and below 0.01 against CSET; all p_corrected ≤ `{python} noise_corr_worse_p_max`).
+
+### CSET and wCSET keep their correlation advantage despite large connectome errors {#sec-s1-prior-noise}
 
 ```{python filename="simf_degradation_summary_stats.py"}
 #| output: false
@@ -673,11 +722,16 @@ import mindmap as mm
 
 deg_metrics_summary = mm.metric.MetricSuite.load("./results/simf/degradation")
 
-# Medians per method and perturbation level. sLORETA and dSPM are connectome-agnostic: their flagship values
-# are repeated at every level (processing_simf.qmd, Suite Assembly), so their median at 0% is their reference.
+# Localization error at the quarter rising phase, spatial correlation at the peak.
+DEG_PHASE = {"localization_error": "qrp", "correlation": "pp"}
+
+# Medians per method and perturbation level, as in Study I: one value per region (the mean over its runs), then
+# the median across regions. sLORETA and dSPM are connectome-agnostic: solved once per run and repeated at every
+# level (processing_simf.qmd), so their median at 0% is their reference.
 def _deg_medians(metric):
-    df = deg_metrics_summary.to_df(metrics=metric, filters={"phase": "qrp"})
-    return df.groupby(["Method", "percentage"])["Value"].median().unstack("percentage")
+    df = deg_metrics_summary.to_df(metrics=metric, filters={"phase": DEG_PHASE[metric]})
+    return (df.groupby(["Method", "percentage", "region"])["Value"].mean()
+            .groupby(["Method", "percentage"]).median().unstack("percentage"))
 
 _loc_med_summary = _deg_medians("localization_error")
 _corr_med_summary = _deg_medians("correlation")
@@ -705,12 +759,13 @@ deg_summary_corr_cset_100 = fmt_num(_corr_med_summary.loc["cset", 100], 2)
 # reference comes first in each pair, so sign = -1 means CSET/wCSET is better.
 DEG_REFERENCES = ["sloreta", "dspm"]
 def _deg_test(metric, higher_is_better):
-    order = sorted(deg_metrics_summary.to_df(metrics=metric, filters={"phase": "qrp"})["percentage"].unique())
+    phase = DEG_PHASE[metric]
+    order = sorted(deg_metrics_summary.to_df(metrics=metric, filters={"phase": phase})["percentage"].unique())
     return cached(
-        deg_metrics_summary.stat.cluster_permutation, f"./results/simf/degradation/stats/{metric}_qrp_cluster",
+        deg_metrics_summary.stat.cluster_permutation, f"./results/simf/degradation/stats/{metric}_{phase}_cluster",
         metric, coord="percentage", group_by="Method",
         comparisons=deg_metrics_summary.stat.build_comparisons(DEG_REFERENCES, ["cset", "wcset"]),
-        pairing_col="region", coord_order=order, higher_is_better=higher_is_better, filters={"phase": "qrp"},
+        pairing_col="region", coord_order=order, higher_is_better=higher_is_better, filters={"phase": phase},
         correction="holm", family="pair", n_permutations=3000, seed=0,
     )
 
@@ -722,19 +777,30 @@ def _deg_cluster(metric, ref, method, better):
     rows = clusters[clusters["sign"] == (-1 if better else 1)]
     return None if rows.empty else main_cluster(rows)
 
-def _deg_diff(metric, ref, method, cluster):
+_deg_est_memo = {}  # each estimate bootstraps its CI: computed once, read by the prose and @tbl-deg
+
+def _deg_est(metric, ref, method, cluster):
     """Paired difference vs. `ref` over the cluster's perturbation span, positive = `method` better: the
     Hodges-Lehmann estimate for localization error and the mean for correlation, as in @sec-s1-localization."""
+    key = (metric, ref, method, cluster["percentage_start"], cluster["percentage_end"])
+    if key not in _deg_est_memo:
+        _deg_est_memo[key] = _deg_est_uncached(metric, ref, method, cluster)
+    return _deg_est_memo[key]
+
+def _deg_est_uncached(metric, ref, method, cluster):
     name, hib = _DEG_METRICS[metric]
-    levels = [p for p in deg_metrics_summary.to_df(metrics=name, filters={"phase": "qrp"})["percentage"].unique()
+    levels = [p for p in deg_metrics_summary.to_df(metrics=name, filters={"phase": DEG_PHASE[name]})["percentage"].unique()
               if cluster["percentage_start"] <= p <= cluster["percentage_end"]]
     estimator = deg_metrics_summary.estimate.hodges_lehmann if metric == "loc" else deg_metrics_summary.estimate.mean_diff
-    est = estimator(
+    return estimator(
         name, group_by="Method", comparisons=[(ref, method)], pairing_col="region",
-        filters={"phase": "qrp", "percentage": levels},
+        filters={"phase": DEG_PHASE[name], "percentage": levels}, alpha=1 - CI_LEVEL,
     ).vs(method, higher_is_better=hib).loc[ref]
+
+def _deg_diff(metric, ref, method, cluster):
+    est = _deg_est(metric, ref, method, cluster)
     digits, unit = (1, " mm") if metric == "loc" else (2, "")
-    return (f"{est['estimate']:+.{digits}f}{unit}, 95% CI {est['ci_low']:.{digits}f} to {est['ci_high']:.{digits}f}")
+    return (f"{est['estimate']:+.{digits}f}{unit}, {CI_LEVEL * 100:g}% CI {est['ci_low']:.{digits}f} to {est['ci_high']:.{digits}f}")
 
 # deg_<metric>_<method>_<ref>_{better,worse}_*: the largest cluster where `method` beats `ref` (or loses to it),
 # its span, effect and p_corrected.
@@ -749,15 +815,122 @@ for _m in ["loc", "corr"]:
                 globals()[f"{_key}_end"] = fmt_num(_c["percentage_end"], 0)
                 globals()[f"{_key}_d"] = _deg_diff(_m, _ref, _method, _c)
                 globals()[f"{_key}_p"] = fmt_p(_c["p_corrected"])
+
+def _p_pair(*keys):
+    """p_corrected of several clusters for prose, e.g. '= 0.031 and 0.043', or one value when they agree."""
+    ps = [globals()[f"{k}_p"] for k in keys]
+    return ps[0] if len(set(ps)) == 1 else ps[0] + "".join(f" and {p_[2:] if p_.startswith('=') else p_}" for p_ in ps[1:])
+
+# Story checks (Results and Discussion). Every quoted cluster is significant. Each method keeps its correlation
+# advantage over both references up to the same level, wCSET longer than CSET, and loses it at high perturbation;
+# wCSET's localization falls below sLORETA's before CSET's does; both localize worse than dSPM up to 100%, wCSET at
+# every level, as without perturbation.
+_quoted = [("loc", r_, m_, k_) for r_, m_, k_ in [("sloreta", "wcset", True), ("sloreta", "wcset", False),
+                                                  ("sloreta", "cset", True), ("sloreta", "cset", False),
+                                                  ("dspm", "wcset", False), ("dspm", "cset", False)]]
+_quoted += [("corr", r_, m_, k_) for r_ in DEG_REFERENCES for m_ in ["cset", "wcset"] for k_ in (True, False)]
+assert all(_deg_cluster(mt, r_, m_, k_) is not None and _deg_cluster(mt, r_, m_, k_)["significant"] for mt, r_, m_, k_ in _quoted)
+assert all(len({globals()[f"deg_corr_{m_}_{r_}_better_end"] for r_ in DEG_REFERENCES}) == 1 for m_ in ["cset", "wcset"])
+assert int(deg_corr_wcset_sloreta_better_end) > int(deg_corr_cset_sloreta_better_end)
+assert int(deg_loc_wcset_sloreta_worse_start) < int(deg_loc_cset_sloreta_worse_start)
+assert (deg_loc_wcset_dspm_worse_start, deg_loc_wcset_dspm_worse_end, deg_loc_cset_dspm_worse_end) == ("0", "100", "100")
+deg_corr_wcset_better_end, deg_corr_cset_better_end = deg_corr_wcset_sloreta_better_end, deg_corr_cset_sloreta_better_end
+deg_loc_dspm_p = _p_pair("deg_loc_wcset_dspm_worse", "deg_loc_cset_dspm_worse")
+
+def _from(key):
+    """Start of a cluster that runs to 100%, for prose: 'from 90% on', or 'at 100%' when it is only the last level."""
+    start = globals()[f"{key}_start"]
+    assert globals()[f"{key}_end"] == "100"
+    return "at 100%" if start == "100" else f"from {start}% on"
+
+deg_corr_wcset_sloreta_worse_from, deg_corr_wcset_dspm_worse_from, deg_corr_cset_sloreta_worse_from, deg_corr_cset_dspm_worse_from = (
+    _from(f"deg_corr_{m_}_{r_}_worse") for m_ in ["wcset", "cset"] for r_ in DEG_REFERENCES)
+
+# The prose says that outside the clusters it quotes, no difference was significant: at most one significant
+# cluster of each sign per pair.
+assert all(
+    (_deg[m_].clusters_by_pair[(r_, k_)].query("significant")["sign"].value_counts() <= 1).all()
+    for m_ in _DEG_METRICS for r_ in DEG_REFERENCES for k_ in ["cset", "wcset"]
+)
+
+def _abs_range(metric, pairs, better, digits=2):
+    """Range of the cluster effects' magnitudes over `pairs`, e.g. '0.22–0.23', or one value when they agree."""
+    vals = [abs(_deg_est(metric, r_, m_, _deg_cluster(metric, r_, m_, better))["estimate"]) for r_, m_ in pairs]
+    lo, hi = fmt_num(min(vals), digits), fmt_num(max(vals), digits)
+    return lo if lo == hi else f"{lo}–{hi}"
+
+deg_corr_wcset_better_dr, deg_corr_wcset_worse_dr, deg_corr_cset_better_dr, deg_corr_cset_worse_dr = (
+    _abs_range("corr", [(r_, m_) for r_ in DEG_REFERENCES], better) for m_ in ["wcset", "cset"] for better in [True, False])
+# Discussion: CSET's and wCSET's disadvantages once most edges are swapped (every quoted "worse" cluster runs to
+# 100%). Spatial correlation against both references; localization against sLORETA only, since both were already
+# worse than dSPM at low perturbation (wCSET at every level).
+_worse_pairs = [(r_, m_) for r_ in DEG_REFERENCES for m_ in ["wcset", "cset"]]
+assert all(_deg_cluster(mt, r_, m_, False)["percentage_end"] == 100 for mt in ["loc", "corr"] for r_, m_ in _worse_pairs)
+deg_corr_worse_dr_all = _abs_range("corr", _worse_pairs, False)
+deg_loc_worse_sloreta_mm = _abs_range("loc", [("sloreta", m_) for m_ in ["wcset", "cset"]], False, digits=1)
+
+# @tbl-deg: every quoted cluster, its span, direction, effect magnitude with its 99% CI and p_corrected
+def _p_cell(p_corrected):
+    """'≤ 0.001' at the smallest p that 3000 permutations (Holm-corrected) can return."""
+    return f"≤ {p_corrected:.3f}" if p_corrected < 0.002 else f"{p_corrected:.3f}"
+
+_TBL_ROWS = [
+    ("loc", "Localization error", [("sloreta", "wcset"), ("sloreta", "cset"), ("dspm", "wcset"), ("dspm", "cset")]),
+    ("corr", "Spatial correlation", [("sloreta", "wcset"), ("dspm", "wcset"), ("sloreta", "cset"), ("dspm", "cset")]),
+]
+_rows = []
+for _m, _label, _pairs in _TBL_ROWS:
+    for _i, (_r, _k) in enumerate(_pairs):
+        for _j, _better in enumerate([True, False]):
+            _c = _deg_cluster(_m, _r, _k, _better)
+            if _c is None:
+                continue
+            _e = _deg_est(_m, _r, _k, _c)
+            _lo, _hi = sorted([abs(_e["ci_low"]), abs(_e["ci_high"])])
+            _span = (f'{_c["percentage_start"]:.0f}%' if _c["percentage_start"] == _c["percentage_end"]
+                     else f'{_c["percentage_start"]:.0f}–{_c["percentage_end"]:.0f}%')
+            _diff = (f'{abs(_e["estimate"]):.1f} mm ({_lo:.1f} to {_hi:.1f})' if _m == "loc"
+                     else f'Δr = {abs(_e["estimate"]):.2f} ({_lo:.2f} to {_hi:.2f})')
+            _rows.append([_label if _i == 0 and _j == 0 else "",
+                          f"{METHOD_LABELS[_k]} vs. {METHOD_LABELS[_r]}" if _j == 0 or _deg_cluster(_m, _r, _k, True) is None else "",
+                          _span, "more accurate" if _better else "less accurate", _diff, _p_cell(_c["p_corrected"])])
+deg_table = "\n".join(
+    [f"| Metric | Comparison | Perturbation | CSET/wCSET is | Difference ({CI_LEVEL * 100:g}% CI) | p_corrected |",
+     "|:--|:--|:--|:--|:--|:--|"] + ["| " + " | ".join(r_) + " |" for r_ in _rows])
+deg_corr_wcset_better_p = _p_pair("deg_corr_wcset_sloreta_better", "deg_corr_wcset_dspm_better")
+deg_corr_wcset_worse_p = _p_pair("deg_corr_wcset_sloreta_worse", "deg_corr_wcset_dspm_worse")
+deg_corr_cset_better_p = _p_pair("deg_corr_cset_sloreta_better", "deg_corr_cset_dspm_better")
+deg_corr_cset_worse_p = _p_pair("deg_corr_cset_sloreta_worse", "deg_corr_cset_dspm_worse")
+
+# Surrogates on the perturbation scale (processing_simf.qmd, "Prior Similarity"; Annex): each surrogate's equivalent
+# perturbation, read off the perturbation curve by linear interpolation, with every harmonic and without the λ = 0
+# harmonics. Only the bracket over both versions is quoted here.
+import pandas as pd
+
+_prior_sim = pd.read_csv("./results/simf/prior_similarity/similarity.csv")
+_pert = _prior_sim[_prior_sim["kind"] == "perturbation"].sort_values("percentage")
+_surr = _prior_sim[_prior_sim["kind"] == "surrogate"]
+_equiv = np.concatenate([np.interp(-_surr[col], -_pert[col], _pert["percentage"])
+                         for col in ["similarity", "similarity_nonzero"]])
+deg_surr_equiv_lo, deg_surr_equiv_hi = fmt_num(_equiv.min(), 0), fmt_num(_equiv.max(), 0)
+assert _equiv.max() < float(deg_corr_wcset_better_end)
 ```
 
-We perturbed an increasing share of the connectome's edges (@sec-data-synthetic) and compared CSET and wCSET with the connectome-agnostic sLORETA at the quarter rising phase (differences averaged over each cluster's perturbation span, positive = CSET/wCSET better). wCSET degraded gradually and never became significantly worse than sLORETA, whereas CSET held up to moderate perturbation and then fell below it.
+We perturbed an increasing share of the connectome's edges (@sec-data-synthetic) and compared CSET and wCSET with sLORETA and dSPM, which do not use the connectome. wMNE, the least accurate standard method in the main analysis, is omitted. We evaluated localization error at 25% of the peak amplitude and spatial correlation at the peak. wCSET kept its advantage in spatial correlation up to `{python} deg_corr_wcset_better_end`% perturbation and CSET up to `{python} deg_corr_cset_better_end`%. In localization, wCSET lost its advantage over sLORETA at a lower perturbation level than CSET. For reference, the priors that wCSET builds on the surrogates of @sec-connectome are as similar to the individual prior as those of connectomes with `{python} deg_surr_equiv_lo`–`{python} deg_surr_equiv_hi`% of their edges swapped (Annex, @fig-annex-prior-sim), well within the range where wCSET kept its correlation advantage.
 
-For localization error (Annex Figure 7), wCSET's error rose from `{python} deg_summary_loc_wcset_0` mm without perturbation to `{python} deg_summary_loc_wcset_100` mm at 100%, against `{python} deg_summary_ref_loc_sloreta` mm for sLORETA. It was significantly lower than sLORETA's up to `{python} deg_loc_wcset_better_end`% perturbation (`{python} deg_loc_wcset_better_d`; p_corrected `{python} deg_loc_wcset_better_p`), and never significantly higher. CSET's error stayed at `{python} deg_summary_loc_cset_lo_s`–`{python} deg_summary_loc_cset_hi_s` mm up to 60%, then rose to `{python} deg_summary_loc_cset_100` mm. It was lower than sLORETA's up to `{python} deg_loc_cset_better_end`% (`{python} deg_loc_cset_better_d`; p_corrected `{python} deg_loc_cset_better_p`), but higher from `{python} deg_loc_cset_worse_start`% on (`{python} deg_loc_cset_worse_d`; p_corrected `{python} deg_loc_cset_worse_p`).
+For localization error (@fig-annex-deg-loc; @tbl-deg), wCSET's median error rose from `{python} deg_summary_loc_wcset_0` mm without perturbation to `{python} deg_summary_loc_wcset_100` mm at 100%, whereas sLORETA's and dSPM's errors, unaffected by the perturbation, stayed at `{python} deg_summary_ref_loc_sloreta` and `{python} deg_summary_ref_loc_dspm` mm. wCSET was more accurate than sLORETA up to `{python} deg_loc_wcset_sloreta_better_end`% perturbation and less accurate from `{python} deg_loc_wcset_sloreta_worse_start`% on. CSET's error stayed at `{python} deg_summary_loc_cset_lo_s`–`{python} deg_summary_loc_cset_hi_s` mm up to 60%, then rose to `{python} deg_summary_loc_cset_100` mm. It was more accurate than sLORETA up to `{python} deg_loc_cset_sloreta_better_end`% and less accurate from `{python} deg_loc_cset_sloreta_worse_start`% on. Against dSPM, wCSET was less accurate at every perturbation level, as without perturbation (@sec-s1-localization). CSET was less accurate than dSPM from `{python} deg_loc_cset_dspm_worse_start`% on.
 
-Spatial correlation followed the same pattern (Annex Figure 8). wCSET's correlation fell from `{python} deg_summary_corr_wcset_0` to `{python} deg_summary_corr_wcset_100`, against `{python} deg_summary_ref_corr_sloreta` for sLORETA. It was significantly higher than sLORETA's up to `{python} deg_corr_wcset_better_end`% (`{python} deg_corr_wcset_better_d`; p_corrected `{python} deg_corr_wcset_better_p`), and its deficit at 100% was not significant (p_corrected `{python} deg_corr_wcset_worse_p`). CSET's correlation stayed at `{python} deg_summary_corr_cset_lo_s`–`{python} deg_summary_corr_cset_hi_s` up to 60%, then dropped to `{python} deg_summary_corr_cset_100`. It was higher than sLORETA's up to `{python} deg_corr_cset_better_end`% (`{python} deg_corr_cset_better_d`; p_corrected `{python} deg_corr_cset_better_p`), but lower from `{python} deg_corr_cset_worse_start`% on (`{python} deg_corr_cset_worse_d`; p_corrected `{python} deg_corr_cset_worse_p`).
+Spatial correlation held up longer (@fig-annex-deg-corr; @tbl-deg). wCSET's median correlation fell from `{python} deg_summary_corr_wcset_0` without perturbation to `{python} deg_summary_corr_wcset_100` at 100%, whereas sLORETA's and dSPM's stayed at `{python} deg_summary_ref_corr_sloreta` and `{python} deg_summary_ref_corr_dspm`. wCSET's correlation exceeded both up to `{python} deg_corr_wcset_better_end`% perturbation, by Δr = `{python} deg_corr_wcset_better_dr`, and fell slightly below sLORETA's `{python} deg_corr_wcset_sloreta_worse_from` and dSPM's `{python} deg_corr_wcset_dspm_worse_from`, by Δr = `{python} deg_corr_wcset_worse_dr`. CSET's correlation stayed at `{python} deg_summary_corr_cset_lo_s`–`{python} deg_summary_corr_cset_hi_s` up to 60%, then dropped to `{python} deg_summary_corr_cset_100`. It exceeded both up to `{python} deg_corr_cset_better_end`%, by Δr = `{python} deg_corr_cset_better_dr`, and fell below sLORETA's `{python} deg_corr_cset_sloreta_worse_from` and dSPM's `{python} deg_corr_cset_dspm_worse_from`, by Δr = `{python} deg_corr_cset_worse_dr`.
 
-### Surrogate alternatives {#sec-s1-surrogates}
+```{python filename="simf_degradation_table.py"}
+#| echo: false
+#| label: tbl-deg
+#| tbl-cap: "Comparisons under connectome perturbation. Differences are averaged over each cluster's perturbation range (Hodges–Lehmann estimates for localization error, means for spatial correlation) and given as magnitudes, with their direction in the fourth column. Between the listed ranges, no difference was significant."
+from IPython.display import Markdown
+Markdown(deg_table)
+```
+
+### Atlas and local surrogates can replace the individual connectome {#sec-s1-surrogates}
 
 ```{python filename="simf_surrogate_stats.py"}
 #| output: false
@@ -781,14 +954,14 @@ DELTA = {"localization_error": DELTA_LOC_MM, "correlation": DELTA_CORR}
 
 # Surrogate vs. original connectome, per method and outcome: Wilcoxon signed-rank, paired by region (mean
 # over its repetitions), ties kept (Pratt), Holm across the 5 surrogates. Hodges-Lehmann shift and
-# rank-biserial r, each with its 95% CI.
+# rank-biserial r, each with its 99% CI.
 surr_metrics = mm.metric.MetricSuite.load("./results/simf/surrogates")
 surr_comparisons = surr_metrics.stat.build_comparisons(["original"], surrogates)
 surr_results = {
     (method, metric, phase): surr_metrics.stat.wilcoxon(
         metric, group_by="Surrogate", comparisons=surr_comparisons, pairing_col="region",
         filters={"Method": method, "phase": phase}, correction="holm", zero_method="pratt",
-        effect_sizes=("hodges_lehmann", "rank_biserial"), ci_seed=0,
+        effect_sizes=("hodges_lehmann", "rank_biserial"), ci_seed=0, ci_level=CI_LEVEL,
     )
     for method in methods for metric, phase in OUTCOMES
 }
@@ -801,85 +974,113 @@ surr_vs = {key: res.vs("original", higher_is_better=not HIGHER_IS_BETTER[key[1]]
 # Hodges-Lehmann CI lies above -margin.
 surr_noninferior = {key: (v["hodges_lehmann_ci_low"] > -DELTA[key[1]]).to_dict() for key, v in surr_vs.items()}
 
-# Statistics quoted in the prose (wCSET). The prose splits the surrogates in two: those that match the original
-# (no significant difference and non-inferior, on localization and peak correlation) and those that significantly
-# worsen localization beyond the margin. Every surrogate is non-inferior in peak correlation, and only GBF lowers
-# it significantly. All checked here.
+# Statistics quoted in the prose (wCSET). Localization splits the surrogates in three: those that match the original
+# (not significantly different and non-inferior), those that are inconclusive (not significantly different, but the
+# CI reaches beyond the margin) and those that significantly worsen it. Spatial correlation is slightly but
+# significantly lower with every surrogate, at both phases, and non-inferior at the peak. All checked here.
 _loc_wcset = surr_vs[("wcset", "localization_error", "qrp")]
 _corr_wcset_qrp = surr_vs[("wcset", "correlation", "qrp")]
 _corr_wcset_pp = surr_vs[("wcset", "correlation", "pp")]
 _ni_loc = surr_noninferior[("wcset", "localization_error", "qrp")]
 _ni_pp = surr_noninferior[("wcset", "correlation", "pp")]
-surr_match = [s_ for s_ in surrogates if _ni_loc[s_] and _ni_pp[s_]
-              and not _loc_wcset.loc[s_, "significant"] and not _corr_wcset_pp.loc[s_, "significant"]]
-surr_worse = [s_ for s_ in surrogates if s_ not in surr_match]
-assert surr_match and surr_worse
-assert all(_loc_wcset.loc[s_, "significant"] and _loc_wcset.loc[s_, "hodges_lehmann"] < 0 and not _ni_loc[s_]
-           for s_ in surr_worse)
+surr_match = [s_ for s_ in surrogates if _ni_loc[s_] and not _loc_wcset.loc[s_, "significant"]]
+surr_inconclusive = [s_ for s_ in surrogates if not _ni_loc[s_] and not _loc_wcset.loc[s_, "significant"]]
+surr_worse = [s_ for s_ in surrogates if _loc_wcset.loc[s_, "significant"]]
+assert surr_match == ["fused", "geom-atlas", "geom-atlas-bin"] and surr_inconclusive == ["fused-bin"] and surr_worse == ["beltrami"]
+assert _loc_wcset.loc["beltrami", "hodges_lehmann"] < 0
 assert all(_ni_pp.values())
-assert list(_corr_wcset_pp.index[_corr_wcset_pp["significant"]]) == ["beltrami"]
-assert _corr_wcset_pp.loc["beltrami", "hodges_lehmann"] < 0
+assert all(v["significant"].all() and (v["hodges_lehmann"] < 0).all() for v in [_corr_wcset_qrp, _corr_wcset_pp])
 
 def _names(ss):
     labels = [SURROGATE_LABELS[s_] for s_ in ss]
     return labels[0] if len(labels) == 1 else ", ".join(labels[:-1]) + f" and {labels[-1]}"
 
-surr_match_names, surr_worse_names = _names(surr_match), _names(surr_worse)
-surr_match_p_min = f'{min(_loc_wcset.loc[surr_match, "p_corrected"].min(), _corr_wcset_pp.loc[surr_match, "p_corrected"].min()):.2f}'
-# Largest deficit each matching surrogate's CI allows, as a positive number
-surr_match_loc_ci = fmt_num(-_loc_wcset.loc[surr_match, "hodges_lehmann_ci_low"].min())
+def _deficit(v, s_, unit="", digits=1):
+    """`s_`'s deficit vs. the original as a positive number, with its 99% CI."""
+    return fmt_ci(_flip(v.loc[s_], "hodges_lehmann"), "hodges_lehmann", unit=unit, digits=digits, level=CI_LEVEL)
+
+# Localization
+surr_match_names = _names(surr_match)
+surr_match_p_min = f'{np.floor(_loc_wcset.loc[surr_match, "p_corrected"].min() * 100) / 100:.2f}'  # rounded down, so "≥" holds
+surr_match_loc_max = fmt_num(_loc_wcset.loc[surr_match, "hodges_lehmann"].abs().max())  # largest difference
+surr_match_loc_ci = fmt_num(-_loc_wcset.loc[surr_match, "hodges_lehmann_ci_low"].min())  # largest deficit within the CIs
+surr_atlasbin_loc = _deficit(_loc_wcset, "fused-bin", unit=" mm")
+surr_atlasbin_loc_p = fmt_p(_loc_wcset.loc["fused-bin", "p_corrected"])
+surr_beltrami_loc = _deficit(_loc_wcset, "beltrami", unit=" mm")
+surr_beltrami_loc_p = fmt_p(_loc_wcset.loc["beltrami", "p_corrected"])
+surr_atlasbin_loc_cp = f"{surr_atlasbin_loc[:-1]}; p_corrected {surr_atlasbin_loc_p})"  # one parenthesis: CI and p
+surr_beltrami_loc_cp = f"{surr_beltrami_loc[:-1]}; p_corrected {surr_beltrami_loc_p})"
+surr_loc_margin = fmt_num(DELTA_LOC_MM, 0)
+surr_ci_pct = fmt_num(CI_LEVEL * 100, 0)
+
+# Spatial correlation: deficits as positive numbers, GBF quoted apart
+_pp_deficit = -_corr_wcset_pp["hodges_lehmann"]
+_pp_other = _pp_deficit.drop("beltrami")
+assert _pp_deficit["beltrami"] > _pp_other.max()
+surr_pp_lo, surr_pp_hi = fmt_num(_pp_other.min(), 2), fmt_num(_pp_other.max(), 2)
+surr_beltrami_pp = _deficit(_corr_wcset_pp, "beltrami", digits=2)
+surr_pp_p_max = fmt_p(_corr_wcset_pp["p_corrected"].max())
+surr_pp_ci_min = fmt_num(-_corr_wcset_pp["hodges_lehmann_ci_low"].min(), 2)  # largest deficit within the CIs
+surr_match_pp_lo, surr_match_pp_hi = fmt_num(_pp_deficit[surr_match].min(), 2), fmt_num(_pp_deficit[surr_match].max(), 2)
 surr_match_pp_ci = fmt_num(-_corr_wcset_pp.loc[surr_match, "hodges_lehmann_ci_low"].min(), 2)
-surr_worse_loc = " and ".join(
-    f'{SURROGATE_LABELS[s_]} by {fmt_ci(_flip(_loc_wcset.loc[s_], "hodges_lehmann"), "hodges_lehmann", unit=" mm")}'
-    for s_ in surr_worse)
-surr_beltrami_pp = fmt_ci(_flip(_corr_wcset_pp.loc["beltrami"], "hodges_lehmann"), "hodges_lehmann", digits=2)
-surr_beltrami_pp_p = fmt_p(_corr_wcset_pp.loc["beltrami", "p_corrected"])
-surr_pp_ci_min = fmt_num(-_corr_wcset_pp["hodges_lehmann_ci_low"].min(), 2)
-corr_wcset_hl_lo_qrp, corr_wcset_hl_hi_qrp = (fmt_num(_corr_wcset_qrp["hodges_lehmann"].min(), 2),
-                                              fmt_num(_corr_wcset_qrp["hodges_lehmann"].max(), 2))
+surr_qrp_lo, surr_qrp_hi = fmt_num(-_corr_wcset_qrp["hodges_lehmann"].max(), 2), fmt_num(-_corr_wcset_qrp["hodges_lehmann"].min(), 2)
 
-# CSET: the Laplace-Beltrami surrogate markedly worsens localization; every other significant difference
-# is a small deficit (largest quoted per metric, as a positive number).
-_cset_beltrami = surr_vs[("cset", "localization_error", "qrp")].loc["beltrami"]
-assert _cset_beltrami["hodges_lehmann"] < 0 and _cset_beltrami["significant"]
-cset_beltrami_loc_hl = fmt_ci(_flip(_cset_beltrami, "hodges_lehmann"), "hodges_lehmann", unit=" mm")
-_cset_other = {
-    (metric, s): v.loc[s, "hodges_lehmann"]
-    for (method, metric, phase), v in surr_vs.items() if method == "cset"
-    for s in surrogates
-    if v.loc[s, "significant"] and (metric, s) != ("localization_error", "beltrami")
-}
-assert all(d < 0 for d in _cset_other.values())
-cset_other_loc_max = fmt_num(-min([d for (m, _), d in _cset_other.items() if m == "localization_error"], default=0))
-cset_other_corr_max = fmt_num(-min([d for (m, _), d in _cset_other.items() if m == "correlation"], default=0), 2)
+# CSET: only the Laplace-Beltrami surrogate changes its localization significantly (markedly worse); its spatial
+# correlation is slightly but significantly lower with every surrogate, at both phases.
+_cset_loc = surr_vs[("cset", "localization_error", "qrp")]
+assert list(_cset_loc.index[_cset_loc["significant"]]) == ["beltrami"] and _cset_loc.loc["beltrami", "hodges_lehmann"] < 0
+cset_beltrami_loc_hl = _deficit(_cset_loc, "beltrami", unit=" mm")
+cset_other_loc_max = fmt_num(_cset_loc.drop("beltrami")["hodges_lehmann"].abs().max())
+_cset_corr = [surr_vs[("cset", "correlation", phase)] for phase in ["qrp", "pp"]]
+assert all(v["significant"].all() and (v["hodges_lehmann"] < 0).all() for v in _cset_corr)
+cset_corr_lo = fmt_num(min(-v["hodges_lehmann"].max() for v in _cset_corr), 2)
+cset_corr_hi = fmt_num(max(-v["hodges_lehmann"].min() for v in _cset_corr), 2)
 
-# dSPM's and sLORETA's benchmark reference lines, taken from the Study I results above and summarized
-# like the boxes they are drawn over: mean over repetitions per region, median across regions.
-# Correlation: the per-region curves of the Study I figure (corr_collapsed) at the median qrp/peak time.
+# Discussion: deficits as an estimate and two CI bounds, to quote them in words ("7.1 mm worse (99% CI 3.7 to 10.9 mm
+# worse)"). The binarized atlas' CI spans zero, so it is quoted as "from ... better to ... worse".
+def _deficit_parts(v, s_, digits=1):
+    d = _flip(v.loc[s_], "hodges_lehmann")
+    return tuple(fmt_num(d[k], digits) for k in ["hodges_lehmann", "hodges_lehmann_ci_low", "hodges_lehmann_ci_high"])
+assert _flip(_loc_wcset.loc["beltrami"], "hodges_lehmann")["hodges_lehmann_ci_low"] > 0
+assert _flip(_cset_loc.loc["beltrami"], "hodges_lehmann")["hodges_lehmann_ci_low"] > 0
+surr_beltrami_loc_d, surr_beltrami_loc_lo, surr_beltrami_loc_hi = _deficit_parts(_loc_wcset, "beltrami")
+cset_beltrami_loc_d, cset_beltrami_loc_lo, cset_beltrami_loc_hi = _deficit_parts(_cset_loc, "beltrami")
+_atlasbin = _flip(_loc_wcset.loc["fused-bin"], "hodges_lehmann")
+assert _atlasbin["hodges_lehmann_ci_low"] < 0 < _atlasbin["hodges_lehmann_ci_high"]
+surr_atlasbin_loc_d = fmt_num(_atlasbin["hodges_lehmann"])
+surr_atlasbin_loc_better, surr_atlasbin_loc_worse = fmt_num(-_atlasbin["hodges_lehmann_ci_low"]), fmt_num(_atlasbin["hodges_lehmann_ci_high"])
+surr_beltrami_pp_d = fmt_num(_pp_deficit["beltrami"], 2)
+
+# dSPM's and sLORETA's benchmark reference lines, solved in the surrogate run on the same samples
+# (Surrogate="none") and summarized like the boxes they are drawn over: mean over repetitions per region,
+# median across regions.
 _ref_methods = ["dspm", "sloreta"]
-surr_ref_loc = (simf_metrics.to_df(metrics="localization_error", filters={"phase": "qrp", "Method": _ref_methods})
-                .groupby(["Method", "region"])["Value"].mean().groupby("Method").median().to_dict())
-surr_ref_corr = {
-    phase: corr_collapsed[(corr_collapsed["times"] == t) & corr_collapsed["Method"].isin(_ref_methods)]
-           .groupby("Method")["Value"].median().to_dict()
-    for phase, t in phase_times.items()
-}
+def _surr_ref(metric, phase):
+    df = surr_metrics.to_df(metrics=metric, filters={"Surrogate": "none", "phase": phase, "Method": _ref_methods})
+    return df.groupby(["Method", "region"])["Value"].mean().groupby("Method").median().to_dict()
+surr_ref_loc = _surr_ref("localization_error", "qrp")
+surr_ref_corr = {phase: _surr_ref("correlation", phase) for phase in ["qrp", "pp"]}
 
-# wCSET's correlation at the peak with each surrogate, relative to dSPM's and sLORETA's references.
+# wCSET's correlation at the peak with each surrogate minus dSPM's and sLORETA's references (medians).
 _wcset_pp = (surr_metrics.to_df(metrics="correlation", filters={"Method": "wcset", "phase": "pp"})
              .groupby(["Surrogate", "region"])["Value"].mean().groupby("Surrogate").median())
-_ratios = [_wcset_pp[s] / surr_ref_corr["pp"][m] for s in surrogates for m in _ref_methods]
-corr_wcset_ref_ratio_lo, corr_wcset_ref_ratio_hi = fmt_num(min(_ratios), 1), fmt_num(max(_ratios), 1)
+_gaps = [_wcset_pp[s] - surr_ref_corr["pp"][m] for s in surrogates for m in _ref_methods]
+assert min(_gaps) > 0
+corr_wcset_ref_dr_lo, corr_wcset_ref_dr_hi = fmt_num(min(_gaps), 2), fmt_num(max(_gaps), 2)
 ```
 
-We replaced the true connectome with the dMRI-free surrogates of @sec-connectome, keeping wCSET's hyperparameters unchanged (@fig-surrogate; Hodges–Lehmann shifts, positive = surrogate better). With the `{python} surr_match_names` surrogates, wCSET performed as well as with the true connectome. Neither its localization error nor its spatial correlation at the peak differed significantly (all p_corrected ≥ `{python} surr_match_p_min`), and every CI excluded a deficit as large as the non-inferiority margins (at most `{python} surr_match_loc_ci` mm and Δr = `{python} surr_match_pp_ci`, against margins of 5 mm and 0.1). The other surrogates significantly worsened its localization, and their CIs extended beyond the 5 mm margin: `{python} surr_worse_loc`. With the Beltrami surrogate (GBF), its spatial correlation at the peak was also lower, by Δr = `{python} surr_beltrami_pp` (p_corrected `{python} surr_beltrami_pp_p`). This loss remained well within the margin, as for every surrogate (largest deficit within the CIs: Δr = `{python} surr_pp_ci_min`), and wCSET's correlation at the peak stayed `{python} corr_wcset_ref_ratio_lo`–`{python} corr_wcset_ref_ratio_hi` times that of dSPM and sLORETA with every surrogate. At the quarter rising phase, before activity spreads, the surrogates changed spatial correlation little (Δr = `{python} corr_wcset_hl_lo_qrp` to `{python} corr_wcset_hl_hi_qrp`; Annex Figure 10).
+We replaced the individual connectome with the surrogates of @sec-connectome, keeping wCSET's hyperparameters unchanged (@fig-surrogate). With the atlas and both local surrogates, wCSET's localization was non-inferior to that with the individual connectome, and its spatial correlation fell by only Δr = `{python} surr_match_pp_lo`–`{python} surr_match_pp_hi`. Non-inferiority was not shown for the binarized atlas, and GBF localized significantly worse.
 
-CSET changed little: with most surrogates, differences were either not significant or small deficits (at most `{python} cset_other_loc_max` mm in localization error and Δr = `{python} cset_other_corr_max` in spatial correlation). The exception was the Laplace-Beltrami surrogate (GBF), which worsened its localization by `{python} cset_beltrami_loc_hl`. Full CSET results are in Annex Figure 9.
+For the atlas, local and binarized local surrogates, no localization difference exceeded `{python} surr_match_loc_max` mm, and every `{python} surr_ci_pct`% CI excluded a disadvantage of `{python} surr_loc_margin` mm. With the binarized atlas, wCSET's error was higher by `{python} surr_atlasbin_loc_cp`. This difference was not significant, but its CI included the `{python} surr_loc_margin` mm margin, so non-inferiority was not shown. GBF localized less accurately than wCSET with the individual connectome, by `{python} surr_beltrami_loc_cp`. Because GBF differs from wCSET in both its harmonics and its weights (@sec-connectome), this disadvantage cannot be attributed to either one alone.
+
+Spatial correlation at the peak was slightly but significantly lower with every surrogate (all p_corrected `{python} surr_pp_p_max`): by Δr = `{python} surr_pp_lo`–`{python} surr_pp_hi` with the atlas and local surrogates, binarized or not, and by Δr = `{python} surr_beltrami_pp` with GBF. Every disadvantage stayed well within the `{python} DELTA_CORR` margin, with the largest upper CI bound at Δr = `{python} surr_pp_ci_min`. With every surrogate, wCSET's correlation still exceeded dSPM's and sLORETA's, by Δr = `{python} corr_wcset_ref_dr_lo`–`{python} corr_wcset_ref_dr_hi`. At 25% of the peak amplitude, the surrogates lowered spatial correlation by a similar amount (Δr = `{python} surr_qrp_lo`–`{python} surr_qrp_hi`; @fig-annex-surrogate-early).
+
+CSET responded similarly (@fig-annex-surrogate-cset). Its localization changed significantly only with geometric harmonics, which worsened it by `{python} cset_beltrami_loc_hl`. With the other surrogates, it changed by at most `{python} cset_other_loc_max` mm. Because CSET uses no harmonic weights, this comparison changes only the harmonics, which suggests that the geometric harmonics, rather than GBF's weights, drive GBF's disadvantage in localization. Its spatial correlation was slightly lower with every surrogate, by Δr = `{python} cset_corr_lo`–`{python} cset_corr_hi` at both time points.
 
 ```{python filename="simf_surrogate_plot.py"}
 #| echo: false
 #| label: fig-surrogate
-#| fig-cap: "*wCSET accuracy with the original structural connectome versus five dMRI-free connectome surrogates.* Column a: localization error at the quarter rising phase; column b: spatial correlation with ground truth at the peak phase (quarter rising phase: Annex Figure 10). Row 1: values per connectome condition; row 2: paired differences vs. the original connectome, oriented so positive = surrogate better. Every panel uses one value per region, the mean over its repetitions. (a1, b1) Box = IQR, line = median; dashed lines mark dSPM's and sLORETA's medians as connectome-free benchmarks. (a2, b2) Violin = distribution, thick line = median, thin line = IQR. Dashed line in (a2, b2) = non-inferiority margin (surrogate worse by 5 mm or 0.1). Above each violin: Wilcoxon signed-rank test vs. the original connectome (region-paired, Holm-corrected), rank-biserial r, and the number of regions where the surrogate is better/tied/worse. CSET: Annex Figure 9."
+#| fig-cap: "*wCSET accuracy with the original structural connectome versus five dMRI-free connectome surrogates.* Column a: localization error at the quarter rising phase; column b: spatial correlation with ground truth at the peak phase (quarter rising phase: @fig-annex-surrogate-early). Row 1: values per connectome condition; row 2: paired differences vs. the original connectome, oriented so positive = surrogate better. Every panel uses one value per region, the mean over its repetitions. (a1, b1) Box = IQR, line = median; dashed lines mark dSPM's and sLORETA's medians as connectome-free benchmarks. (a2, b2) Violin = distribution, thick line = median, thin line = IQR. Dashed line in (a2, b2) = non-inferiority margin (surrogate worse by 5 mm or 0.1). Above each violin: Wilcoxon signed-rank test vs. the original connectome (region-paired, Holm-corrected), rank-biserial r, and the number of regions where the surrogate is better/tied/worse. CSET: @fig-annex-surrogate-cset."
 import matplotlib.pyplot as plt
 
 # Colors per connectome condition (original = gray).
@@ -950,7 +1151,7 @@ column_headers(surr_fig, zip(surr_axes, ["LOCALIZATION ERROR\n(quarter rising ph
 
 ## Study II: Clinical Localization (Resection Cohort) {#sec-study2}
 
-### Localization Error {#sec-s2-localization}
+### No method localized the epileptogenic zone significantly better than wCSET {#sec-s2-localization}
 
 ```{python filename="results_resection_localization.py"}
 #| output: false
@@ -971,21 +1172,24 @@ included_subjects = [s for s in all_subjects if s not in EXCLUDED_SUBJECTS]
 FILTERS = {"phase": "hrp", "ILAE": 1, "Subject": included_subjects}
 competitors = [m for m in RESECTION_METHODS if m != "wcset"]
 comparisons = resection_metrics.stat.build_comparisons(["wcset"], competitors)
+# CIs Bonferroni-corrected across the 5 competitors (@sec-stats-tests): 99%.
+RESECTION_CI_LEVEL = 1 - 0.05 / len(competitors)
 
 # Peak-to-resection distance: Wilcoxon signed-rank vs. wCSET, paired by subject, Holm across the 5
 # competitors. Ties kept (Pratt): a patient whose two peaks both fall inside the resection (0 mm each) is
-# a tie and stays in the sample. Hodges-Lehmann shift (mm) and rank-biserial r, each with its 95% CI.
+# a tie and stays in the sample. Hodges-Lehmann shift (mm) and rank-biserial r, each with its 99% CI.
 resection_results = resection_metrics.stat.wilcoxon(
     "peak_distance_mm", group_by="Method", comparisons=comparisons, pairing_col="Subject", filters=FILTERS,
     correction="holm", zero_method="pratt", effect_sizes=("hodges_lehmann", "rank_biserial"), ci_seed=0,
+    ci_level=RESECTION_CI_LEVEL,
 )
 _peak_vs = resection_results.vs("wcset", higher_is_better=False)  # positive = wCSET closer
 
 # Peak inside vs. outside the resection: exact McNemar on the discordant patients, Holm across the 5
-# competitors; difference in the proportion of patients inside (Newcombe 95% CI).
+# competitors; difference in the proportion of patients inside (Newcombe 99% CI).
 resection_inside_results = resection_metrics.stat.mcnemar(
     "peak_inside_resection", group_by="Method", comparisons=comparisons, pairing_col="Subject",
-    filters=FILTERS, correction="holm", effect_sizes=("prop_diff",),
+    filters=FILTERS, correction="holm", effect_sizes=("prop_diff",), ci_level=RESECTION_CI_LEVEL,
 )
 _inside_vs = resection_inside_results.vs("wcset")  # positive = wCSET inside more often
 
@@ -1006,13 +1210,30 @@ resection_middle = ", ".join(_middle_txt[:-1]) + " and " + _middle_txt[-1]
 
 resection_p = {c: fmt_p(_peak_vs.loc[c, "p_corrected"]) for c in competitors}
 resection_r = {c: fmt_stat(_peak_vs.loc[c, "rank_biserial"]) for c in competitors}
-resection_hl = {c: fmt_ci(_peak_vs.loc[c], "hodges_lehmann", unit=" mm") for c in competitors}
+resection_hl = {c: fmt_ci(_peak_vs.loc[c], "hodges_lehmann", unit=" mm", level=RESECTION_CI_LEVEL) for c in competitors}
 assert (_peak_vs["rank_biserial"] > 0).all()  # the prose says every effect favoured wCSET
 resection_r_lo, resection_r_hi = fmt_stat(_peak_vs["rank_biserial"].min()), fmt_stat(_peak_vs["rank_biserial"].max())
 
 # Hodges-Lehmann shifts (positive = wCSET closer), range across competitors.
 resection_hl_lo, resection_hl_hi = fmt_num(_peak_vs["hodges_lehmann"].min()), fmt_num(_peak_vs["hodges_lehmann"].max())
 assert not _peak_vs["significant"].any()  # the prose says no distance difference was significant
+assert (_peak_vs["hodges_lehmann"] > 0).all()  # ...and every estimate favored wCSET
+resection_ci_pct = fmt_num(RESECTION_CI_LEVEL * 100, 0)
+resection_margin = fmt_num(DELTA_LOC_MM, 0)
+
+# Non-inferiority: the CI's lower bound (wCSET's largest disadvantage within the CI) above -margin. The prose names
+# the two groups in this order.
+_ni = _peak_vs["hodges_lehmann_ci_low"] > -DELTA_LOC_MM
+assert list(_ni.index[_ni]) == ["cset", "dspm"]
+assert sorted(_ni.index[~_ni]) == ["beltrami", "sloreta", "wmne"]
+resection_worst = {c: fmt_num(-_peak_vs.loc[c, "hodges_lehmann_ci_low"]) for c in competitors}
+resection_worst_cset, resection_worst_dspm, resection_worst_beltrami, resection_worst_sloreta, resection_worst_wmne = (
+    resection_worst[c] for c in ["cset", "dspm", "beltrami", "sloreta", "wmne"])
+# Discussion: what Study II leaves open against the methods wCSET was not shown non-inferior to, i.e. wCSET's
+# largest disadvantage and largest advantage within their CIs.
+_open = _peak_vs.loc[~_ni]
+resection_open_worse = fmt_num(-_open["hodges_lehmann_ci_low"].min())
+resection_open_better = fmt_num(_open["hodges_lehmann_ci_high"].max())
 
 # Competitor closest to significance, quoted in the prose.
 _closest = _peak_vs["p_corrected"].idxmin()
@@ -1028,21 +1249,39 @@ resection_inside = (f"{_counts[0]} of {resection_n} patients for {_groups[0]}, "
                     + ", ".join(f"{n} for {g}" for n, g in zip(_counts[1:-1], _groups[1:-1]))
                     + f", and {_counts[-1]} for {_groups[-1]}")
 resection_inside_wcset, resection_inside_sloreta = int(_inside["wcset"]), int(_inside["sloreta"])
+# "wCSET and sLORETA ... in 8 of the 26 patients each, wMNE in 6, GBF in 5, CSET in 3 and dSPM in none"
+assert _inside.idxmax() in ("wcset", "sloreta") and resection_inside_wcset == resection_inside_sloreta == _counts[0]
+resection_inside_lead = _groups[0]
+resection_inside_top = f"{_counts[0]} of the {resection_n} patients" + (" each" if " and " in _groups[0] else "")
+_rest = [f"{g} in {n if n else 'none'}" for n, g in zip(_counts[1:], _groups[1:])]
+resection_inside_rest = ", ".join(_rest[:-1]) + " and " + _rest[-1]
 
 # McNemar read-outs: discordant patients (wCSET inside only / competitor inside only) and the difference
 # in proportions inside.
 resection_mcnemar = {
     c: (f"{int(_inside_vs.loc[c, 'n_reference_only'])} vs. {int(_inside_vs.loc[c, 'n_competitor_only'])} "
-        f"discordant patients, Δp = {fmt_ci(_inside_vs.loc[c], 'prop_diff', digits=2)}, "
+        f"discordant patients, Δp = {fmt_ci(_inside_vs.loc[c], 'prop_diff', digits=2, level=RESECTION_CI_LEVEL)}, "
         f"p_corrected {fmt_p(_inside_vs.loc[c, 'p_corrected'])}")
     for c in competitors
 }
 # The prose says only the difference with dSPM is significant, in wCSET's favour.
 assert list(_inside_vs.index[_inside_vs["significant"]]) == ["dspm"] and _inside_vs.loc["dspm", "prop_diff"] > 0
-resection_mcnemar_dspm = (f"Δp = {fmt_ci(_inside_vs.loc['dspm'], 'prop_diff', digits=2)}, "
+resection_mcnemar_dspm = (f"Δp = {fmt_ci(_inside_vs.loc['dspm'], 'prop_diff', digits=2, level=RESECTION_CI_LEVEL)}, "
                           f"p_corrected {fmt_p(_inside_vs.loc['dspm', 'p_corrected'])}")
+# "difference in proportion 0.31, 99% CI 0.04 to 0.56; p_corrected = 0.039"
+_dspm_in = _inside_vs.loc["dspm"]
+resection_inside_dspm_diff = (f"{_dspm_in['prop_diff']:.2f}, {resection_ci_pct}% CI {_dspm_in['prop_diff_ci_low']:.2f} to "
+                              f"{_dspm_in['prop_diff_ci_high']:.2f}; p_corrected {fmt_p(_dspm_in['p_corrected'])}")
 resection_inside_dspm = int(_inside["dspm"])
+assert resection_inside_dspm == 0  # Discussion: "dSPM, which placed the peak inside it in none"
 resection_inside_p_others = f'{_inside_vs.drop("dspm")["p_corrected"].min():.3f}'
+# Discussion: GBF vs wCSET, same direction as in simulation (wCSET closer) but not significant.
+assert not _peak_vs.loc["beltrami", "significant"] and _peak_vs.loc["beltrami", "hodges_lehmann"] > 0
+resection_gbf_hl = fmt_ci(_peak_vs.loc["beltrami"], "hodges_lehmann", unit=" mm", level=RESECTION_CI_LEVEL)
+_gbf = _peak_vs.loc["beltrami"]
+assert _gbf["hodges_lehmann_ci_low"] < 0 < _gbf["hodges_lehmann_ci_high"]  # "from ... worse to ... better"
+resection_gbf_d = fmt_num(_gbf["hodges_lehmann"])
+resection_gbf_worse, resection_gbf_better = fmt_num(-_gbf["hodges_lehmann_ci_low"]), fmt_num(_gbf["hodges_lehmann_ci_high"])
 
 # Example subject (fixed in processing_spike.qmd) and how often wCSET's / sLORETA's peaks are inside.
 _in = (resection_metrics.to_df(metrics="peak_inside_resection", filters=FILTERS)
@@ -1052,11 +1291,11 @@ resection_wcset_only_in = int((_in["wcset"] & ~_in["sloreta"]).sum())
 resection_sloreta_only_in = int((~_in["wcset"] & _in["sloreta"]).sum())
 ```
 
-Study II moves from simulated to clinical data. We evaluated localization accuracy against the resected epileptogenic zone in seizure-free patients (ILAE 1, n=`{python} resection_n`), comparing wCSET with CSET, wMNE, dSPM, sLORETA, and GBF (@sec-inverse).
+Study II moves from simulated to clinical data. In the `{python} resection_n` seizure-free patients (@sec-data-resection), no method localized the epileptogenic zone significantly better than wCSET, and wCSET was non-inferior to CSET and dSPM within the `{python} resection_margin` mm margin. Its peak fell inside the resection volume as often as any other method's, and more often than dSPM's.
 
-At the half rising phase (@sec-metric-loc), peak-to-resection distance was lowest for GBF and wCSET (@fig-resection-localization a; medians `{python} resection_peak_median_beltrami` and `{python} resection_peak_median_wcset` mm). `{python} resection_middle` followed, and dSPM had the largest median (`{python} resection_peak_median_dspm` mm). No difference from wCSET was significant, the closest being `{python} resection_peak_closest` (p_corrected `{python} resection_peak_p_min`). The point estimates all favoured wCSET, by `{python} resection_hl_lo`–`{python} resection_hl_hi` mm (Hodges–Lehmann shift), but with `{python} resection_n` patients they remain imprecise.
+By the Hodges–Lehmann estimate at 50% of the spike's peak amplitude (@sec-metric-loc; @fig-resection-localization), wCSET localized better than every other method, by `{python} resection_hl_lo` to `{python} resection_hl_hi` mm, but no difference was significant (smallest p_corrected `{python} resection_peak_p_min`, against `{python} resection_peak_closest`). Against CSET and dSPM, the `{python} resection_ci_pct`% CIs ruled out wCSET localizing worse by more than `{python} resection_margin` mm (at most `{python} resection_worst_cset` and `{python} resection_worst_dspm` mm worse), so wCSET was non-inferior to them. Against GBF, sLORETA and wMNE, the estimates also favored wCSET, but with `{python} resection_n` patients the CIs were too wide to rule out a disadvantage beyond the margin (up to `{python} resection_worst_beltrami`, `{python} resection_worst_sloreta` and `{python} resection_worst_wmne` mm worse).
 
-The peak fell inside the resection in `{python} resection_inside`. wCSET's peak was inside more often than dSPM's (`{python} resection_inside_wcset` vs. `{python} resection_inside_dspm` patients; exact McNemar test, `{python} resection_mcnemar_dspm`). Against the other methods, the difference was not significant (p_corrected ≥ `{python} resection_inside_p_others`).
+`{python} resection_inside_lead` placed the peak inside the resection volume in `{python} resection_inside_top`, `{python} resection_inside_rest`. wCSET's peak fell inside more often than dSPM's (difference in proportion `{python} resection_inside_dspm_diff`). Its difference from the other methods was not significant (p_corrected ≥ `{python} resection_inside_p_others`). The `{python} resection_inside_wcset` patients of wCSET and sLORETA only partly overlap: both methods succeeded in `{python} resection_both_in`, only wCSET in `{python} resection_wcset_only_in` others, and only sLORETA in another `{python} resection_sloreta_only_in`.
 
 ```{python filename="results_resection_localization_plot.py"}
 #| echo: false
@@ -1128,53 +1367,46 @@ colorbar(resection_fig, [_res_x0 + 0.25 * (_res_x1 - _res_x0), _res_y0 - 0.075, 
          (0, 1), "Reds", "Normalized absolute activity")
 ```
 
-An individual example illustrates what this distance means spatially (@fig-resection-localization b). In this patient, the peaks of both wCSET and sLORETA fall inside the resection at the half rising phase, as in `{python} resection_both_in` of the `{python} resection_n` patients. Only wCSET's peak was inside in `{python} resection_wcset_only_in` others, and only sLORETA's in `{python} resection_sloreta_only_in`.
-
 ## Study III: Clinical Dynamics (Simultaneous iEEG/EEG) {#sec-study3}
 
-### Spatial Correlation Analysis
-
-Study II scored a single location per patient. Study III instead tests how well each method reproduces the spatial pattern of activity recorded intracranially, across contacts and over time.
-
-wCSET was compared against every other method on the signed spatial correlation between virtual and recorded iEEG, averaged over the comparison window (@sec-metric-corr), with a paired spike-level bootstrap (@sec-stats).
+### wCSET reproduced the intracranial pattern better in one of two patients with cortical sources
 
 ```{python filename="results_intra_vieeg_significance.py"}
 #| output: false
 import mindmap as mm
 
 # Per-timepoint signed Pearson r across contacts, per subject and method (processing_intra.qmd, "Spatial pattern
-# metrics"), and its window and peak means, plus the peak AUC, over burst-resampled spikes (processing_intra.qmd,
-# "Spike-level bootstrap").
+# metrics"), and its window mean over burst-resampled spikes (processing_intra.qmd, "Spike-level bootstrap"). The
+# peak summaries are reported in the Annex only.
 vieeg_metrics = mm.metric.MetricSuite.load("./results/intra/spatial_metrics")
 boot_metrics = mm.metric.MetricSuite.load("./results/intra/bootstrap")
 
-# Subjects 12 and 50 have deep sources, far from the cortical source space; the glass brains and peak summaries
+# Patients 12 and 50 have deep sources, far from the cortical source space; the glass brains and peak summaries
 # stay with the two others.
 SUBJECT_ORDER = ["48", "34", "12", "50"]
 MAIN_SUBJECTS = ["48", "34"]
 SUBJECT_TITLES = {
-    "34": "Subject 2",
-    "48": "Subject 1",
-    "12": "Subject 3\n(deep source)",
-    "50": "Subject 4\n(deep source)",
+    "34": "Patient 2",
+    "48": "Patient 1",
+    "12": "Patient 3\n(deep source)",
+    "50": "Patient 4\n(deep source)",
 }
 
 COMPETITORS = ["sloreta", "cset", "dspm", "wmne", "beltrami"]
 STANDARD = ["cset", "sloreta", "dspm", "wmne"]  # GBF reported separately
 SIGNED = "correlation_spatial_signed"
-# Tested outcome (window mean of signed r), then the peak summaries for comparison with Grova et al. 2016 and
-# Afnan et al. 2026 (@sec-metric-corr).
-OUTCOMES = [(SIGNED, "window"), (SIGNED, "peak"), ("auc_spatial", "peak")]
+# Tested outcome: window mean of signed r (@sec-metric-corr).
+OUTCOMES = [(SIGNED, "window")]
 
 # Difference wCSET - competitor, per subject and outcome: paired bootstrap over bursts of spikes (the same draws
-# for every method), Holm across the competitors; mean difference with its 95% basic CI (Davison & Hinkley 1997).
+# for every method), Holm across the competitors; mean difference with its 99% basic CI (Davison & Hinkley 1997).
 # Resampled averages are noisier than the full one, which pulls every correlation, and so every difference,
 # towards zero (bias up to 1.1 SE: the results' bias_se_ratio); the percentile interval would inherit that pull.
 vieeg_results = {
     (subject, metric, summary): boot_metrics.stat.bootstrap(
         f"{metric}_{summary}", group_by="Method", comparisons=boot_metrics.stat.build_comparisons(["wcset"], COMPETITORS),
         pairing_col="Subject", filters={"Subject": subject}, replicates=f"{metric}_{summary}_boot", replicate_col="draw",
-        estimator="mean_diff", correction="holm", ci_method="basic",
+        estimator="mean_diff", correction="holm", ci_method="basic", ci_level=CI_LEVEL,
     )
     for metric, summary in OUTCOMES for subject in SUBJECT_ORDER
 }
@@ -1186,7 +1418,7 @@ def _level(subject, method):
 
 vieeg_std_names = ", ".join(METHOD_LABELS[c] for c in STANDARD[:-1]) + f" and {METHOD_LABELS[STANDARD[-1]]}"
 
-# Subject 1: wCSET above every standard method, not different from GBF.
+# Patient 1: wCSET above every standard method, not different from GBF.
 _s48 = vieeg_vs[("48", SIGNED, "window")]
 assert _s48.loc[STANDARD, "significant"].all() and (_s48.loc[STANDARD, "mean_diff"] > 0).all()
 assert not _s48.loc["beltrami", "significant"]
@@ -1198,10 +1430,15 @@ signed_48_p_max = f"≤ {_s48.loc[STANDARD, 'p_corrected'].max():.3f}"
 signed_48_d_lo = fmt_num(_s48.loc[STANDARD, "mean_diff"].min(), 2)
 signed_48_d_hi = fmt_num(_s48.loc[STANDARD, "mean_diff"].max(), 2)
 signed_48_ci_lo = fmt_num(_s48.loc[STANDARD, "mean_diff_ci_low"].min(), 2)
-signed_48_beltrami_d = fmt_ci(_s48.loc["beltrami"], "mean_diff", digits=2)
+signed_48_beltrami_d = fmt_ci(_s48.loc["beltrami"], "mean_diff", digits=2, level=CI_LEVEL)
 signed_48_p_beltrami = fmt_p(_s48.loc["beltrami", "p_corrected"])
+# Discussion: the CI is wider than GBF's correlation deficit in simulation, which it therefore cannot resolve.
+_ci_width = _s48.loc["beltrami", "mean_diff_ci_high"] - _s48.loc["beltrami", "mean_diff_ci_low"]
+assert _ci_width > _pp_deficit["beltrami"]
+signed_48_beltrami_ci_width = fmt_num(_ci_width, 2)
+assert abs(_level("48", "beltrami") - _level("48", "wcset")) < 0.02  # "GBF's correlation was similar to wCSET's"
 
-# Subject 2: wCSET below sLORETA, dSPM and wMNE, above CSET, no difference significant.
+# Patient 2: wCSET below sLORETA, dSPM and wMNE, above CSET, no difference significant.
 _s34 = vieeg_vs[("34", SIGNED, "window")]
 _LOWER_34 = ["sloreta", "dspm", "wmne"]  # standard methods above wCSET; CSET falls below it
 assert not _s34["significant"].any() and (_s34.loc[_LOWER_34, "mean_diff"] < 0).all() and _s34.loc["cset", "mean_diff"] > 0
@@ -1212,12 +1449,15 @@ signed_34_std_hi = fmt_num(max(_level("34", c) for c in _LOWER_34), 2)
 signed_34_d_lo = fmt_num(-_s34.loc[_LOWER_34, "mean_diff"].max(), 2)  # wCSET's deficit, as a positive number
 signed_34_d_hi = fmt_num(-_s34.loc[_LOWER_34, "mean_diff"].min(), 2)
 signed_34_p_min = fmt_p(_s34["p_corrected"].min())
+# GBF in Patient 2: similar to wCSET
+signed_34_beltrami = fmt_num(_level("34", "beltrami"), 2)
+assert abs(_level("34", "beltrami") - _level("34", "wcset")) < 0.02
 
-# Subjects 3 and 4 (deep sources): every correlation near zero.
+# Patients 3 and 4 (deep sources): every correlation near zero.
 _DEEP_ABS_MAX = 0.11
 assert all(abs(_level(s_, m)) < _DEEP_ABS_MAX for s_ in ["12", "50"] for m in COMPETITORS + ["wcset"])
 signed_deep_abs_max = fmt_num(_DEEP_ABS_MAX, 2)
-# Subject 3: wCSET above sLORETA, dSPM, wMNE and GBF, not CSET.
+# Patient 3: wCSET above sLORETA, dSPM, wMNE and GBF, not CSET.
 _s12 = vieeg_vs[("12", SIGNED, "window")]
 _ABOVE_12 = ["sloreta", "dspm", "wmne", "beltrami"]
 assert _s12.loc[_ABOVE_12, "significant"].all() and (_s12.loc[_ABOVE_12, "mean_diff"] > 0).all()
@@ -1228,42 +1468,38 @@ signed_12_hi = fmt_num(round(max(_level("12", c) for c in _ABOVE_12), 2) + 0.0, 
 signed_12_d_lo = fmt_num(_s12.loc[_ABOVE_12, "mean_diff"].min(), 2)
 signed_12_d_hi = fmt_num(_s12.loc[_ABOVE_12, "mean_diff"].max(), 2)
 signed_12_p_max = f"≤ {_s12.loc[_ABOVE_12, 'p_corrected'].max():.3f}"
-signed_12_cset_d = fmt_ci(_s12.loc["cset"], "mean_diff", digits=2)
+signed_12_cset_d = fmt_ci(_s12.loc["cset"], "mean_diff", digits=2, level=CI_LEVEL)
 signed_12_p_cset = fmt_p(_s12.loc["cset", "p_corrected"])
-# Subject 4: no difference significant.
+# Patient 4: no difference significant.
 _s50 = vieeg_vs[("50", SIGNED, "window")]
 assert not _s50["significant"].any()
 signed_50_p_min = fmt_p(_s50["p_corrected"].min())
 
-# Peak summaries (Annex): no difference significant in either main subject.
-_peak = [vieeg_vs[(s_, m, "peak")] for s_ in MAIN_SUBJECTS for m in (SIGNED, "auc_spatial")]
-assert not any(v["significant"].any() for v in _peak)
-peak_p_min = fmt_p(min(v["p_corrected"].min() for v in _peak))
 
 # Glass-brain example (processing_intra.qmd): signed r at the timepoint shown.
 import json
 _glass = {s_: json.load(open(f"./results/intra/glass_example/sub-{s_}.json")) for s_ in SUBJECT_ORDER}
 glass_48_r_wcset, glass_48_r_sloreta = (fmt_num(_glass["48"]["r"][m], 2) for m in ["wcset", "sloreta"])
 glass_34_r_wcset, glass_34_r_sloreta = (fmt_num(_glass["34"]["r"][m], 2) for m in ["wcset", "sloreta"])
-# Subject 3: sLORETA closer than wCSET at that timepoint; Subject 4: neither correlates.
+# Patient 3: sLORETA closer than wCSET at that timepoint; Patient 4: neither correlates.
 assert _glass["12"]["r"]["sloreta"] > _glass["12"]["r"]["wcset"]
 assert all(abs(_glass["50"]["r"][m]) < 0.1 for m in ["wcset", "sloreta"])
 glass_12_r_wcset, glass_12_r_sloreta = (fmt_num(_glass["12"]["r"][m], 2) for m in ["wcset", "sloreta"])
 glass_50_r_wcset, glass_50_r_sloreta = (fmt_num(_glass["50"]["r"][m], 2) for m in ["wcset", "sloreta"])
 ```
 
-In Subject 1 (@fig-intracranial-diff), wCSET's virtual iEEG correlated more closely with the recording (window-mean r = `{python} signed_48_wcset`) than that of `{python} vieeg_std_names` (r = `{python} signed_48_std_lo` to `{python} signed_48_std_hi`). The differences, Δr = `{python} signed_48_d_lo`–`{python} signed_48_d_hi`, were significant (all p_corrected `{python} signed_48_p_max`), with all lower CI bounds ≥ `{python} signed_48_ci_lo`. wCSET's advantage arose mostly after the spike peak (@fig-intracranial-diff a1). Against GBF (r = `{python} signed_48_beltrami`), the difference was not significant (Δr = `{python} signed_48_beltrami_d`, p_corrected `{python} signed_48_p_beltrami`).
+Study II evaluated a single location per patient. Study III instead tests how well each method reproduces the spatial pattern of activity recorded intracranially, across contacts and over time (@sec-metric-corr). With two patients with cortical sources, these results are a proof of concept. wCSET reproduced the recorded pattern better than CSET and the standard methods in Patient 1, mostly after the spike peak, but not in Patient 2.
 
-Subject 2 did not reproduce this pattern. wCSET's correlation (r = `{python} signed_34_wcset`) was lower than that of sLORETA, dSPM and wMNE (r = `{python} signed_34_std_lo` to `{python} signed_34_std_hi`), by Δr = `{python} signed_34_d_lo`–`{python} signed_34_d_hi`, and higher than CSET's (r = `{python} signed_34_cset`), but no difference was significant (smallest p_corrected `{python} signed_34_p_min`).
+In Patient 1 (@fig-intracranial-diff), wCSET's virtual iEEG correlated with the recording at r = `{python} signed_48_wcset` over the comparison window, against r = `{python} signed_48_std_lo` to `{python} signed_48_std_hi` for CSET, sLORETA, dSPM and wMNE (Δr = `{python} signed_48_d_lo`–`{python} signed_48_d_hi`, all lower CI bounds ≥ `{python} signed_48_ci_lo`; all p_corrected `{python} signed_48_p_max`). GBF's correlation was similar to wCSET's (r = `{python} signed_48_beltrami`), and their difference was not significant (p_corrected `{python} signed_48_p_beltrami`). wCSET's advantage arose mostly after the spike peak (@fig-intracranial-diff a1), as our hypothesis predicts.
 
-In Subjects 3 and 4, whose sources lay deep, far from the cortical source space (@sec-limitations), no method's virtual iEEG agreed with the recording (all |r| < `{python} signed_deep_abs_max`). In Subject 3, wCSET's correlation (r = `{python} signed_12_wcset`) was nonetheless significantly higher than that of sLORETA, dSPM, wMNE and GBF (r = `{python} signed_12_lo` to `{python} signed_12_hi`; Δr = `{python} signed_12_d_lo`–`{python} signed_12_d_hi`, all p_corrected `{python} signed_12_p_max`), but not than CSET's (Δr = `{python} signed_12_cset_d`, p_corrected `{python} signed_12_p_cset`). In Subject 4, no difference was significant (smallest p_corrected `{python} signed_50_p_min`).
+Patient 2 did not reproduce this pattern. wCSET's correlation (r = `{python} signed_34_wcset`) was lower than sLORETA's, dSPM's and wMNE's (r = `{python} signed_34_std_lo` to `{python} signed_34_std_hi`), higher than CSET's (r = `{python} signed_34_cset`), and similar to GBF's (r = `{python} signed_34_beltrami`), but no difference was significant (smallest p_corrected `{python} signed_34_p_min`).
 
-At the spike peak, as evaluated by @grova_intracranial_2016 and @afnan_assessing_2026, neither the signed correlation nor the AUC separated wCSET from any other method in Subjects 1 and 2 (smallest p_corrected `{python} peak_p_min`; Annex).
+In Patients 3 and 4, whose sources lay deep, far from the cortical source space (@sec-data-ieeg), no method's virtual iEEG agreed with the recording (all |r| < `{python} signed_deep_abs_max`). In Patient 3, wCSET's correlation (r = `{python} signed_12_wcset`) was significantly higher than sLORETA's, dSPM's, wMNE's and GBF's (r = `{python} signed_12_lo` to `{python} signed_12_hi`; all p_corrected `{python} signed_12_p_max`), but because all correlations stayed near zero, these differences are unlikely to reflect a better reconstruction. In Patient 4, no difference was significant (smallest p_corrected `{python} signed_50_p_min`).
 
 ```{python filename="results_intra_vieeg_significance_plot.py"}
 #| echo: false
 #| label: fig-intracranial-diff
-#| fig-cap: "*Spatial correlation between virtual and recorded iEEG.* One column per subject (a–d); Subjects 3 and 4 had deep sources. (a1–d1) Signed Pearson correlation across contacts between virtual and recorded iEEG over the comparison window, for wCSET, GBF, CSET and dSPM (sLORETA and wMNE follow dSPM closely). Faint lines = per timepoint; bold lines = 40 ms moving average, for display only (all statistics use the unsmoothed values). Grey band = the 5 samples (25 ms) around 2.0 s, where the spikes are aligned (spike peak). Dotted line = 0. (a2–d2) Difference in the window-mean correlation, wCSET minus each other method; positive = wCSET better. Half-violin = bootstrap distribution of the difference over 1,000 draws, each re-averaging bursts of spikes resampled with replacement, reflected around the observed difference (basic bootstrap; it is the uncertainty of the difference, not the spread of the data). Marker = difference on the average of all spikes; bar = 95% basic bootstrap CI. Above each column: significance (paired bootstrap, Holm-corrected; \*p<0.05, \*\*p<0.01, \*\*\*p<0.001)."
+#| fig-cap: "*Spatial correlation between virtual and recorded iEEG.* One column per patient (a–d); Patients 3 and 4 had deep sources. (a1–d1) Signed Pearson correlation across contacts between virtual and recorded iEEG over the comparison window, for wCSET, GBF, CSET and dSPM (sLORETA and wMNE follow dSPM closely). Faint lines = per timepoint; bold lines = 40 ms moving average, for display only (all statistics use the unsmoothed values). Grey band = the 5 samples (25 ms) around 2.0 s, where the spikes are aligned (spike peak). Dotted line = 0. (a2–d2) Difference in the window-mean correlation, wCSET minus each other method; positive = wCSET better. Half-violin = bootstrap distribution of the difference over 1,000 draws, each re-averaging bursts of spikes resampled with replacement, reflected around the observed difference (basic bootstrap; it is the uncertainty of the difference, not the spread of the data). Marker = difference on the average of all spikes; bar = 99% basic bootstrap CI. Above each column: significance (paired bootstrap, Holm-corrected; \*p<0.05, \*\*p<0.01, \*\*\*p<0.001)."
 import matplotlib.pyplot as plt
 
 TIME_METHODS = ["dspm", "cset", "beltrami", "wcset"]  # dSPM stands for the standard methods (sLORETA/wMNE overlap it)
@@ -1295,7 +1531,7 @@ with mm.metric.plot.style(fontsize=8):
         ax.set_title(f"{letter}1. {title}:\ncorrelation over time", loc="left", fontsize=9)
         ax.spines[["top", "right"]].set_visible(False)
 
-        # (2) Window-mean difference vs. wCSET: basic-bootstrap distribution (half-violin), estimate and 95% CI
+        # (2) Window-mean difference vs. wCSET: basic-bootstrap distribution (half-violin), estimate and 99% CI
         dax = vieeg_axes[1, col_i]
         boot_metrics.plot.paired_differences(
             vieeg_results[(subject, SIGNED, "window")], reference="wcset", order=COMPETITORS, palette=COLORS,
@@ -1308,12 +1544,12 @@ share_ylim(vieeg_axes[0])  # time courses comparable across subjects
 share_ylim(vieeg_axes[1])  # differences comparable across subjects
 ```
 
-@fig-intra-reconstruction shows one timepoint in detail: the peak of the virtual iEEG's global field power (GFP), averaged over the two methods. In Subject 1, wCSET's virtual iEEG correlated with the recording at that timepoint (r = `{python} glass_48_r_wcset`), whereas sLORETA's did not (r = `{python} glass_48_r_sloreta`). In Subject 2, both correlations were weak (r = `{python} glass_34_r_wcset` and `{python} glass_34_r_sloreta`). In Subject 3, sLORETA's virtual iEEG correlated more closely with the recording than wCSET's at that timepoint (r = `{python} glass_12_r_sloreta` and `{python} glass_12_r_wcset`), and in Subject 4, neither did (r = `{python} glass_50_r_sloreta` and `{python} glass_50_r_wcset`).
+@fig-intra-reconstruction shows one timepoint in detail: the peak of the virtual iEEG's global field power (GFP), averaged over the two methods. In Patient 1, wCSET's virtual iEEG correlated with the recording at that timepoint (r = `{python} glass_48_r_wcset`), whereas sLORETA's did not (r = `{python} glass_48_r_sloreta`). In Patient 2, both correlations were weak (r = `{python} glass_34_r_wcset` and `{python} glass_34_r_sloreta`). In Patient 3, sLORETA's virtual iEEG correlated more closely with the recording than wCSET's at that timepoint (r = `{python} glass_12_r_sloreta` and `{python} glass_12_r_wcset`), and in Patient 4, neither did (r = `{python} glass_50_r_sloreta` and `{python} glass_50_r_wcset`).
 
 ```{python filename="results_intra_spatial_plot.py"}
 #| echo: false
 #| label: fig-intra-reconstruction
-#| fig-cap: "*Recorded vs. virtual iEEG at one timepoint.* Subjects 1–4 (rows; Subjects 3 and 4 had deep sources). (a1–d1) Intracranial global field power (GFP, standard deviation across contacts) of the recorded iEEG and of wCSET's and sLORETA's virtual iEEG, each scaled to its own maximum within the spike window (shaded); dashed line = the timepoint shown on the right, the peak of the averaged virtual GFPs. (a2–a4 to d2–d4) Superior view with each intracranial contact colored by its signed amplitude: recorded iEEG, wCSET, sLORETA. Each map's color range ends at the 95th percentile of its own absolute amplitudes, so the few strongest contacts saturate. r = signed spatial correlation with the recording at that timepoint."
+#| fig-cap: "*Recorded vs. virtual iEEG at one timepoint.* Patients 1–4 (rows; Patients 3 and 4 had deep sources). (a1–d1) Intracranial global field power (GFP, standard deviation across contacts) of the recorded iEEG and of wCSET's and sLORETA's virtual iEEG, each scaled to its own maximum within the spike window (shaded); dashed line = the timepoint shown on the right, the peak of the averaged virtual GFPs. (a2–a4 to d2–d4) Superior view with each intracranial contact colored by its signed amplitude: recorded iEEG, wCSET, sLORETA. Each map's color range ends at the 95th percentile of its own absolute amplitudes, so the few strongest contacts saturate. r = signed spatial correlation with the recording at that timepoint."
 import json
 import matplotlib.pyplot as plt
 
@@ -1367,80 +1603,75 @@ plt.show()
 ```
 
 
-<!--
-Change of Formulation!
-wCSET’s correlation was already higher by Δr = 0.16–0.17 at 25% of the peak amplitude. Methods describes this as a time point “where the simulated activity is still confined to the initial patch”. So wCSET’s advantage in spatial correlation exists before there is any co-activation, which weakens the claim that the advantage comes from capturing co-activation. A plausible explanation is that whole-cortex correlation also rewards having fewer spurious activations far from the source. Either way, the opening “wCSET’s advantage emerged as activity spread” isn’t accurate. **The gap grows as activity spreads (0.16 → 0.28)**, but it doesn’t emerge with the spread. That’s the claim the data support, and it’s how the Discussion should frame it.
--->
-
 # Discussion
 
 ## Summary of Findings
 
-We hypothesized that connectivity-informed methods would localize a source at its onset about as well as standard methods, but reconstruct the co-activation that follows more accurately (@sec-introduction). Our results support both parts of this hypothesis. In simulation (Study I) and in patients who underwent epilepsy surgery (Study II), wCSET localized the onset about as well as the standard methods. In simulation, it also reconstructed the subsequent co-activation markedly better, and simultaneous intracranial recordings (Study III) confirmed this advantage in one of the two patients analyzed, which offers preliminary support in real data.
+We hypothesized that connectivity-informed methods would bring little benefit for localizing a source but would reconstruct the spatial pattern of activity more accurately, with a gain that grows as activity spreads beyond its onset (@sec-introduction). The results support this hypothesis in simulation and, preliminarily, in intracranial recordings. Consistent with the first part, wCSET brought no consistent localization benefit. In simulation (Study I), it localized the source more accurately than sLORETA and wMNE but less accurately than CSET and dSPM. In patients who underwent epilepsy surgery (Study II), no method localized the epileptogenic zone significantly better than wCSET, which was non-inferior to CSET and dSPM. Consistent with the second part, wCSET reconstructed the spatial pattern of activity more accurately than every other method throughout the simulated spike, and its advantage over the standard methods grew as activity spread, from Δr = `{python} corr1_std_dr_qrp_lo`–`{python} corr1_std_dr_qrp_hi` at 25% of the peak amplitude to `{python} corr1_std_dr_pp_lo`–`{python} corr1_std_dr_pp_hi` at the peak. Simultaneous intracranial recordings (Study III) showed the same advantage, arising mostly after the spike peak, in one of the two patients with cortical sources but not in the other.
 
-The specific connectome mattered less than expected. In simulation, wCSET performed slightly better with surrogate connectomes that require no diffusion MRI than with the individual connectome used to generate the data, although it outperformed the standard methods with either. GBF, which uses cortical geometry instead of a connectome, performed on par with wCSET using the atlas surrogate. We discuss what these results imply for the role of the connectome in @sec-connectome-geometry.
+These results suggest that localization alone is an incomplete benchmark for connectivity-informed methods. Localization did not consistently favor wCSET, whereas the spatial pattern of activity did, increasingly so as activity spread. A benchmark that measures only where a source lies and how far it extends at onset therefore misses where these priors should help most.
 
-These results also show that localization alone is an incomplete benchmark for source reconstruction. Localization did not consistently favor wCSET over the standard methods in either Study I or Study II, whereas measures of the spatial pattern of activity did, in simulation and in one intracranial patient. No single benchmark is sufficient. Simulations are exact but rest on simplified models of the head, of the spread of activity and of noise. Resections are clinically grounded but spatially coarse, and intracranial recordings are direct but sparse. Because each benchmark has a different blind spot, results that agree across them carry more weight than any one of them alone.
+No single dataset is sufficient to measure this gain, either. Simulations are exact but rest on simplified models of the head, of the spread of activity and of noise. Resections are clinically grounded but spatially coarse, and intracranial recordings are direct but sparse. Because each has a different blind spot, results that agree across them carry more weight than any one alone. Here, simulation and surgery agree that wCSET brings no consistent localization advantage, and simulation and one intracranial patient agree on its advantage in the spatial pattern of activity.
 
-## Localization at Onset
+The surrogate and perturbation analyses address a practical question: whether wCSET needs an individual connectome. In simulation, it did not. With the atlas and local surrogates, which require no diffusion MRI, wCSET's localization was non-inferior to that with the individual connectome used to generate the data, and its spatial correlation fell by only Δr = `{python} surr_match_pp_lo`–`{python} surr_match_pp_hi`. Its advantage in spatial correlation also survived perturbation of up to `{python} deg_corr_wcset_better_end`% of the connectome's edges. Replacing the connectome with cortical geometry, however, mattered in simulation. GBF localized significantly worse, and the loss that CSET showed with geometric harmonics suggests that the harmonics, rather than GBF's weights, cause GBF's loss. In the clinical data, GBF and wCSET performed similarly: neither localized the epileptogenic zone significantly better than the other (Study II), and they reached similar correlations in Patient 1 (Study III). We discuss this discrepancy further in @sec-connectome-geometry.
 
-<!-- Proposed for the prose pass (Study I vs. II localization): "In simulation, wCSET's localization depended on single-spike SNR: it was the most precise method at SNR ≥ 7–10 but less robust than dSPM below SNR 5. In patients, its peak fell inside the resection more often than dSPM's. This would be consistent with the high-SNR regime, but the single-spike SNR of the clinical data could not be estimated." -->
+## Localization
 
-At 25% of the rising phase, wCSET localized the simulated onset about as accurately as CSET and dSPM, and more accurately than sLORETA and wMNE. The differences from CSET and dSPM were significant, but only because of the large number of regions compared (`{python} simf_n_regions`). Their effects were small (r ≈ `{python} loc1_small_r`), so the three methods localized comparably. We expected this, because at onset, activity is still confined to the initial patch and has not yet reached any connected region. A prior that encodes connections between regions therefore has little to add.
+As expected, wCSET brought no consistent localization benefit: it was less accurate than CSET and dSPM in simulation but showed no detectable disadvantage in patients.
 
-Study II gave the same picture in patients. wCSET and GBF had the lowest localization errors, nearly identical to each other, and wCSET's maximum fell inside the resection volume in `{python} resection_inside_wcset` of `{python} resection_n` patients, against `{python} resection_inside_sloreta` for sLORETA. No difference between methods was significant, although every effect against the standard methods favored wCSET (r = `{python} resection_r_lo`–`{python} resection_r_hi`). With `{python} resection_n` patients, Study II could detect large differences in localization error, but not differences as small as those found in simulation. Since none was significant, its results confirm that localization differences between methods are small.
+At 25% of the peak amplitude, wCSET localized the simulated source more accurately than sLORETA and wMNE, but less accurately than CSET and dSPM, by `{python} loc1_cset_hl` and `{python} loc1_dspm_hl`. It was not shown to be non-inferior to either. A connectivity prior has little to add at that point, while activity is still confined to the initial patch, so we expected no advantage there. The disadvantage reflects bimodal errors. wCSET placed its peak inside the initial patch more often than CSET and dSPM (`{python} loc1_exact_wcset`% of runs against `{python} loc1_exact_cset`% and `{python} loc1_exact_dspm`%), but it also placed it more than 30 mm away more often (`{python} loc1_far_wcset`% against `{python} loc1_far_cset`% and `{python} loc1_far_dspm`%). This disadvantage depends on noise: at higher SNR, wCSET localized more accurately than dSPM (@sec-s1-data-noise).
 
-On the same cohort, @wang_geometry_2026 report a similar parity for GBF against dSPM, sLORETA and eLORETA (p = 0.079–0.133). They also report that GBF improved significantly over depth-weighted MNE (p = 0.012), the equivalent of our wMNE. Neither GBF nor wCSET did so in our analysis, possibly because our wMNE uses a different depth weighting and regularization (@sec-inverse).
+Study II also showed no consistent advantage. No method localized the epileptogenic zone significantly better than wCSET, although the point estimates favored wCSET by `{python} resection_hl_lo` to `{python} resection_hl_hi` mm. wCSET was non-inferior to CSET and dSPM within the `{python} resection_margin` mm margin, so it localized no more than `{python} resection_margin` mm worse than either. Against GBF, sLORETA and wMNE, the `{python} resection_ci_pct`% CIs were too wide to rule out a larger disadvantage. With `{python} resection_n` patients, Study II could detect only large differences in localization error, not differences as small as those found in simulation, and it leaves open disadvantages of up to `{python} resection_open_worse` mm and advantages of up to `{python} resection_open_better` mm. The proportion of patients whose resection volume contained the peak gave the same picture. `{python} resection_inside_lead` placed the peak inside it in `{python} resection_inside_top`, more often than any other method. Only dSPM, which placed the peak inside it in none, did significantly worse than wCSET.
 
-In patients, however, localization was less accurate than in simulation. In simulation, wCSET's maximum lay a median of `{python} simf_loc_trial_median_wcset` mm from the initial patch. A resection volume is a much larger target than an initial patch, so we expected wCSET's maximum to fall inside it in nearly every patient. Yet it fell inside in only `{python} resection_inside_wcset` of `{python} resection_n`. Several differences between real recordings and our simulation may explain this gap. Real physiological noise is probably larger than our noise model assumes, and Study II could be whitened only with a diagonal noise covariance (@sec-data-resection). The target itself may also be imperfect. Interictal spikes arise from the irritative zone, which can extend beyond the epileptogenic zone and therefore beyond the resection [@rosenow_presurgical_2001]. Moreover, by 50% of the rising phase, the spike may already include activity that has propagated from its origin.
+Localization was less accurate in patients than in simulation. In simulation, wCSET's peak lay a median of `{python} simf_loc_trial_median_wcset` mm from the initial patch. Since a resection volume is a much larger target than an initial patch, one would expect wCSET's peak to fall inside it in nearly every patient. It did so in only `{python} resection_inside_wcset` of `{python} resection_n`. Several differences between real recordings and our simulation may explain this gap. Real physiological noise is probably larger than our noise model assumes, and Study II could be whitened only with a diagonal noise covariance (@sec-data-resection). The target itself may be imperfect: interictal spikes arise from the irritative zone, which can extend beyond the epileptogenic zone and therefore beyond the resection [@rosenow_presurgical_2001]. Finally, by 50% of the peak amplitude, the spike may already include activity that has propagated from its origin.
 
-Study II still answered the question it was included for. Localization against a resection is the field's conventional benchmark, and wCSET's advantage in reconstructing co-activation did not come at a cost in localization accuracy.
+On the same cohort, @wang_geometry_2026 found no significant difference between GBF and dSPM, sLORETA or eLORETA (p = 0.079–0.133), consistent with our results. They did find GBF more accurate than depth-weighted MNE (p = 0.012), whereas wCSET did not differ significantly from our wMNE, possibly because our wMNE uses a different depth weighting and regularization (@sec-inverse).
 
-## Co-Activation
+Study II still answered the question it was included for. Localization against a resection is the field's conventional benchmark. On it, no method significantly outperformed wCSET, and wCSET was non-inferior to CSET and dSPM. In patients, its advantage in the spatial pattern of activity therefore came at no detectable cost in localization.
 
-In simulation, wCSET's advantage appeared once activity had spread from the initial patch to connected regions, that is, once there was co-activation for a connectivity prior to capture. From onset until `{python} corr1_window_end_lo`–`{python} corr1_window_end_hi` ms, wCSET's spatial correlation with the ground truth was higher than that of every other method, and its advantage over the standard methods was largest close to the spike peak.
+## Spatial Pattern of Activity
 
-The connectome spectrum helps explain this timing. It describes activity as a combination of connectome harmonics, from low-frequency patterns that vary smoothly across connected regions to high-frequency patterns that vary rapidly (@sec-connectome). In visual evoked responses, @rue-queralt_connectome_2021 found that this spectrum became more compact as the response rose, meaning that a few harmonics, mostly of low frequency, captured most of the signal. wCSET's advantage rose with the simulated spike in the same way. Both connectome-based priors are built for such compact spectra. CSET's sparse prior favors a few harmonics, and wCSET's weights additionally favor the low-frequency ones. wCSET is therefore well suited to the moments when the signal has a compact connectome spectrum, such as when activity propagates across connected regions.
+wCSET's advantage in the spatial pattern of activity appeared before activity spread, grew as it spread, withstood noise and connectome errors, and was partly reproduced in intracranial recordings.
 
-This advantage was robust. wCSET's spatial correlation remained higher than that of the standard methods down to an SNR of `{python} noise_corr_end_std`. It also withstood errors in the connectome, which matters because real tractography contains many false-positive connections [@maier-hein_challenge_2017]. Under perturbation of the connectome, wCSET's spatial correlation never became significantly lower than sLORETA's, whereas CSET's fell below sLORETA's once `{python} deg_loc_cset_worse_start`% of edges were swapped. With all edges swapped, the connectome no longer indicates which regions are connected, so wCSET can at best perform like a method without connectivity information. Even then, it did not perform worse.
+In simulation, wCSET's spatial correlation with the simulated activity was higher than that of every other method from onset until `{python} corr1_window_end_lo`–`{python} corr1_window_end_hi` ms. Its advantage over the standard methods was already present at 25% of the peak amplitude (Δr = `{python} corr1_std_dr_qrp_lo`–`{python} corr1_std_dr_qrp_hi`), while activity was still confined to the initial patch. Spread beyond the patch therefore cannot explain this early advantage, but local connectivity can. The dipoles of the patch are linked by the short-range edges that every connectome in this study contains (@sec-connectome), so the prior favors activity that covers the patch as a whole. Previous studies found that priors built on connectome or geometric harmonics reconstruct the spatial extent of a source more accurately than standard methods [@siu_structural_2026; @wang_geometry_2026]. Such a better-delimited source, with less spurious activity elsewhere on the cortex, would explain the higher whole-cortex correlation before activity spreads. The advantage then grew as activity spread beyond the patch, reaching Δr = `{python} corr1_std_dr_pp_lo`–`{python} corr1_std_dr_pp_hi` at the peak.
 
-Simultaneous intracranial recordings provide the most direct test of this advantage in real data, although with two patients analyzed, they offer a proof of concept rather than a validation (two further patients with deep sources are discussed in @sec-limitations). We compared virtual and recorded iEEG with two measures that ignore polarity, the Spearman correlation of absolute amplitudes and the AUC (@sec-metric-corr, @sec-metric-auc). The signed Pearson correlation used by @grova_intracranial_2016 and @afnan_assessing_2026 led to the same conclusions, with larger effects (@fig-annex-signed).
+The connectome spectrum may help explain why the advantage grew. This spectrum describes activity as a combination of connectome harmonics, from low-frequency patterns that vary smoothly across connected regions to high-frequency patterns that vary rapidly (@sec-connectome). @rue-queralt_connectome_2021 computed it for source-reconstructed visual evoked responses and found that it became more compact as the response rose: a few harmonics, mostly of low frequency, captured most of the signal. This observation motivates connectome-based priors. CSET's sparse prior favors a few harmonics, and wCSET's weights additionally favor the low-frequency ones. If activity likewise becomes more compact in the connectome spectrum as it spreads, these priors should fit it increasingly well, and their advantage should grow with spread, as it did here. The low-frequency weights may also explain why wCSET's advantage exceeded CSET's.
 
-Over the whole comparison window, wCSET outperformed sLORETA, dSPM, wMNE and CSET on both measures in Patient 1, and did not differ from any of them in Patient 2. GBF performed on par with wCSET in both patients, and wCSET was never significantly worse than another method. @fig-intra-reconstruction shows a single time point, the peak of the virtual GFP, at which wCSET agreed better with the recording than sLORETA in both patients. In Patient 1, both methods placed their largest amplitudes on the correct electrode shafts, but mostly not on the correct contacts. In Patient 2, wCSET's largest amplitudes fell on the shaft that dominated the recording. This agreement did not persist over the rest of the window, which explains why the methods did not differ overall in that patient.
+This advantage was robust. wCSET's spatial correlation remained higher than that of the standard methods down to an SNR of `{python} noise_corr_end_std`. It also withstood errors in the connectome, which matters because real tractography contains many false-positive connections [@maier-hein_challenge_2017]. With up to `{python} deg_corr_wcset_better_end`% of edges swapped, wCSET's spatial correlation remained higher than sLORETA's and dSPM's; CSET's did so with up to `{python} deg_corr_cset_better_end`% swapped. Localization was more sensitive: wCSET became less accurate than sLORETA once `{python} deg_loc_wcset_sloreta_worse_start`% of edges were swapped, and CSET once `{python} deg_loc_cset_sloreta_worse_start`% were. With most edges swapped, the connectome no longer indicates which regions are connected, so the prior misleads the reconstruction. Both methods then performed worse than sLORETA and dSPM in spatial correlation (Δr = `{python} deg_corr_worse_dr_all`) and worse than sLORETA in localization (by `{python} deg_loc_worse_sloreta_mm` mm).
 
-In Patients 1 and 2, absolute agreement with the recording was modest. On the signed correlation, wCSET's median over the comparison window was `{python} signed_48_wcset` in Patient 1 and `{python} signed_34_wcset` in Patient 2, within the 0.14–0.45 range that @afnan_assessing_2026 report between MEG and simultaneous SEEG at the spike peak. Agreement of this size thus seems inherent to this benchmark rather than specific to EEG or to our methods. Sparse sampling likely contributes. Even with 67 to 146 contacts per patient, the electrodes sample only a small fraction of the cortex on which activity is reconstructed.
+Simultaneous intracranial recordings partly support these simulation results. Only two of the four patients had cortical sources (the other two are discussed in @sec-limitations), so the recordings offer a proof of concept rather than a validation. wCSET's advantage appeared in Patient 1 but not in Patient 2. In Patient 1, wCSET's virtual iEEG correlated with the recording at r = `{python} signed_48_wcset` over the comparison window, whereas the standard methods' did not (r = `{python} signed_48_std_lo` to `{python} signed_48_std_hi`). wCSET outperformed them and CSET, mostly after the spike peak. This timing is consistent with the simulation, in which the advantage grew as activity spread. In Patient 2, the standard methods reached r = `{python} signed_34_std_lo`–`{python} signed_34_std_hi` and wCSET only `{python} signed_34_wcset`. This difference was not significant (p_corrected ≥ `{python} signed_34_p_min[2:]`), but it went against wCSET. In both patients, GBF reached a correlation similar to wCSET's.
 
-Within these limits, the intracranial recordings support the simulation results. wCSET reconstructed the recorded activity better than the standard methods in Patient 1, and in neither patient was it worse than any other method
+Absolute agreement with the recording was modest in both patients. wCSET's correlation over the comparison window reached r = `{python} signed_48_wcset` in Patient 1 and `{python} signed_34_wcset` in Patient 2. @afnan_assessing_2026 report correlations of 0.14–0.45 between MEG and simultaneous SEEG at the spike peak. A window average includes samples of lower SNR than the peak and would be expected to fall below a peak value, so our correlations appear in line with this benchmark. Agreement of this size may therefore be inherent to comparisons with intracranial recordings rather than specific to EEG or to our methods. Sparse sampling likely contributes: even with 67 to 146 contacts per patient, the electrodes sample only a small fraction of the cortex on which activity is reconstructed. Larger cohorts will be needed to tell whether Patient 1 or Patient 2 is the more typical case.
 
 ## Connectome or Geometry? {#sec-connectome-geometry}
 
-wCSET did not need the individual connectome. In simulation, wCSET with the atlas or local surrogate, and GBF, which uses geometric harmonics instead of connectome harmonics, all outperformed wCSET with the individual connectome, both for localization (r = `{python} loc_wcset_r_lo`–`{python} loc_wcset_r_hi`) and, more strongly, for spatial correlation at the peak (r = `{python} corr_wcset_r_lo_pp`–`{python} corr_wcset_r_hi_pp`). This held even though the simulated activity spread along the individual connectome itself. No surrogate stood out, and binarized surrogates, in which all edges have the same weight, performed like weighted ones. In real data, where both methods relied on surrogates, a geometric surrogate did as well as a connectome surrogate. GBF and wCSET with the atlas connectome had the lowest median distances to the resection volume in Study II, and neither was significantly better than the other in either patient of Study III. @siu_structural_2026, who filtered source reconstructions with harmonics rather than using them as a prior, found the same parity between geometric and connectome harmonics against resected epileptogenic zones in 20 patients.
+wCSET did not need the individual connectome. In simulation, with the atlas and both local surrogates, wCSET's localization and spatial correlation stayed within the non-inferiority margins of those with the individual connectome, even though the simulated activity spread along the individual connectome itself. The largest disadvantages that the CIs allowed were `{python} surr_match_loc_ci` mm in localization and Δr = `{python} surr_match_pp_ci` in spatial correlation. A surrogate is therefore a practical option when diffusion MRI is unavailable, as is usually the case in clinical epilepsy workups, and Studies II and III used the atlas surrogate for this reason.
 
-Why would surrogates outperform the very connectome on which the activity was simulated? We hypothesize that the answer lies in how spatially concentrated each graph's low-frequency harmonics are. To explore this, we computed the inverse participation ratio of the 200 lowest-frequency harmonics of each graph, a measure that is high when a harmonic is concentrated on few dipoles (@fig-annex-ipr). The individual connectome's harmonics often concentrated on small, sometimes disjoint groups of dipoles, whereas the surrogates' harmonics spread more evenly across the cortex. Because wCSET's weights favor low-frequency harmonics, a concentrated one pulls the reconstruction toward its cluster. Whether that cluster is actually active, however, depends on what the brain is doing at that moment. If it is not, the prior still pulls the reconstruction toward it, and the harmonic becomes a liability.
+Two surrogates fell short in localization. GBF localized `{python} surr_beltrami_loc_d` mm worse than wCSET with the individual connectome (`{python} surr_ci_pct`% CI `{python} surr_beltrami_loc_lo` to `{python} surr_beltrami_loc_hi` mm worse), and wCSET with the binarized atlas localized `{python} surr_atlasbin_loc_d` mm worse (`{python} surr_ci_pct`% CI from `{python} surr_atlasbin_loc_better` mm better to `{python} surr_atlasbin_loc_worse` mm worse). Neither CI ruled out a disadvantage beyond the `{python} loc1_delta` mm margin. GBF also lowered the spatial correlation at the peak, but only by Δr = `{python} surr_beltrami_pp`, well within the `{python} DELTA_CORR` margin. CSET showed the same pattern more strongly: geometric harmonics worsened its localization by `{python} cset_beltrami_loc_d` mm (`{python} surr_ci_pct`% CI `{python} cset_beltrami_loc_lo` to `{python} cset_beltrami_loc_hi` mm), whereas the other surrogates changed it by at most `{python} cset_other_loc_max` mm. Because CSET uses no harmonic weights, this comparison changes only the harmonics, which points to the harmonics, rather than GBF's weights, as the cause of GBF's loss.
 
-CSET's sparse prior should be less exposed to this problem. It selects only the few harmonics that best explain the data, so it can leave out a concentrated harmonic that does not match the activity, and it has little to gain from more homogeneous ones. Consistent with this, CSET performed only slightly worse with most surrogates than with the individual connectome. The exception was geometric harmonics, with which CSET localized markedly worse (r = `{python} cset_beltrami_loc_r`). The leading geometric harmonics are smooth, global patterns, so the few that a sparse prior selects may not be enough to place a focal onset.
+In patients, these disadvantages were not detected. For spatial correlation, this is expected. In Study III, GBF's correlation did not differ significantly from wCSET's in either patient with cortical sources. The disadvantage in simulation (Δr = `{python} surr_beltrami_pp_d`) is too small for the bootstrap within a single patient to resolve: in Patient 1, the `{python} surr_ci_pct`% CI of the difference was `{python} signed_48_beltrami_ci_width` wide. For localization, the absence of a difference is less informative. In Study II, wCSET localized better than GBF by `{python} resection_gbf_d` mm, in the same direction as in simulation, but the `{python} resection_ci_pct`% CI ranged from `{python} resection_gbf_worse` mm worse to `{python} resection_gbf_better` mm better. With `{python} resection_n` patients and the resection as a coarse reference, Study II could not detect a difference of the size seen in simulation. @siu_structural_2026, who used the harmonics to filter source reconstructions rather than as a prior, also found that geometric and connectome harmonics performed similarly against resected epileptogenic zones in 20 patients.
 
-A useful graph therefore needs two properties. First, it must reflect how the cortex is organized. With all edges of the connectome swapped at random, wCSET performed no better than the standard methods (@sec-s1-prior-noise). Second, its low-frequency harmonics must be spatially homogeneous enough. The individual connectome met the first requirement but not the second, which would explain why surrogates improved on it. The atlas connectome and the cortical geometry meet both. In practice, this means that wCSET does not require individual diffusion MRI, which is rarely acquired in clinical epilepsy workups.
+The connectome still has to reflect how the cortex is organized. With most edges swapped at random, wCSET performed worse than sLORETA and dSPM in spatial correlation and worse than sLORETA in localization (@sec-s1-prior-noise). The surrogates, however, are far from random. In terms of how closely their priors match the individual prior, every surrogate, including GBF, is equivalent to swapping only `{python} deg_surr_equiv_lo`–`{python} deg_surr_equiv_hi`% of the edges (@sec-s1-prior-noise). Since wCSET kept its correlation advantage with up to `{python} deg_corr_wcset_better_end`% of edges swapped, every surrogate should preserve that advantage, as all of them did. This measure does not, however, explain GBF's localization disadvantage, because GBF's prior is nearly as close to the individual prior as those of the other surrogates. What in geometric harmonics impairs localization in simulation remains open.
 
-These results do not mean that individual connectome harmonics are misleading, but that wCSET does not yet extract all the information they carry. Its weights, like GBF's, depend only on each harmonic's frequency, not on the recorded data, so it favors a concentrated harmonic whether or not its cluster is active. Selecting harmonics from the data, as CSET does, avoids this problem but raises another. Choosing a few harmonics among thousands is difficult, and although CSET was less exposed to concentrated harmonics, it performed worse than wCSET overall. A prior could combine the strengths of both by selecting harmonics from the data, but only among the low-frequency ones. Until then, wCSET's fixed weighting remains the better trade-off.
+Connectome or geometry? For the spatial pattern of activity, either supports wCSET's advantage, and an atlas connectome is enough. For localization, connectome harmonics did better in simulation, a difference that our clinical cohorts were too small to confirm or rule out.
 
 ## Limitations {#sec-limitations}
 
-Our source model restricts dipoles to the cortex (@sec-source-space), so it cannot represent deep generators. In Study III, the two patients whose activity arose from deep structures could not be reconstructed well by any method (@fig-annex-deep), a limitation that @grova_intracranial_2016 also report. This is a missed opportunity, because tractography, the very data our prior draws on, also captures connections to and among deep structures. Including these structures is not straightforward, however. On the cortex, each source can be oriented perpendicular to the surface, but deep structures offer no such surface, so their sources need free orientations. A connection between two sources pointing in different directions has no clear meaning, so the connectome would have to encode orientation as well.
+The strongest evidence for wCSET's advantage comes from simulation, in which activity spreads along the connectome. This design builds in the assumption on which connectome-based priors rest: that activity spreading along the connectome has a compact connectome spectrum. The assumption is grounded in data: @rue-queralt_connectome_2021 found such compact spectra in source-reconstructed evoked responses. It is also as defensible as the independent focal sources of most simulations, which match the assumptions of the standard methods. If real activity follows the connectome less closely, however, wCSET's advantage would likely be smaller than in simulation. Perturbing the connectome used for reconstruction shows that the advantage does not require an exact match (@sec-s1-prior-noise), and the clinical studies, though small, offer a partial test in real data.
 
-For all methods except CSET, we set the regularization parameter α from the SNR of each recording (@sec-lambda). To see how far this choice was from the best possible one, we reconstructed the Study III recordings over a range of α values and measured each reconstruction's agreement with the intracranial signal (@fig-annex-alpha). The value with the best agreement was up to an order of magnitude away from the SNR-based value. In practice, however, no intracranial recording is available to find it. The two usual alternatives that need no reference, the L-curve and generalized cross-validation, gave implausible values on our data, so the SNR rule remained the best available choice. Choosing α without a reference therefore remains an open problem for source imaging in general. CSET's α was instead fixed after tuning in simulation, because no comparable rule exists for sparse priors, and this may have disadvantaged it in real data.
+How activity spreads is also simplified: it propagates hop by hop, without feedback. Neural mass models include feedback, but at the resolution of our source space, our attempts produced either a focal spike or a full seizure, and nothing in between. Coarser models with about 1,000 nodes are stable, but too coarse for EEG source modeling. A patch of cortex can be modeled as a single dipole only if its extent is much smaller than its distance to the scalp, which requires sources less than about 5 mm apart [@nunez_multi-scale_2019, p. 199]. Our source space meets this criterion with a spacing of 3.3 mm (@sec-source-space), whereas 1,000-node models space their nodes about 10 mm apart [@siu_structural_2026]. Whole-brain neural mass models at dipole resolution remain a step for future work.
 
-Our standard methods were limited to those available in MNE-Python. This excludes LORETA and LAURA, which @carboni_linear_2022 found most accurate for localizing interictal spikes, ahead of sLORETA and eLORETA.
+The source model has a limitation of its own: it restricts dipoles to the cortex (@sec-source-space), so it cannot represent deep generators. In the two Study III patients with deep sources, no method's virtual iEEG agreed with the recording, a limitation that @grova_intracranial_2016 also report. Excluding deep structures is a missed opportunity, because tractography, the very data our prior draws on, also captures connections to and among them. Including them is not straightforward, however. On the cortex, each source can be oriented perpendicular to the surface, but deep structures offer no such surface, so their sources need free orientations. It is unclear what a connection between two differently oriented sources would mean, so the connectome would have to encode orientation as well.
 
-Finally, only two patients could be evaluated in Study III. The test within each patient accounts for autocorrelation across time points, but two patients do not allow a test across patients, and more are needed before these results can be generalized.
+Finally, CSET's regularization parameter was fixed at a single value, tuned in simulation, because the SNR rule we used for the other methods applies only to Gaussian priors (@sec-lambda). A fixed value cannot adapt to the SNR of each recording, which may have disadvantaged CSET in real data.
 
 # Conclusion
 
-Source reconstruction is conventionally benchmarked on localizing a single, focal generator, a criterion that says little about how well a method captures the co-activation of distributed regions. We introduced wCSET, which replaces CSET's sparse prior with a smooth, exponentially decaying L2 prior over the connectome-harmonic spectrum. We validated it alongside CSET, three connectivity-agnostic methods, and a geometry-based alternative (GBF) against three ground truths: a simulation of activity spreading across the structural connectome, the resected epileptogenic zone of seizure-free patients, and simultaneous intracranial recordings.
+Source reconstruction is conventionally benchmarked on the location and extent of a single, focal generator, a criterion that says little about how well a method reconstructs the spatial pattern of activity as it spreads across distributed regions. We introduced wCSET, which replaces CSET's sparse prior with a Gaussian prior on the connectome spectrum whose weights decay exponentially with graph frequency. We validated it alongside CSET, three standard methods and a geometry-based alternative (GBF) against three references: a simulation of activity spreading along the structural connectome, the resected epileptogenic zone of seizure-free patients, and simultaneous intracranial recordings.
 
-wCSET localized a source's onset about as well as the standard methods, in simulation and in the resection cohort. It reconstructed the co-activation patterns that follow markedly better in simulation, and against intracranial recordings in one of two evaluable subjects, without ever performing significantly worse than another method. This advantage held under moderate noise and considerable connectome corruption. dMRI-free surrogate connectomes even improved wCSET, so the method does not require individual diffusion MRI. A purely geometric alternative performed on par with wCSET in all three studies, as two independent groups also report [@wang_geometry_2026; @siu_structural_2026]. How evenly the harmonics spread over the cortex may therefore matter more than how anatomically accurate the connectome is.
+wCSET brought no consistent localization benefit: in simulation, it localized more accurately than sLORETA and wMNE but less accurately than CSET and dSPM, and in the resection cohort, no method localized significantly better than it. wCSET did, however, reconstruct the spatial pattern of activity more accurately than every other method throughout the simulated spike, with an advantage that grew as activity spread and withstood noise and large connectome errors. Intracranial recordings showed the same advantage in one of the two patients with cortical sources. In simulation, atlas and local surrogate connectomes preserved this advantage, so wCSET need not rely on individual diffusion MRI. GBF, built on geometric harmonics, preserved it too, but localized less accurately in simulation. Connectivity-informed priors thus pay off in the spatial pattern of activity rather than in localization, a gain that benchmarks of localization alone cannot detect.
 
-Beyond wCSET itself, we see the three-part validation framework as the more lasting contribution: simulated, resected, and intracranial ground truths that together probe a source's full pattern of activity rather than its onset alone. Two of its parts stand on their own: a simulation in which activity spreads along the structural connectome in dipole space, and simultaneous EEG/iEEG recordings that test reconstruction beyond localization. Applying them to future connectivity- and geometry-informed methods, and to source models that include deep generators, are natural next steps toward source imaging that reflects the brain's network organization rather than reducing it to a single point.
+Beyond wCSET itself, we see the three-part validation framework as the more lasting contribution: simulated, surgical and intracranial references that together probe a source's spatial pattern of activity, not only its location. Its simulation, in which activity spreads along the structural connectome at dipole resolution, is openly available, and its intracranial comparison applies to any simultaneous EEG–iEEG dataset (@sec-data-availability). Natural next steps are to apply this framework to future connectivity- and geometry-informed methods, and to extend it to source models that include deep generators and to larger intracranial cohorts. These steps would help source imaging reconstruct not only where activity begins, but how it unfolds across the brain’s network, a prerequisite for studying how its regions interact.
 
 # Acknowledgements
 
@@ -1450,7 +1681,7 @@ This work was supported by the Swiss National Science Foundation (SNF) under gra
 
 During the preparation of this manuscript, the author(s) used Claude (Anthropic) to assist with rewriting and editing portions of the text for clarity and concision. All AI-generated or AI-edited content was reviewed, verified, and edited by the author(s), who take full responsibility for the accuracy and integrity of the published work.
 
-# Data and Code Availability
+# Data and Code Availability {#sec-data-availability}
 
 Code for the analyses and figures presented in this manuscript is available at \[manuscript repository link\], with the accompanying `mindmap` analysis package available at \[mindmap package repository link\].
 
