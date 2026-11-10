@@ -1464,28 +1464,38 @@ Uncertainty of the window-mean spatial metrics over the recorded spikes, for
 the paired comparisons in `index.qmd`. Each draw resamples the spikes with
 replacement, re-averages the same spikes for the EEG and the iEEG, re-inverts
 with every method and recomputes the metrics of `intra_spatial_metrics.py`,
-averaged over the spike window and over the 5 samples centred on the recorded
-iEEG's peak (one window mean and one peak mean per method and metric). Spikes are
+averaged over the spike window and over the 5 samples centred on the spike
+time (one window mean and one peak mean per method and metric). Spikes are
 resampled as bursts: spikes linked because one's window falls in the other's
 baseline (see Spike Overlaps) are drawn together, so the units drawn are
 independent (a cluster bootstrap). Noise covariance and `lambda2` stay fixed
 from all spikes, as computed by `eeg_preprocessing.py`/`solve_inverse.py`. Each timepoint is
 solved independently, so each draw reconstructs only the baseline (for the z-score of the virtual iEEG)
-and the window.
+and the samples it summarizes.
 
 **Parameter choices:**
 
 - `N_BOOT = 1000`: smallest attainable p is 2/1001, enough for Holm across
   the 5 competitors.
-- `PEAK_SAMPLES = 5`: samples averaged around the peak (25 ms at 200 Hz),
-  as Grova et al. (2016) averaged 5 samples around the spike peak. The peak is
-  the maximum of the recorded iEEG's GFP (standard deviation across contacts
-  of the baseline-normalized average) within the window, taken from all
-  spikes and kept fixed across draws, like the window.
+- `PEAK_SAMPLES = 5` centred on `SPIKE_PEAK_TIME = 2.0` s: the Delphos
+  detection time, on which the spikes are aligned (25 ms at 200 Hz). Grova et
+  al. (2016) averaged 5 samples around the spike peak; Afnan et al. (2026)
+  computed the AUC at the spike peak. The per-sample values of every draw are
+  also saved (`results/intra/bootstrap_peak_samples.npz`), so a single-sample
+  summary at 2.0 s needs no rerun. Until 2026-11-07 the peak was centred on
+  the recorded iEEG's GFP maximum (2.065 s in Patient 2, 1.980 s in Patient 3).
+- `REUSE_WINDOW`: the 2026-11-07 rerun (peak moved to 2.0 s) recomputed only
+  the peak and copied the window means and draws from the 2026-10-26 run
+  (backup in `results/intra_backup_2026-11-07/bootstrap`). The draws are the
+  same spikes (same seeds, same bursts, asserted through the window and burst
+  counts), so recomputing the window would give the same values. Set it to
+  `None` to recompute both from scratch.
 - One seed per subject (`int(sub)`), so draws are reproducible.
+- `CHUNK = 25`: 40 chunks per subject, i.e. 5 full waves of the 8 jobs (50
+  left the last wave half idle).
 - The average over all spikes must reproduce `intra_spatial_metrics.py`'s
-  window means (assert), which checks that `build_solvers` matches
-  `solve_inverse.py`.
+  time course at every summarized sample (assert), which checks that
+  `build_solvers` matches `solve_inverse.py`.
 
 ```{python filename="intra_spike_bootstrap.py"}
 # | output: false
@@ -1511,11 +1521,15 @@ SPATIAL_METRICS = {"correlation_spatial_absrank": spatial_absrank, "correlation_
 BASELINE = (0.5, 1.0)  # eeg_preprocessing.py's BASELINE
 N_BOOT = 1000
 N_JOBS = 8  # more jobs slow each CSET solve down enough to lower throughput (14 jobs: ~70 draws/h; 6: ~100)
-CHUNK = 50  # draws per parallel task, saved as they finish
-PEAK_SAMPLES = 5  # samples averaged around the recorded iEEG's peak, as Grova et al. 2016
+CHUNK = 25  # draws per parallel task, saved as they finish; 1000/25 = 40 = 5 full waves of 8 jobs
+SPIKE_PEAK_TIME = 2.0  # s, the Delphos detection time the spikes are aligned on
+PEAK_SAMPLES = 5  # samples averaged around it, as Grova et al. 2016
 SUMMARIES = ["window", "peak"]
+# window means and draws copied from this suite instead of recomputed (None = recompute)
+REUSE_WINDOW = Path("../results/intra_backup_2026-11-07/bootstrap")
 
 fboot = Path("../results/intra/bootstrap")
+fpeak_samples = Path("../results/intra/bootstrap_peak_samples.npz")
 checkpoint_dir = Path("../results/intra/_checkpoint_bootstrap")
 
 
@@ -1555,34 +1569,37 @@ def zscore(data, base):
     return (data - base.mean(1, keepdims=True)) / std
 
 
-def evaluate(draws, eeg, ieeg, ave, iave, solvers, src, window, peak):
-    """Mean of each metric over the spike window and over the `peak` samples of the window, per method, for each
-    draw (array of spike indices): the same spikes re-averaged for EEG and iEEG, re-inverted, projected onto the
-    contacts."""
+def evaluate(draws, eeg, ieeg, ave, iave, solvers, src, segments):
+    """Per-sample metric values in each of `segments` ({name: (tmin, tmax)}), per method, for each draw (array of
+    spike indices): the same spikes re-averaged for EEG and iEEG, re-inverted, projected onto the contacts.
+    Returns {name: array (n_draws, n_methods, n_metrics, n_samples)}."""
     X, Xi = eeg.get_data(), ieeg.get_data()
-    # Each timepoint is solved alone: only the baseline (for the z-score) and the window are reconstructed. The
+    # Each timepoint is solved alone: only the baseline (for the z-score) and the segments are reconstructed. The
     # baseline excludes its end sample, as in normalize_evoked_by_baseline.
-    segments = {"base": dict(tmin=BASELINE[0], tmax=BASELINE[1], include_tmax=False),
-                "win": dict(tmin=window[0], tmax=window[1])}
-    out = np.zeros((len(draws), len(METHODS), len(SPATIAL_METRICS), len(SUMMARIES)))
+    crops = {"base": dict(tmin=BASELINE[0], tmax=BASELINE[1], include_tmax=False),
+             **{name: dict(tmin=t0, tmax=t1) for name, (t0, t1) in segments.items()}}
+    out = {}
     for d, idx in enumerate(draws):
         ave_b, iave_b = ave.copy(), iave.copy()
         ave_b.data, ave_b.nave = X[idx].mean(0), len(idx)
         iave_b.data, iave_b.nave = Xi[idx].mean(0), len(idx)
-        crops = {seg: (ave_b.copy().crop(**c), iave_b.copy().crop(**c)) for seg, c in segments.items()}
-        x = zscore(crops["win"][1].data, crops["base"][1].data)
+        cropped = {seg: (ave_b.copy().crop(**c), iave_b.copy().crop(**c)) for seg, c in crops.items()}
         for k, m in enumerate(METHODS):
             v = {seg: mm.analysis.eeg.compute_virtual_ieeg(src, solvers[m](e), i, conductivity=0.25, threshold=0.003)
-                 .reorder_channels(iave.ch_names).data for seg, (e, i) in crops.items()}
-            y = zscore(v["win"], v["base"])
-            for j, func in enumerate(SPATIAL_METRICS.values()):
-                values = func(x, y)
-                out[d, k, j] = values.mean(), values[peak].mean()
+                 .reorder_channels(iave.ch_names).data for seg, (e, i) in cropped.items()}
+            for name in segments:
+                x = zscore(cropped[name][1].data, cropped["base"][1].data)
+                y = zscore(v[name], v["base"])
+                for j, func in enumerate(SPATIAL_METRICS.values()):
+                    values = func(x, y)
+                    if name not in out:
+                        out[name] = np.zeros((len(draws), len(METHODS), len(SPATIAL_METRICS), len(values)))
+                    out[name][d, k, j] = values
     return out
 
 
-def bootstrap_subject(sub):
-    """Observed and N_BOOT burst-resampled window means for one subject, checkpointed per chunk of draws."""
+def bootstrap_subject(sub, segment_names):
+    """Observed and N_BOOT burst-resampled per-sample values for one subject, checkpointed per chunk of draws."""
     fsub = checkpoint_dir / f"sub-{sub}"
     fsub.mkdir(parents=True, exist_ok=True)
 
@@ -1594,12 +1611,15 @@ def bootstrap_subject(sub):
     window = mm.analysis.eeg.find_spike_window(iave, baseline=BASELINE)
     solvers, src = build_solvers(sub)
 
-    # Peak: PEAK_SAMPLES centred on the recorded iEEG's GFP maximum within the window (all spikes), fixed across draws
-    iave_win = mm.analysis.eeg.normalize_evoked_by_baseline(iave, baseline=BASELINE).crop(*window)
-    gfp = iave_win.data.std(0)
+    # Peak: PEAK_SAMPLES centred on SPIKE_PEAK_TIME, on the sample grid and inside the window
+    times = iave.times
+    centre = int(np.argmin(np.abs(times - SPIKE_PEAK_TIME)))
+    assert abs(times[centre] - SPIKE_PEAK_TIME) < 1e-6, (sub, times[centre])
     half = PEAK_SAMPLES // 2
-    centre = int(np.clip(gfp.argmax(), half, len(gfp) - 1 - half))
-    peak = slice(centre - half, centre + half + 1)
+    peak_times = times[centre - half:centre + half + 1]
+    assert window[0] <= peak_times[0] and peak_times[-1] <= window[1], (sub, window, peak_times)
+    segments = {"window": tuple(window), "peak": (peak_times[0], peak_times[-1])}
+    segments = {name: segments[name] for name in segment_names}
 
     # Bursts: spikes whose baseline holds an earlier spike's window, resampled whole; one seed per subject
     overlaps = pd.read_csv(f"../results/intra/spike_overlaps/sub-{sub}.csv")
@@ -1609,15 +1629,17 @@ def bootstrap_subject(sub):
     draws = [np.concatenate([np.flatnonzero(bursts == b) for b in rng.choice(n_bursts, n_bursts)])
              for _ in range(N_BOOT)]
 
-    args = (eeg, ieeg, ave, iave, solvers, src, window, peak)
-    if not (fsub / "observed.npy").exists():
-        np.save(fsub / "observed.npy", evaluate([np.arange(len(eeg))], *args)[0])
-    todo = [c for c in range(0, N_BOOT, CHUNK) if not (fsub / f"draws_{c:04d}.npy").exists()]
+    args = (eeg, ieeg, ave, iave, solvers, src, segments)
+    if not (fsub / "observed.npz").exists():
+        observed = evaluate([np.arange(len(eeg))], *args)
+        np.savez(fsub / "observed.npz", **{name: a[0] for name, a in observed.items()})
+    todo = [c for c in range(0, N_BOOT, CHUNK) if not (fsub / f"draws_{c:04d}.npz").exists()]
     Parallel(n_jobs=N_JOBS)(
-        delayed(lambda c: np.save(fsub / f"draws_{c:04d}.npy", evaluate(draws[c:c + CHUNK], *args)))(c) for c in todo
+        delayed(lambda c: np.savez(fsub / f"draws_{c:04d}.npz", **evaluate(draws[c:c + CHUNK], *args)))(c)
+        for c in todo
     )
     return {"n_spikes": len(eeg), "n_bursts": int(n_bursts), "window": [float(t) for t in window],
-            "peak_times": iave_win.times[peak].tolist()}
+            "peak_times": [float(t) for t in peak_times]}
 
 
 def compute_bootstrap(overwrite=False):
@@ -1625,31 +1647,64 @@ def compute_bootstrap(overwrite=False):
         print("Already exists, skipping.")
         return
 
-    counts = {sub: bootstrap_subject(sub) for sub in SUBJECTS}
+    reused = mm.metric.MetricSuite.load(REUSE_WINDOW) if REUSE_WINDOW is not None else None
+    computed = ["peak"] if reused is not None else SUMMARIES
+    counts = {}
+    for sub in SUBJECTS:
+        counts[sub] = bootstrap_subject(sub, computed)
+        print(f"sub-{sub} done", flush=True)
+
+    if reused is not None:
+        # the reused draws must be the same spikes: same window, same bursts, same number of draws
+        old = reused.metadata["bootstrap"]
+        assert old["n_boot"] == N_BOOT and list(old["baseline"]) == list(BASELINE)
+        for sub in SUBJECTS:
+            for key in ["n_spikes", "n_bursts", "window"]:
+                assert old["subjects"][sub][key] == counts[sub][key], (sub, key, old["subjects"][sub][key], counts[sub][key])
 
     suite = mm.metric.MetricSuite("Intra vIEEG spike-level bootstrap")
     observed_ts = mm.metric.MetricSuite.load("../results/intra/spatial_metrics")
+    peak_samples = {}
     for sub in SUBJECTS:
         fsub = checkpoint_dir / f"sub-{sub}"
-        observed = np.load(fsub / "observed.npy")
-        boot = np.concatenate([np.load(fsub / f"draws_{c:04d}.npy") for c in range(0, N_BOOT, CHUNK)])
-        peak_times = np.array(counts[sub]["peak_times"])
+        observed = dict(np.load(fsub / "observed.npz"))
+        boot = {name: np.concatenate([np.load(fsub / f"draws_{c:04d}.npz")[name] for c in range(0, N_BOOT, CHUNK)])
+                for name in computed}
+        peak_samples[f"sub-{sub}_observed"] = observed["peak"].astype(np.float32)
+        peak_samples[f"sub-{sub}_boot"] = boot["peak"].astype(np.float32)
+        sample_times = {"window": None, "peak": np.array(counts[sub]["peak_times"])}
         for k, m in enumerate(METHODS):
             for j, metric in enumerate(SPATIAL_METRICS):
-                # all spikes must reproduce intra_spatial_metrics.py's time course (same pipeline); tolerance =
-                # numerical noise only (CSET's iterative solver: up to ~2e-4 on the rank metric)
-                ts = observed_ts.to_df(metrics=metric, filters={"Subject": sub, "Method": m})
-                at_peak = np.isclose(ts["times"].to_numpy()[:, None], peak_times).any(1)
-                assert at_peak.sum() == PEAK_SAMPLES, (sub, m, metric)
-                for i, (summary, expected) in enumerate(zip(SUMMARIES, [ts["Value"].mean(), ts["Value"][at_peak].mean()])):
-                    assert np.isclose(observed[k, j, i], expected, atol=1e-3), (sub, m, metric, summary, observed[k, j, i], expected)
-                    suite.register(f"{metric}_{summary}", np.array([observed[k, j, i]]), Method=m, Subject=sub)
-                    suite.register(f"{metric}_{summary}_boot", boot[:, k, j, i], Method=m, Subject=sub,
-                                   draw=np.arange(N_BOOT))
-    suite.metadata["bootstrap"] = {"n_boot": N_BOOT, "unit": "burst of spikes whose baseline holds an earlier spike's window",
-                                   "baseline": list(BASELINE), "peak_samples": PEAK_SAMPLES, "subjects": counts}
+                # all spikes must reproduce intra_spatial_metrics.py's time course at every computed sample (same
+                # pipeline); tolerance = numerical noise only (CSET's iterative solver: up to ~2e-4 on the rank metric)
+                ts = observed_ts.to_df(metrics=metric, filters={"Subject": sub, "Method": m}).sort_values("times")
+                for name in computed:
+                    t = sample_times[name]
+                    expected = ts["Value"].to_numpy() if t is None else \
+                        ts["Value"].to_numpy()[np.isclose(ts["times"].to_numpy()[:, None], t).any(1)]
+                    assert expected.shape == observed[name][k, j].shape, (sub, m, metric, name)
+                    assert np.allclose(observed[name][k, j], expected, atol=1e-3), (sub, m, metric, name)
+                for summary in SUMMARIES:
+                    if summary in computed:
+                        obs, draws_ = observed[summary][k, j].mean(), boot[summary][:, k, j].mean(-1)
+                    else:  # copied from the reused suite, draw by draw
+                        obs = reused.to_df(metrics=f"{metric}_{summary}", filters={"Subject": sub, "Method": m})["Value"].item()
+                        prev = reused.to_df(metrics=f"{metric}_{summary}_boot", filters={"Subject": sub, "Method": m})
+                        draws_ = prev.sort_values("draw")["Value"].to_numpy()
+                        assert len(draws_) == N_BOOT
+                    suite.register(f"{metric}_{summary}", np.array([obs]), Method=m, Subject=sub)
+                    suite.register(f"{metric}_{summary}_boot", draws_, Method=m, Subject=sub, draw=np.arange(N_BOOT))
+    suite.metadata["bootstrap"] = {
+        "n_boot": N_BOOT, "unit": "burst of spikes whose baseline holds an earlier spike's window",
+        "baseline": list(BASELINE), "peak_samples": PEAK_SAMPLES, "peak_time": SPIKE_PEAK_TIME,
+        "window_reused_from": None if REUSE_WINDOW is None else str(REUSE_WINDOW), "subjects": counts,
+    }
     suite.save(fboot, overwrite=True)
+    # per-sample peak values (draw, method, metric, sample), for single-sample summaries
+    np.savez(fpeak_samples, methods=np.array(METHODS), metrics=np.array(list(SPATIAL_METRICS)),
+             **{f"sub-{sub}_times": np.array(counts[sub]["peak_times"]) for sub in SUBJECTS}, **peak_samples)
     shutil.rmtree(checkpoint_dir)
 
-compute_bootstrap(overwrite=True)  # must force-regen: SNR-derived lambda2 for wCSET/GBF too (was a fixed 0.01)
+# 2026-11-07: peak moved to SPIKE_PEAK_TIME = 2.0 s (was the iEEG GFP maximum); window reused (REUSE_WINDOW)
+compute_bootstrap(overwrite=True)
 ```

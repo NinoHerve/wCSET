@@ -6,6 +6,7 @@ Statistics read-out and paired-difference panels come from mindmap (`PairwiseRes
 Imported with `from scripts.figures import *`; everything listed in `__all__` is available.
 """
 import hashlib
+import inspect
 import json
 import shutil
 from pathlib import Path
@@ -13,6 +14,7 @@ from pathlib import Path
 import matplotlib.colors
 import matplotlib.image as mpimg
 import numpy as np
+import pandas as pd
 from matplotlib.cm import ScalarMappable
 from mindmap.metric.results import ClusterResult, PairwiseResult
 
@@ -20,7 +22,8 @@ _RESULT_TYPES = {"ClusterResult": ClusterResult, "PairwiseResult": PairwiseResul
 
 __all__ = [
     "COLORS", "LINE_COLOR", "METHODS", "METHOD_LABELS", "FILL_ALPHA", "LINE_MATTE",
-    "fmt_p", "fmt_stat", "fmt_num", "fmt_ci", "main_cluster", "cached", "mark_reference", "matte",
+    "fmt_p", "fmt_stat", "fmt_num", "fmt_ci", "main_cluster", "cached", "margin_tests", "margin_verdicts",
+    "paired_margin_plot", "mark_reference", "matte",
     "crop_white", "image_panel", "colorbar", "share_ylim", "column_headers",
 ]
 
@@ -92,6 +95,84 @@ def cached(test, folder, *args, **kwargs):
     result.save(folder)
     (folder/"call.json").write_text(json.dumps({"call": call, "type": type(result).__name__}))
     return result
+
+# ---------------------------------------------------------------- tests against the margin (±δ)
+# Stars in the paired-difference panels test a meaningful effect in either direction: ▲ = significantly
+# better by more than +δ, ▼ = significantly worse by more than −δ (one-sided, Holm within each direction),
+# ns = neither. Estimates, CIs, effect sizes and counts come from the unchanged two-sided test ("base").
+# group_a - group_b vs. the offset, for "better"/"worse" read in vs(reference, higher_is_better)'s orientation
+_MARGIN_SIDES = {
+    True: {"better": (+1, "greater"), "worse": (-1, "less")},
+    False: {"better": (-1, "less"), "worse": (+1, "greater")},
+}
+
+
+def margin_tests(test, *args, delta, reference, higher_is_better=True, **kwargs):
+    """`test(*args, **kwargs)` (a bound `suite.stat.wilcoxon`/`.bootstrap` with `reference` as every pair's
+    group_a) three times: "base" as given (two-sided vs. 0: estimates, CIs, effect sizes), and one-sided
+    against the margin in each direction -- "better" (reference better by more than `delta`) and "worse"
+    (worse by more than `delta`), "better"/"worse" read as in `result.vs(reference, higher_is_better)`.
+    Returns {"base", "better", "worse", "delta", "reference", "higher_is_better"}."""
+    base = test(*args, **kwargs)
+    groups = set(base.table["group_a"])
+    assert groups == {reference}, f"every comparison must have {reference!r} as group_a, got {groups}"
+    side_kwargs = dict(kwargs)
+    if "ci" in inspect.signature(test).parameters:
+        side_kwargs["ci"] = False  # intervals come from the base test
+    out = {"base": base, "delta": delta, "reference": reference, "higher_is_better": higher_is_better}
+    for direction, (sign, alternative) in _MARGIN_SIDES[higher_is_better].items():
+        result = test(*args, **{**side_kwargs, "offset": sign * delta, "alternative": alternative})
+        read = result.vs(reference, higher_is_better=higher_is_better)
+        # vs() re-expresses each test as "reference better by more than offset": check the orientation
+        assert (read["alternative"] == ("greater" if direction == "better" else "less")).all(), (direction, read["alternative"])
+        assert np.allclose(read["offset"].astype(float), delta if direction == "better" else -delta), (direction, read["offset"])
+        out[direction] = result
+    return out
+
+
+def _stars(p):
+    return "***" if p < 0.001 else "**" if p < 0.01 else "*" if p < 0.05 else "ns"
+
+
+def margin_verdicts(tests, alpha=0.05):
+    """One row per competitor: `direction` ("better"/"worse"/None, reference vs. competitor), its corrected
+    one-sided `p_corrected` (the smaller of the two when neither is significant), both p-values, and the
+    `stars` label drawn in the figures ("▲ ***", "▼ *", "ns")."""
+    ref, hib = tests["reference"], tests["higher_is_better"]
+    better = tests["better"].vs(ref, higher_is_better=hib)["p_corrected"]
+    worse = tests["worse"].vs(ref, higher_is_better=hib)["p_corrected"]
+    rows = {}
+    for c in better.index:
+        pb, pw = float(better[c]), float(worse[c])
+        assert not (pb < alpha and pw < alpha), (c, pb, pw)
+        direction = "better" if pb < alpha else "worse" if pw < alpha else None
+        p = pb if direction == "better" else pw if direction == "worse" else min(pb, pw)
+        stars = "ns" if direction is None else ("▲ " if direction == "better" else "▼ ") + _stars(p)
+        rows[c] = {"direction": direction, "p_corrected": p, "p_better": pb, "p_worse": pw, "stars": stars}
+    return pd.DataFrame.from_dict(rows, orient="index")
+
+
+def paired_margin_plot(suite, tests, order, ax, margin_label="δ", annotate=("rank_biserial", "counts"), **kwargs):
+    """`suite.plot.paired_differences` of the base test, its first annotation line replaced by the margin
+    verdict (`margin_verdicts`), and dashed lines at ±δ. Positive = reference better, as in the tests."""
+    ref, hib, delta = tests["reference"], tests["higher_is_better"], tests["delta"]
+    plot = suite.plot.paired_differences(
+        tests["base"], reference=ref, higher_is_better=hib, order=order, annotate=("stars",) + tuple(annotate),
+        show_offset=False, ax=ax, **kwargs,
+    )
+    verdicts = margin_verdicts(tests)
+    n_lines = 1 + len(annotate)
+    texts = plot.artists["text"]
+    assert len(texts) == n_lines * len(order), (len(texts), n_lines, order)
+    for i, c in enumerate(order):
+        texts[i * n_lines].set_text(verdicts.loc[c, "stars"])
+    for sign, name in [(+1, f"+{margin_label}"), (-1, f"−{margin_label}")]:
+        ax.axhline(sign * delta, color="#0b0b0b", linestyle="--", linewidth=1, alpha=0.5, zorder=0.5)
+        ax.annotate(name, xy=(0.0, sign * delta), xycoords=("axes fraction", "data"), xytext=(3, 2 * sign),
+                    textcoords="offset points", fontsize=7, ha="left", va="bottom" if sign > 0 else "top", alpha=0.7)
+    plot.data.attrs["margin_verdicts"] = verdicts
+    return plot
+
 
 # ---------------------------------------------------------------- labels and colors
 def mark_reference(ax, reference, suffix=" (ref.)"):

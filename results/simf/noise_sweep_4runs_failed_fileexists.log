@@ -1,0 +1,60 @@
+=== noise_sweep_simulation.py start Mon Nov  9 07:57:45 PM CET 2026
+sub-10-noisesweep-v4:   0%|          | 0/14256 [00:00<?, ?it/s]joblib.externals.loky.process_executor._RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "/home/nino/miniconda3/envs/mindmap/lib/python3.11/site-packages/joblib/externals/loky/process_executor.py", line 490, in _process_worker
+    r = call_item()
+        ^^^^^^^^^^^
+  File "/home/nino/miniconda3/envs/mindmap/lib/python3.11/site-packages/joblib/externals/loky/process_executor.py", line 291, in __call__
+    return self.fn(*self.args, **self.kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nino/miniconda3/envs/mindmap/lib/python3.11/site-packages/joblib/parallel.py", line 607, in __call__
+    return [func(*args, **kwargs) for func, args, kwargs in self.items]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nino/miniconda3/envs/mindmap/lib/python3.11/site-packages/joblib/parallel.py", line 607, in <listcomp>
+    return [func(*args, **kwargs) for func, args, kwargs in self.items]
+            ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nino/Code/mindmap/mindmap/analysis/simulation/pipeline.py", line 150, in _run_one
+    ave.save(fave, verbose="warning")
+  File "<decorator-gen-203>", line 10, in save
+  File "/home/nino/miniconda3/envs/mindmap/lib/python3.11/site-packages/mne/evoked.py", line 424, in save
+    write_evokeds(fname, self, overwrite=overwrite)
+  File "<decorator-gen-211>", line 12, in write_evokeds
+  File "/home/nino/miniconda3/envs/mindmap/lib/python3.11/site-packages/mne/evoked.py", line 1994, in write_evokeds
+    _write_evokeds(fname, evoked, on_mismatch=on_mismatch, overwrite=overwrite)
+  File "/home/nino/miniconda3/envs/mindmap/lib/python3.11/site-packages/mne/evoked.py", line 2001, in _write_evokeds
+    fname = _check_fname(fname=fname, overwrite=overwrite)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<decorator-gen-0>", line 12, in _check_fname
+  File "/home/nino/miniconda3/envs/mindmap/lib/python3.11/site-packages/mne/utils/check.py", line 282, in _check_fname
+    raise FileExistsError(
+FileExistsError: Destination file exists. Please use option "overwrite=True" to force overwriting.
+"""
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/tmp/claude-1001/-home-nino-Manuscripts-wCSET/48840b04-ef81-40fd-918b-a65107c87d99/scratchpad/noise_sweep_simulation.py", line 118, in <module>
+    run_noise_sweep_simulation(overwrite=True)
+  File "/tmp/claude-1001/-home-nino-Manuscripts-wCSET/48840b04-ef81-40fd-918b-a65107c87d99/scratchpad/noise_sweep_simulation.py", line 97, in run_noise_sweep_simulation
+    mm.analysis.simulation.generate_simulation_dataset(
+  File "/home/nino/Code/mindmap/mindmap/analysis/simulation/pipeline.py", line 331, in generate_simulation_dataset
+    results = Parallel(n_jobs=n_jobs)(
+              ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nino/miniconda3/envs/mindmap/lib/python3.11/site-packages/joblib/parallel.py", line 2072, in __call__
+    return output if self.return_generator else list(output)
+                                                ^^^^^^^^^^^^
+  File "/home/nino/miniconda3/envs/mindmap/lib/python3.11/site-packages/joblib/parallel.py", line 1682, in _get_outputs
+    yield from self._retrieve()
+  File "/home/nino/miniconda3/envs/mindmap/lib/python3.11/site-packages/joblib/parallel.py", line 1784, in _retrieve
+    self._raise_error_fast()
+  File "/home/nino/miniconda3/envs/mindmap/lib/python3.11/site-packages/joblib/parallel.py", line 1859, in _raise_error_fast
+    error_job.get_result(self.timeout)
+  File "/home/nino/miniconda3/envs/mindmap/lib/python3.11/site-packages/joblib/parallel.py", line 758, in get_result
+    return self._return_or_raise()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nino/miniconda3/envs/mindmap/lib/python3.11/site-packages/joblib/parallel.py", line 773, in _return_or_raise
+    raise self._result
+FileExistsError: Destination file exists. Please use option "overwrite=True" to force overwriting.
+sub-10-noisesweep-v4:   0%|          | 31/14256 [00:23<2:59:13,  1.32it/s]
+=== noise_sweep_simulation.py FAILED (exit 1) at Mon Nov  9 07:58:15 PM CET 2026

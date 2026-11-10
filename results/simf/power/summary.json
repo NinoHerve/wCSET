@@ -1,0 +1,147 @@
+{
+  "pilot": {
+    "n_regions": 50,
+    "n_runs_per_region": 4,
+    "seed": 2027
+  },
+  "decision_rule": {
+    "power_target": 0.9,
+    "ni_required": [
+      "cset",
+      "dspm"
+    ],
+    "superiority_required": [
+      "sloreta",
+      "wmne"
+    ],
+    "correlation_effect_scale": 0.5,
+    "k_max": 396,
+    "ks": [
+      50,
+      100,
+      150,
+      200,
+      250,
+      300,
+      350,
+      396
+    ],
+    "rs": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      8
+    ]
+  },
+  "B": 2000,
+  "B_cluster": 300,
+  "n_perm_cluster": 1000,
+  "chosen": {
+    "k": 396,
+    "r": 4,
+    "feasible": true,
+    "min_power": 0.9135,
+    "limiting_test": "NI vs cset",
+    "hours": 15.884
+  },
+  "pilot_effects_mm": {
+    "cset": -2.61,
+    "sloreta": 7.69,
+    "dspm": -0.86,
+    "wmne": 45.14
+  },
+  "sd_between_mm": {
+    "cset": 10.57,
+    "sloreta": 7.86,
+    "dspm": 15.85,
+    "wmne": 15.37
+  },
+  "sd_within_mm": {
+    "cset": 23.38,
+    "sloreta": 30.76,
+    "dspm": 22.31,
+    "wmne": 36.25
+  },
+  "required_power_chosen": {
+    "NI vs cset": 0.913,
+    "NI vs dspm": 0.958,
+    "superiority vs sloreta": 1.0,
+    "superiority vs wmne": 1.0,
+    "correlation (min over 4)": 1.0
+  },
+  "required_power_previous": {
+    "NI vs cset": 0.335,
+    "NI vs dspm": 0.409,
+    "superiority vs sloreta": 1.0,
+    "superiority vs wmne": 1.0,
+    "correlation (min over 4)": 1.0
+  },
+  "pilot_true_diff_mm_fixed": {
+    "cset": -2.06,
+    "sloreta": 8.19,
+    "dspm": -0.45,
+    "wmne": 45.09
+  },
+  "loc_superiority_power_pilot_effect": {
+    "cset": 0.0,
+    "sloreta": 1.0,
+    "dspm": 0.003,
+    "wmne": 1.0
+  },
+  "loc_noninf_power_pilot_effect": {
+    "cset": 0.914,
+    "sloreta": 1.0,
+    "dspm": 0.958,
+    "wmne": 1.0
+  },
+  "loc_noninf_power_true_diff_0": {
+    "cset": 1.0,
+    "sloreta": 1.0,
+    "dspm": 0.98,
+    "wmne": 0.938
+  },
+  "loc_ci_half_width_mm": {
+    "cset": 1.72,
+    "sloreta": 1.45,
+    "dspm": 2.13,
+    "wmne": 3.15
+  },
+  "loc_mde_superiority_mm": {
+    "cset": 2.68,
+    "sloreta": 2.12,
+    "dspm": 3.43,
+    "wmne": 3.99
+  },
+  "loc_max_deficit_noninf_mm": {
+    "cset": 2.1,
+    "sloreta": 2.77,
+    "dspm": 1.04,
+    "wmne": 0.37
+  },
+  "noninf_power_upper80_variances": {
+    "cset": 0.802,
+    "dspm": 0.957
+  },
+  "cost_hours": {
+    "previous 100 x 8": {
+      "simulation": 0.4,
+      "solve + score": 2.0,
+      "degradation (11 levels)": 3.7,
+      "surrogates (6 connectomes)": 2.0,
+      "flagship-based total": 8.0
+    },
+    "chosen 396 x 4": {
+      "simulation": 0.7,
+      "solve + score": 4.0,
+      "degradation (11 levels)": 7.3,
+      "surrogates (6 connectomes)": 4.0,
+      "flagship-based total": 15.9
+    }
+  },
+  "noise_sweep_hours": {
+    "noise sweep, 50 x 9 SNR x 3 (current)": 1.5,
+    "noise sweep, 396 x 9 SNR x 1": 4.1
+  }
+}

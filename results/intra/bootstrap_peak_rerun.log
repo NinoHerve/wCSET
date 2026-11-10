@@ -1,0 +1,219 @@
+=== bootstrap start Sat Nov  7 17:16:19 2026
+EEG channel type selected for re-referencing
+Adding average EEG reference projection.
+1 projection items deactivated
+Average reference projection was added, but has not been applied yet. Use the apply_proj method to apply it.
+Applying baseline correction (mode: mean)
+    Created an SSP operator (subspace dimension = 1)
+Computing rank from covariance with rank=None
+    Using tolerance 5.5e-12 (2.2e-16 eps * 208 dim * 1.2e+02  max singular value)
+    Estimated rank (eeg): 207
+    EEG: rank 207 computed from 208 data channels with 1 projector
+    Setting small EEG eigenvalues to zero (without PCA)
+    Created the whitener using a noise covariance matrix with rank 207 (1 small eigenvalues omitted)
+Computing inverse operator with 208 channels.
+    208 out of 208 channels remain after picking
+Selected 208 channels
+    Average patch normals will be employed in the rotation to the local surface coordinates....
+    Converting to surface-based source orientations...
+    [done]
+Whitening the forward solution.
+    Created an SSP operator (subspace dimension = 1)
+Computing rank from covariance with rank=None
+    Using tolerance 5.5e-12 (2.2e-16 eps * 208 dim * 1.2e+02  max singular value)
+    Estimated rank (eeg): 207
+    EEG: rank 207 computed from 208 data channels with 1 projector
+    Setting small EEG eigenvalues to zero (without PCA)
+Creating the source covariance matrix
+Adjusting source covariance matrix.
+Computing SVD of whitened and weighted lead field matrix.
+    largest singular value = 11.4055
+    scaling factor to adjust the trace = 6.31734e+22 (nchan = 208 nzero = 1)
+Computing inverse operator with 208 channels.
+    208 out of 208 channels remain after picking
+Selected 208 channels
+Creating the depth weighting matrix...
+    208 EEG channels
+    limit = 7561/7560 = 3.482897
+    scale = 329060 exp = 2
+    Picked elements from a free-orientation depth-weighting prior into the fixed-orientation one
+    Average patch normals will be employed in the rotation to the local surface coordinates....
+    Converting to surface-based source orientations...
+    [done]
+Whitening the forward solution.
+    Created an SSP operator (subspace dimension = 1)
+Computing rank from covariance with rank=None
+    Using tolerance 5.5e-12 (2.2e-16 eps * 208 dim * 1.2e+02  max singular value)
+    Estimated rank (eeg): 207
+    EEG: rank 207 computed from 208 data channels with 1 projector
+    Setting small EEG eigenvalues to zero (without PCA)
+Creating the source covariance matrix
+Adjusting source covariance matrix.
+Computing SVD of whitened and weighted lead field matrix.
+    largest singular value = 11.423
+    scaling factor to adjust the trace = 1.41128e+22 (nchan = 208 nzero = 1)
+sub-48 done
+EEG channel type selected for re-referencing
+Adding average EEG reference projection.
+1 projection items deactivated
+Average reference projection was added, but has not been applied yet. Use the apply_proj method to apply it.
+Applying baseline correction (mode: mean)
+    Created an SSP operator (subspace dimension = 1)
+Computing rank from covariance with rank=None
+    Using tolerance 1.7e-12 (2.2e-16 eps * 208 dim * 37  max singular value)
+    Estimated rank (eeg): 207
+    EEG: rank 207 computed from 208 data channels with 1 projector
+    Setting small EEG eigenvalues to zero (without PCA)
+    Created the whitener using a noise covariance matrix with rank 207 (1 small eigenvalues omitted)
+Computing inverse operator with 208 channels.
+    208 out of 208 channels remain after picking
+Selected 208 channels
+    Average patch normals will be employed in the rotation to the local surface coordinates....
+    Converting to surface-based source orientations...
+    [done]
+Whitening the forward solution.
+    Created an SSP operator (subspace dimension = 1)
+Computing rank from covariance with rank=None
+    Using tolerance 1.7e-12 (2.2e-16 eps * 208 dim * 37  max singular value)
+    Estimated rank (eeg): 207
+    EEG: rank 207 computed from 208 data channels with 1 projector
+    Setting small EEG eigenvalues to zero (without PCA)
+Creating the source covariance matrix
+Adjusting source covariance matrix.
+Computing SVD of whitened and weighted lead field matrix.
+    largest singular value = 9.82859
+    scaling factor to adjust the trace = 1.37113e+21 (nchan = 208 nzero = 1)
+Computing inverse operator with 208 channels.
+    208 out of 208 channels remain after picking
+Selected 208 channels
+Creating the depth weighting matrix...
+    208 EEG channels
+    limit = 7608/7607 = 8.404395
+    scale = 388775 exp = 2
+    Picked elements from a free-orientation depth-weighting prior into the fixed-orientation one
+    Average patch normals will be employed in the rotation to the local surface coordinates....
+    Converting to surface-based source orientations...
+    [done]
+Whitening the forward solution.
+    Created an SSP operator (subspace dimension = 1)
+Computing rank from covariance with rank=None
+    Using tolerance 1.7e-12 (2.2e-16 eps * 208 dim * 37  max singular value)
+    Estimated rank (eeg): 207
+    EEG: rank 207 computed from 208 data channels with 1 projector
+    Setting small EEG eigenvalues to zero (without PCA)
+Creating the source covariance matrix
+Adjusting source covariance matrix.
+Computing SVD of whitened and weighted lead field matrix.
+    largest singular value = 9.47609
+    scaling factor to adjust the trace = 2.25364e+20 (nchan = 208 nzero = 1)
+sub-34 done
+EEG channel type selected for re-referencing
+Adding average EEG reference projection.
+1 projection items deactivated
+Average reference projection was added, but has not been applied yet. Use the apply_proj method to apply it.
+Applying baseline correction (mode: mean)
+    Created an SSP operator (subspace dimension = 1)
+Computing rank from covariance with rank=None
+    Using tolerance 9.2e-12 (2.2e-16 eps * 208 dim * 2e+02  max singular value)
+    Estimated rank (eeg): 207
+    EEG: rank 207 computed from 208 data channels with 1 projector
+    Setting small EEG eigenvalues to zero (without PCA)
+    Created the whitener using a noise covariance matrix with rank 207 (1 small eigenvalues omitted)
+Computing inverse operator with 208 channels.
+    208 out of 208 channels remain after picking
+Selected 208 channels
+    Average patch normals will be employed in the rotation to the local surface coordinates....
+    Converting to surface-based source orientations...
+    [done]
+Whitening the forward solution.
+    Created an SSP operator (subspace dimension = 1)
+Computing rank from covariance with rank=None
+    Using tolerance 9.2e-12 (2.2e-16 eps * 208 dim * 2e+02  max singular value)
+    Estimated rank (eeg): 207
+    EEG: rank 207 computed from 208 data channels with 1 projector
+    Setting small EEG eigenvalues to zero (without PCA)
+Creating the source covariance matrix
+Adjusting source covariance matrix.
+Computing SVD of whitened and weighted lead field matrix.
+    largest singular value = 13.0653
+    scaling factor to adjust the trace = 9.76144e+21 (nchan = 208 nzero = 1)
+Computing inverse operator with 208 channels.
+    208 out of 208 channels remain after picking
+Selected 208 channels
+Creating the depth weighting matrix...
+    208 EEG channels
+    limit = 7467/7629 = 10.011304
+    scale = 710674 exp = 2
+    Picked elements from a free-orientation depth-weighting prior into the fixed-orientation one
+    Average patch normals will be employed in the rotation to the local surface coordinates....
+    Converting to surface-based source orientations...
+    [done]
+Whitening the forward solution.
+    Created an SSP operator (subspace dimension = 1)
+Computing rank from covariance with rank=None
+    Using tolerance 9.2e-12 (2.2e-16 eps * 208 dim * 2e+02  max singular value)
+    Estimated rank (eeg): 207
+    EEG: rank 207 computed from 208 data channels with 1 projector
+    Setting small EEG eigenvalues to zero (without PCA)
+Creating the source covariance matrix
+Adjusting source covariance matrix.
+Computing SVD of whitened and weighted lead field matrix.
+    largest singular value = 13.1991
+    scaling factor to adjust the trace = 3.08232e+21 (nchan = 208 nzero = 1)
+sub-12 done
+EEG channel type selected for re-referencing
+Adding average EEG reference projection.
+1 projection items deactivated
+Average reference projection was added, but has not been applied yet. Use the apply_proj method to apply it.
+Applying baseline correction (mode: mean)
+    Created an SSP operator (subspace dimension = 1)
+Computing rank from covariance with rank=None
+    Using tolerance 5.3e-13 (2.2e-16 eps * 208 dim * 11  max singular value)
+    Estimated rank (eeg): 207
+    EEG: rank 207 computed from 208 data channels with 1 projector
+    Setting small EEG eigenvalues to zero (without PCA)
+    Created the whitener using a noise covariance matrix with rank 207 (1 small eigenvalues omitted)
+Computing inverse operator with 208 channels.
+    208 out of 208 channels remain after picking
+Selected 208 channels
+    Average patch normals will be employed in the rotation to the local surface coordinates....
+    Converting to surface-based source orientations...
+    [done]
+Whitening the forward solution.
+    Created an SSP operator (subspace dimension = 1)
+Computing rank from covariance with rank=None
+    Using tolerance 5.3e-13 (2.2e-16 eps * 208 dim * 11  max singular value)
+    Estimated rank (eeg): 207
+    EEG: rank 207 computed from 208 data channels with 1 projector
+    Setting small EEG eigenvalues to zero (without PCA)
+Creating the source covariance matrix
+Adjusting source covariance matrix.
+Computing SVD of whitened and weighted lead field matrix.
+    largest singular value = 11.4386
+    scaling factor to adjust the trace = 2.04434e+22 (nchan = 208 nzero = 1)
+Computing inverse operator with 208 channels.
+    208 out of 208 channels remain after picking
+Selected 208 channels
+Creating the depth weighting matrix...
+    208 EEG channels
+    limit = 7626/7625 = 9.405371
+    scale = 294181 exp = 2
+    Picked elements from a free-orientation depth-weighting prior into the fixed-orientation one
+    Average patch normals will be employed in the rotation to the local surface coordinates....
+    Converting to surface-based source orientations...
+    [done]
+Whitening the forward solution.
+    Created an SSP operator (subspace dimension = 1)
+Computing rank from covariance with rank=None
+    Using tolerance 5.3e-13 (2.2e-16 eps * 208 dim * 11  max singular value)
+    Estimated rank (eeg): 207
+    EEG: rank 207 computed from 208 data channels with 1 projector
+    Setting small EEG eigenvalues to zero (without PCA)
+Creating the source covariance matrix
+Adjusting source covariance matrix.
+Computing SVD of whitened and weighted lead field matrix.
+    largest singular value = 11.6627
+    scaling factor to adjust the trace = 2.51311e+21 (nchan = 208 nzero = 1)
+sub-50 done
+MetricSuite successfully saved to folder: ../results/intra/bootstrap
+=== bootstrap done in 15.34 h Sun Nov  8 08:36:41 2026

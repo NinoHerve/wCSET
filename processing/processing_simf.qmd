@@ -415,58 +415,38 @@ run_forward_problem(overwrite=False)
 
 # Probe-Set Selection
 
-Shared groundwork for the connectome/noise-robustness experiments: a probe
-set of source regions spatially spread across the cortex, reused by every
-degradation/surrogate/noise condition below so region identity never
-confounds a condition comparison.
+The source regions of Study I: every cortical region of the MultiConn
+scale-4 parcellation that holds at least one dipole of the source space
+(446), minus the 50 tuning regions (`results/simf/tuning/tuning-regions.csv`,
+used to tune the solvers and as the power-analysis pilot) - **396 regions**.
+The degradation and surrogate experiments reuse the flagship runs, so they
+share this set.
 
-Selects a spatially uniform subset of source regions via greedy
-farthest-point sampling over region centroids
-(`mm.anatomy.parcellation.select_uniform_regions`), reused across every
-robustness experiment below.
-
-⚠ Supersedes an earlier version of this cell that instead ranked all 473
-regions by wCSET peak-phase accuracy, split them into performance terciles
-(low/medium/high), and sampled ~20/tercile, with hand-rolled hemisphere/lobe
-sanity-check parsing (`DK_LOBE`/`parse_hemi`/`parse_lobe`). Replaced with
-`select_uniform_regions` for a simpler, purely-spatial selection - the probe
-set no longer deliberately spans the wCSET performance range, only spatial
-coverage of the cortex (hemisphere/lobe balance now follows from the FPS
-geometry rather than being tracked/printed separately).
-
-⚠ Region identities changed as a result: Experiment 3's already-computed
-surrogate reconstructions/metrics
-(`results/simf/surrogates`, from `surrogate_reconstruction.py`
-/`surrogate_comparison.py`) were computed against the *old* probe set and are
-now stale - they need to be regenerated against the new one (flagged in
-`TODO_simf_robustness.md`).
+⚠ Supersedes (2026-11-06) the 100-region farthest-point sample
+(`select_uniform_regions`, `n_regions = 100`, `seed = 42`; kept in
+`results/simf_backup_2026-11-06_100x8/intermediate/probe-set.csv`). The
+power analysis (`notebooks/power_analysis.ipynb`) showed 100 regions x 8 runs
+was underpowered for localization non-inferiority; taking every region not
+used for tuning removes the sampling step altogether. The design was fixed
+before any new data was generated.
 
 **Parameter choices:**
 
-- `n_regions = 100`: bumped up from the previous tercile-based scheme's total
-  (60 = 20/tercile x 3) for denser spatial coverage, at the cost of a larger
-  downstream compute budget (Experiment 3's 5-reps-per-region
-  reconstruction, Experiment 1's 20-reps-per-region noise sweep both scale
-  with this).
-  ⚠ Changing `n_regions` reshuffles `select_uniform_regions`' greedy
-  farthest-point-sampling order, so this is a new region identity set, not a
-  superset of the old 60 - every probe-set-dependent output computed against
-  the old file (`results/simf/intermediate/probe-set.csv`,
-  `results/simf/surrogates` from `surrogate_reconstruction.py`
-  /`surrogate_comparison.py`, and the noise-sweep quick-test index) is now
-  stale and needs rerunning against the regenerated probe set, same as the
-  tercile→FPS switch above.
-- `cortex_only = True` (function default): matches the previous scheme, which
-  in practice only ever sampled `ctx-` regions.
-- `seed = base_seed = 42`: project convention; controls the farthest-point
-  sampling's starting region.
+- Candidate pool: identical to `select_uniform_regions`' own (`cortex_only =
+  True`: labels starting with `ctx-`, among the labels the source-space
+  dipoles fall in), so the 446 count matches the power analysis's `K_MAX`.
+- Tuning regions excluded so no region used to choose a hyperparameter is
+  also used to evaluate it.
 
 ```{python filename="probe_set_selection.py"}
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 import mindmap as mm
+from mindmap.anatomy.source_space.io import get_dipole_positions
+from mindmap.anatomy.utils import align_freesurfer2subject
 import sys
 sys.path.insert(0, "..")
 from scripts.data_manager import SimfManager
@@ -476,40 +456,40 @@ from scripts.utils import check_files
 dm = SimfManager("simf.config.yml")
 sub = "10"
 
-n_regions = 100
-base_seed = 42
-
 def run_probe_set_selection(overwrite=False):
   # output file
   fprobe = Path("../results/simf/intermediate/probe-set.csv")
+  ftuning = Path("../results/simf/tuning/tuning-regions.csv")
 
   if check_files([fprobe]) and not overwrite:
     print("Already exists, skipping.")
     return
 
-  # 0. Load shared inputs (same pattern as surrogate_connectivity.py)
+  # 0. Load shared inputs (same as select_uniform_regions)
   src = dm.load(sub, "fwd", desc="sim")["src"]
   parc = dm.load(sub, "dseg", space="fs", segmentation="multiconn2022", scale="4")
   ras2tkras = dm.load(sub, "ras2tkras")
 
-  # 1. Spatially uniform region selection (greedy farthest-point sampling
-  # over cortical region centroids)
-  regions = mm.anatomy.parcellation.select_uniform_regions(
-    source_space = src,
-    parcellation = parc,
-    ras2tkras = ras2tkras,
-    n_regions = n_regions,
-    seed = base_seed,
-  )
+  # 1. Candidate pool: cortical labels holding at least one dipole - the same
+  # pool select_uniform_regions samples from (cortex_only=True)
+  dipoles = get_dipole_positions(src) * 1000       # [m] -> [mm]
+  dipoles = align_freesurfer2subject(dipoles, ras2tkras)
+  labels = parc.label_points(dipoles, return_id=False).astype(str)
+  candidates = np.unique(labels[np.char.startswith(labels, "ctx-")]).tolist()
+
+  # 2. Drop the tuning regions
+  tuning = set(pd.read_csv(ftuning)["region"])
+  assert tuning <= set(candidates), "some tuning regions are not in the candidate pool"
+  regions = [r for r in candidates if r not in tuning]
+  assert len(candidates) == 446 and len(regions) == 396, (len(candidates), len(regions))
 
   probe_set = pd.DataFrame({"region": regions})
+  print(f"Probe set: {len(probe_set)} regions ({len(candidates)} cortical - {len(tuning)} tuning)")
 
-  print(f"Probe set: {len(probe_set)} regions (spatially uniform, cortex-only)")
-
-  # 2. Save
+  # 3. Save
   probe_set.to_csv(fprobe, index=False)
 
-run_probe_set_selection(overwrite=False)  # overwrite: force regen over the stale 60-region file
+run_probe_set_selection(overwrite=True)  # 2026-11-06: regenerate from the 100-region file to the 396-region design
 ```
 
 # Connectomics
@@ -902,74 +882,26 @@ run_surrogate_connectivity(overwrite=True)
 
 ## Flagship Dataset
 
-Runs the actual spike simulations: for each of the shared 100-region probe
-set (`results/simf/intermediate/probe-set.csv`, see `probe_set_selection.py`), simulates
-8 repetitions of a spike originating in that region and propagating across
-the structural connectome to the sensors, at a fixed target SNR.
+Runs the actual spike simulations: for each of the 396 probe-set regions
+(`results/simf/intermediate/probe-set.csv`, see `probe_set_selection.py`),
+simulates 4 repetitions of a spike originating in that region and propagating
+across the structural connectome to the sensors, at a fixed target SNR -
+1,584 runs.
 
-⚠ **Region/repetition count, revised down from an earlier draft that ran all
-~473 parcellation regions x 30 repetitions (14,190 runs)** - decided via an
-external power-analysis pilot
-(`mindmap/tutorials/analysis/simulations/pilot_power_analysis.ipynb` +
-companion `pilot_01_generate.py`/`pilot_02_solve.py`/`pilot_03_analyze.py` in
-the `mindmap` repo, run and analyzed separately from this project), not a
-guess:
-
-- The pilot simulated 26 regions (stratified by depth x orientation tertiles
-  + lobe, not random/uniform - deliberately spans easy/superficial and
-  hard/deep-tangential sources) x 8 repetitions x all 6 methods on
-  `sub-simf10`, then fit a mixed-effects model per outcome
-  (`localization_error_hrp`, `ap_hrp`, `ap_pp`, `correlation_auc`) with
-  `region` as a random intercept and a named `method:region` variance
-  component (does relative method ranking depend on brain location - the
-  scientifically interesting question this dataset is meant to answer, as
-  opposed to the `method` main effect, which turned out to be saturated at
-  power~1.0 across every tested design and every outcome - the six methods'
-  average performance differs by so much that it isn't a useful axis for
-  sizing this study at all).
-- Monte-Carlo power simulation across a grid of `k` (10-100 regions) x `r`
-  (3-20 reps) found only one test anywhere near the 0.8 threshold: the
-  `method x region` interaction on `localization_error_hrp` (the noisiest
-  outcome), which dips to 0.72 at the smallest grid point (k=10, r=3) but
-  clears 0.86 by k=15 and >=0.96 at r=5 for any k. The pilot's own written
-  recommendation was **k=20, r=5 (100 sims/method)** - comfortably past every
-  plateau with margin, at under half the pilot's own budget.
-- **This project deviates from that recommendation on the region axis**: we
-  kept **k=100** rather than 20, because the interaction test only confirms
-  that *some* region effect is detectable given the pilot's 26-region sample
-  - it can't confirm that 20-26 regions actually represent the anatomical
-  heterogeneity across the full ~400-region atlas. Broader coverage was
-  judged worth the extra compute over the bare power-minimal design.
-  Concretely, the 100 regions used are the project's own **existing
-  probe set** (`results/simf/intermediate/probe-set.csv`, spatially-uniform
-  farthest-point sampling, see `probe_set_selection.py`) rather than a fresh
-  independent sample - this also means the flagship dataset now shares
-  region identities with the connectome-degradation/surrogate/noise-sweep
-  experiments, instead of their 100-region probe set being drawn from a much
-  larger, differently-purposed flagship pool.
-- **`r=8`, not the pilot's `r=5` or the originally-considered `r=20`**: at
-  k=100, the pilot's own grid shows power is already saturated at ~1.0 for
-  every outcome/test *even at r=3* - the reps axis buys no additional
-  detection power once region count is this large. What `r` still buys is
-  per-region estimate precision (SE of one region's own mean
-  `localization_error_hrp`): 4.23mm at r=3, 3.28mm at r=5, 2.59mm at r=8,
-  1.64mm at r=20. `r=8` was chosen as a reasonable middle point given
-  `comparison.py`/`index.qmd` pool metrics across all runs rather than
-  reporting per-region estimates - tighter per-region precision (r=20) isn't
-  currently needed, but `r=3-5`'s coarser per-region precision seemed like
-  unnecessary risk for negligible compute savings.
-- **Net effect**: 100 x 8 = 800 runs vs. the previous 473 x 30 = 14,190 - a
-  94.4% reduction - while comfortably exceeding (not just meeting) the power
-  needed for `comparison.py`'s method comparison.
-- ⚠ **Downstream staleness**: this invalidates the existing 14,190-run
-  flagship dataset and everything computed from it (`solve_inverse.py`,
-  `comparison.py`, and `index.qmd`'s methods table/prose, which currently
-  states "30" repetitions and "drawn uniformly at random" over ~400 regions)
-  - those are follow-up updates, not made here; only `simulation.py` itself
-  is changed in this pass.
-- These variance components come from a single pilot subject/single pilot
-  run (`sub-simf10`, not this project's own `sub-10`) - the pilot notebook
-  itself flags this as a caveat if the sizing is meant to generalize further.
+⚠ **Design revised on 2026-11-06, from 100 regions x 8 runs (800 runs,
+`base_seed = 42`) to 396 regions x 4 runs (1,584 runs, `base_seed = 2028`).**
+The simulation-based power analysis (`notebooks/power_analysis.ipynb`; pilot =
+the 50 tuning regions x 4 runs, `simulate_tuning_spikes.py --seed 2027`,
+solved and scored with this file's solvers and metrics by
+`notebooks/solve_pilot.py`) showed 100 x 8 had only 0.33 (vs. CSET) and 0.41
+(vs. dSPM) power for localization non-inferiority. Between-region variance
+dominates, so regions buy more power than runs: the design takes every region
+not used for tuning (396) and the fewest runs per region that reach 0.90 power
+on every required test. The design was fixed before generating any new data.
+The previous 100 x 8 dataset is kept in
+`derivatives/simulations/sub-10_flagship-100x8` and its metrics in
+`results/simf_backup_2026-11-06_100x8`. New seed (2028) so no run repeats the
+old flagship (42), the tuning set (2026) or the pilot (2027).
 
 ⚠ **Unit note (fixed 2026-08-03):** the inline comments below used to mark
 `width`/`onset`/`repeat` on `SpikeSignal` as **[ms]**, but
@@ -1094,10 +1026,11 @@ changed, not its units.
 
 **Parameter choices - dataset generation:**
 
-- Regions: the shared 100-region probe set (`results/simf/intermediate/probe-set.csv`),
-  not all ~473 parcellation regions - see the power-analysis rationale above.
-- `repetitions = 8`: repeats simulated per source region - see the
-  power-analysis rationale above (revised down from an earlier `30`).
+- Regions: the 396-region probe set (`results/simf/intermediate/probe-set.csv`),
+  every cortical region except the 50 tuning regions - see the
+  power-analysis rationale above.
+- `repetitions = 4`: runs per source region - see the power-analysis
+  rationale above (revised from 8 on 2026-11-06).
 - `snr_target = 5.0`: target single-trial peak-amplitude SNR. Revised down
   from `10` (previously uncited). @gonsisko_electroencephalographic_2024
   reports individual (single-trial) interictal spikes at ~3-5 dB SNR
@@ -1109,8 +1042,8 @@ changed, not its units.
   still much closer to the single-trial literature range than the old,
   averaged-response-scale default of 10, while remaining comfortably above
   the noise floor - literature-**informed**, not literature-**derived**.
-- `base_seed = 42`: fixed seed for reproducibility - standard practice, not a
-  modeling choice.
+- `base_seed = 2028`: fixed seed for reproducibility, new for the 396 x 4
+  design (42 was the 100 x 8 flagship's) - not a modeling choice.
 - `n_jobs = -1`: `generate_simulation_dataset` now parallelizes execution
   internally via `joblib.Parallel` (same addition already used in
   `noise_sweep_simulation.py`'s call). Every run's `run_seed` and output
@@ -1195,11 +1128,11 @@ def run_simulation(overwrite=False):
     spike_window = (-0.03, 0.03),
   )
 
-  # 8 repetitions per region, over the shared 100-region probe set (spatially
-  # uniform sample, see probe_set_selection.py) rather than all ~473
-  # parcellation regions - see the power-analysis rationale in the prose above
+  # 4 repetitions per region over the 396-region probe set (every cortical
+  # region except the tuning regions) - see the power-analysis rationale above
   probe_set = pd.read_csv("../results/simf/intermediate/probe-set.csv")
   brain_regions = probe_set["region"].tolist()
+  assert len(brain_regions) == 396, len(brain_regions)
   sources = [mm.analysis.simulation.Source([br], spike) for br in brain_regions]
 
   mm.analysis.simulation.generate_simulation_dataset(
@@ -1208,11 +1141,11 @@ def run_simulation(overwrite=False):
     simulator = sim,
     sources = sources,
     prop_config = prop_config,
-    repetitions = 8,
+    repetitions = 4,
     snr_targets = [5.0],
     snr_config = snr_config,
     noise_config = noise_config,
-    base_seed = 42,
+    base_seed = 2028,
     entities = {"task":"spk"},
     n_jobs = 20,
   )
@@ -1222,29 +1155,51 @@ run_simulation(overwrite=True)
 
 ## Noise/SNR Sweep Dataset (Experiment 1)
 
-Generates a new simulation dataset spanning 9 SNR levels for a dedicated
-50-region probe set, so noise robustness can be evaluated the same way the
-connectome experiments (degradation, surrogates) evaluate connectome
-robustness. Unlike those, the connectome/forward model stay fixed here
-(connectome identity is their axis, not this one) - only `snr_target`
-varies, so this cell produces genuinely new `ave`/`cov`/`gold` files (not
-just a new reconstruction pass on existing ones). Reconstruction and metric
-computation are separate follow-up steps, not part of this cell - see
-"Experiment 1: Noise/SNR Sweep Reconstruction & Validation" further below.
+Generates a new simulation dataset spanning 9 SNR levels over the 396-region
+probe set (`results/simf/intermediate/probe-set.csv`, see
+`probe_set_selection.py`), one run per region and level - 3,564 runs - so
+noise robustness can be evaluated the same way the connectome experiments
+(degradation, surrogates) evaluate connectome robustness. Unlike those, the
+connectome/forward model stay fixed here (connectome identity is their axis,
+not this one) - only `snr_target` varies, so this cell produces genuinely new
+`ave`/`cov`/`gold` files (not just a new reconstruction pass on existing
+ones). Reconstruction and metric computation are separate follow-up steps,
+not part of this cell - see "Experiment 1: Noise/SNR Sweep Reconstruction &
+Validation" further below.
 
-⚠ **Region set changed from the shared 100-region probe set to a dedicated
-50-region one, specifically for this experiment.** The original design
-reused the shared probe set (`results/simf/intermediate/probe-set.csv`) so the noise
-sweep stayed region-for-region comparable with the degradation/surrogate
-experiments. A completed power-analysis pilot
-(`tutorials/analysis/simulations/pilot_noise_cluster_permutation_power.ipynb`)
-found that, for this experiment specifically, region count matters far more
-than repetition count - 50 regions x 3 reps beats 20 regions x 8 reps at
-equal total budget - and that region-for-region comparability with the other
-Study-1 experiments isn't needed for the noise-robustness question this
-experiment answers on its own. We therefore trade that comparability for a
-smaller, power-optimal, noise-sweep-specific region set (see "Noise-Sweep
-Probe Set" below) rather than continuing to reuse the shared one.
+⚠ **Design revised on 2026-11-07, from 50 regions x 9 SNR x 3 runs (1,350
+runs, subject `10-noisesweep-v2`, `base_seed = 42`) to 396 regions x 9 SNR x
+1 run (3,564 runs, subject `10-noisesweep-v3`, `base_seed = 2029`).** The
+sweep now uses the same 396 regions as the flagship instead of its own
+50-region farthest-point sample (`probe-set_noisesweep.csv`, retired). The
+earlier noise-sweep pilot had already found that region count drives power
+far more than repetitions; the new design takes that to its limit (every
+region not used for tuning, one run each). It is a secondary robustness
+analysis, so there is no separate power analysis: the runs per region are set
+by budget. The previous dataset stays on disk as `sub-10-noisesweep-v2`, its
+metrics in `results/simf_backup_2026-11-06_100x8/noise_sweep`.
+
+⚠ **Design revised on 2026-11-09, from 396 regions x 9 SNR x 1 run (3,564
+runs, `10-noisesweep-v3`, `base_seed = 2029`) to 396 regions x 9 SNR x 4
+runs (14,256 runs, subject `10-noisesweep-v4`, `base_seed = 2030`).** Reason:
+comparability with the flagship, whose regions are summarized by the mean of
+4 runs. Localization errors are bimodal (wCSET hits the initial patch more
+often than CSET/dSPM but also misses by > 30 mm more often), so a single-run
+region value and a 4-run region mean give different paired differences on
+the same runs. At SNR 5, the Hodges-Lehmann difference (positive = wCSET
+better) vs. CSET is -0.4 mm in the 1-run sweep and -0.1 to +0.2 mm for any
+single flagship run, but -4.0 mm for the flagship's 4-run means; vs. dSPM,
+-1.0, -0.3 to -2.8 and -7.7 mm. Run-level data agree (SNR-5 wCSET median per
+run: 6.5 mm sweep vs. 6.2 mm flagship). The change is made for that
+comparability, not because of the sweep's results. The v3 dataset stays on
+disk as `sub-10-noisesweep-v3`, its metrics in
+`results/simf_backup_2026-11-09_noise396x1/noise_sweep`.
+
+**Cost** (scaled from the v3 run, `results/simf/noise_sweep_rerun.log`, at
+`n_jobs = 25`): simulation 1 h 41 min -> ~6.7 h, reconstruction 51 min ->
+~3.4 h, scoring 10 min -> ~0.7 h, so ~11 h in total. Disk: ~200 GB (v3 takes
+49 GB). The reconstruction cell is resumable, so the run can be split across
+sessions.
 
 ⚠ This is a corrected rewrite of an earlier draft of this cell that was never
 run. The earlier draft (a) called `generate_simulation_dataset` with a
@@ -1255,68 +1210,14 @@ would have silently overwritten the flagship dataset's `simulation_index.tsv`
 on first run, since `generate_simulation_dataset` writes that file to
 `sub-{subject}/` keyed only by `subject`, not by `task`. Both are fixed below.
 
-### Noise-Sweep Probe Set
+### Noise-Sweep Probe Set (retired 2026-11-07)
 
-Unlike every other robustness experiment in this file, the noise sweep uses
-its own dedicated region set rather than the shared one from
-`probe_set_selection.py` above (see prose above for why). Built the same way
-- greedy farthest-point sampling via
-`mm.anatomy.parcellation.select_uniform_regions` - just at `n_regions = 50`
-instead of 100, which (per the same reshuffling behavior already documented
-in `probe_set_selection.py`) produces an entirely different region identity
-set, not a subset of the shared 100.
-
-```{python filename="noise_sweep_probe_set.py"}
-from pathlib import Path
-
-import pandas as pd
-
-import mindmap as mm
-import sys
-sys.path.insert(0, "..")
-from scripts.data_manager import SimfManager
-from scripts.utils import check_files
-
-# data manager
-dm = SimfManager("simf.config.yml")
-sub = "10"
-
-n_regions = 50
-base_seed = 42
-
-def run_noise_sweep_probe_set_selection(overwrite=False):
-  # output file
-  fprobe = Path("../results/simf/intermediate/probe-set_noisesweep.csv")
-
-  if check_files([fprobe]) and not overwrite:
-    print("Already exists, skipping.")
-    return
-
-  # 0. Load shared inputs (same pattern as probe_set_selection.py)
-  src = dm.load(sub, "fwd", desc="sim")["src"]
-  parc = dm.load(sub, "dseg", space="fs", segmentation="multiconn2022", scale="4")
-  ras2tkras = dm.load(sub, "ras2tkras")
-
-  # 1. Spatially uniform region selection (greedy farthest-point sampling
-  # over cortical region centroids) - dedicated to this experiment, not the
-  # shared probe set (see prose above)
-  regions = mm.anatomy.parcellation.select_uniform_regions(
-    source_space = src,
-    parcellation = parc,
-    ras2tkras = ras2tkras,
-    n_regions = n_regions,
-    seed = base_seed,
-  )
-
-  probe_set = pd.DataFrame({"region": regions})
-
-  print(f"Noise-sweep probe set: {len(probe_set)} regions (spatially uniform, cortex-only)")
-
-  # 2. Save
-  probe_set.to_csv(fprobe, index=False)
-
-run_noise_sweep_probe_set_selection(overwrite=True)
-```
+The sweep used its own 50-region farthest-point sample
+(`select_uniform_regions`, `n_regions = 50`, `seed = 42`,
+`results/simf/intermediate/probe-set_noisesweep.csv`) until 2026-11-07. It now
+reads the shared 396-region `probe-set.csv`, so the cell that built the
+dedicated set was removed (a copy of its output is in
+`results/simf_backup_2026-11-06_100x8/intermediate/`).
 
 ⚠ **Underlying physical parameters updated 2026-08-03** (spike width,
 propagation conduction speeds, nodal delay, and the new `NoiseConfig`/
@@ -1328,32 +1229,24 @@ design choices independent of those physical parameters.
 
 **Parameter choices:**
 
-- Regions: a dedicated 50-region noise-sweep-specific probe set
-  (`results/simf/intermediate/probe-set_noisesweep.csv`, see "Noise-Sweep Probe Set"
-  above) - not the shared 100-region probe set used by the degradation/
-  surrogate experiments. Traded region-for-region comparability with those
-  experiments for power-optimal sizing specific to the noise sweep - see the
-  ⚠ note above.
+- Regions: the 396-region probe set (`results/simf/intermediate/probe-set.csv`),
+  shared with the flagship - see the ⚠ note above.
 - `snr_levels = [1, 1.5, 2, 3, 5, 7, 10, 14, 20]`: 9 levels, denser than the
   original 5-level log2 grid, still spanning roughly the same 1-20 range.
   Unchanged by the 2026-08-03 parameter update (see ⚠ note above) - the
   flagship dataset's single `snr_target` moved from 10 to 5 (see
   `simulation.py`'s bullets), but this sweep's own point of the exercise is
   to cover a range of SNR levels, not to track that single-point default.
-- `n_reps = 3` (down from the original 20): per the power-analysis pilot
-  referenced above, region count - not repetition count - is what drives
-  power for this experiment's outcomes, so the budget was reallocated from
-  reps toward regions rather than kept high on both axes.
-- Total volume: 50 regions x 9 levels x 3 reps = 1,350 runs (down from the
-  original single-grid 10,000).
-- `subject = f"{sub}-noisesweep-v2"` (i.e. `"10-noisesweep-v2"`), distinct
-  from both the flagship dataset's `sub="10"` and the original noise sweep's
-  `"10-noisesweep"` id, so this smaller, differently-sized replacement can't
-  silently collide with anything computed under the old id. No original
-  `"10-noisesweep"` dataset actually exists on disk to preserve.
-  `noise_sweep_reconstruction.py`/`noise_sweep_comparison.py` have been
-  updated to point at this `"-v2"` subject/index (they previously pointed at
-  the old, nonexistent `"10-noisesweep"` id and would have failed).
+- `n_reps = 4` (up from 1, earlier 3 and 20): the flagship's 4 runs per
+  region, so each region is summarized by the same 4-run mean as in the main
+  analysis - see the 2026-11-09 ⚠ note above.
+- Total volume: 396 regions x 9 levels x 4 runs = 14,256 runs.
+- `subject = f"{sub}-noisesweep-v4"`: a new subject id, so the 396 x 9 x 4
+  dataset can't mix with the previous ones (`10-noisesweep-v3`, 396 x 9 x 1,
+  and `10-noisesweep-v2`, 50 x 9 x 3, both kept as backups) - `generate_simulation_dataset` neither clears an
+  existing subject folder nor regenerates its `simulator/`. Distinct from
+  the flagship's `sub="10"`, whose `simulation_index.tsv` it would
+  otherwise overwrite.
 - One `generate_simulation_dataset` call for the whole sweep: `snr_targets`
   already accepts a list (current installed
   `mindmap.analysis.simulation.pipeline.generate_simulation_dataset`
@@ -1368,14 +1261,16 @@ design choices independent of those physical parameters.
   underlying noise realization reused across levels with only the signal
   scaled. The original plan for this experiment (see TODO §3) wanted that
   literal pairing for a repeated-measures comparison; that would require
-  nine separate calls, each re-seeding `base_seed=42` and each writing to its
+  nine separate calls, each re-seeding `base_seed` and each writing to its
   own `subject` (e.g. `f"{sub}-noisesweep-snr{tag}"`), plus a concat step -
   deliberately not done here in favor of the simpler, upstream-idiomatic
   one-call sweep. Downstream analysis should treat the 9 levels as
   independent samples, not matched pairs.
-- `base_seed = 42`: project convention, reused as the single seed for this
-  call (see pairing note above - it no longer produces paired draws the way
-  it did in the superseded multi-call plan).
+- `base_seed = 2030`: new for the 396 x 9 x 4 design, so no run repeats an
+  earlier dataset's draws (42 = 50 x 9 x 3 sweep and 100 x 8 flagship, 2026 =
+  tuning, 2027 = power pilot, 2028 = 396 x 4 flagship, 2029 = 396 x 9 x 1
+  sweep). Every SNR level is regenerated, SNR 5 included: the flagship's
+  SNR-5 runs belong to another subject, seed and index, and are not reused.
 - `n_jobs = -1`: `generate_simulation_dataset` now parallelizes execution
   internally via `joblib.Parallel` (previously a plain sequential loop, see
   TODO §3). Every run's `run_seed` and output paths are still precomputed up
@@ -1410,25 +1305,26 @@ dm = SimfManager("simf.config.yml")
 sub = "10"
 
 snr_levels = [1, 1.5, 2, 3, 5, 7, 10, 14, 20]
-n_reps = 3
-noisesweep_subject = f"{sub}-noisesweep-v2"
-base_seed = 42
-n_jobs = 25   # compute resource setting, not a modeling choice - see prose above
+n_reps = 4
+noisesweep_subject = f"{sub}-noisesweep-v4"
+base_seed = 2030
+n_jobs = 16   # compute resource setting, not a modeling choice - see prose above (2026-11-09: 25 -> 16 after a low-memory kill)
 
 def run_noise_sweep_simulation(overwrite=False):
   # output: convenience copy of the sweep's simulation_index.tsv under
   # results/, so downstream cells don't need to know the noisesweep subject id.
-  findex = Path("../results/simf/intermediate/noise-sweep_index_v2.tsv")
+  findex = Path("../results/simf/intermediate/noise-sweep_index_v4.tsv")
   fsim_index = dm.roots["sim"]/f"sub-{noisesweep_subject}"/"simulation_index.tsv"
 
   if check_files([findex]) and not overwrite:
     print("Already exists, skipping.")
     return
 
-  # 0. Probe-set regions - dedicated to this experiment, not the shared one
-  # (see "Noise-Sweep Probe Set" above)
-  probe_set = pd.read_csv("../results/simf/intermediate/probe-set_noisesweep.csv")
+  # 0. Probe-set regions - the 396-region set shared with the flagship
+  # (see probe_set_selection.py)
+  probe_set = pd.read_csv("../results/simf/intermediate/probe-set.csv")
   probe_regions = probe_set["region"].tolist()
+  assert len(probe_regions) == 396, len(probe_regions)
 
   # 1. Load shared simulation inputs - same original connectome/forward as
   # the flagship dataset (simulation.py): only noise varies across levels
@@ -1504,6 +1400,9 @@ def run_noise_sweep_simulation(overwrite=False):
   )
 
   # 3. Convenience copy under results/ (see output note above)
+  n_expected = len(probe_regions) * len(snr_levels) * n_reps
+  n_index = len(pd.read_csv(fsim_index, sep="\t"))
+  assert n_index == n_expected, f"{n_index} runs in the index, expected {n_expected}"
   shutil.copy(fsim_index, findex)
 
 run_noise_sweep_simulation(overwrite=True)
@@ -1736,7 +1635,7 @@ def run_solve_inverse(overwrite=False):
     tasks, preprocess_crop, make_reconstruct(fwd, eig), postprocess_save, n_jobs=n_jobs, n_threads_per_job=1,
   )
 
-run_solve_inverse(overwrite=True)  # must force-regen: old STCs used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; wcset's harm was mistakenly set to 0.5, now fixed to the intended harm=5 (depth=0.2 unaffected, unchanged from the prior run); wMNE (formerly desc="mne") now solved with its own depth=0.8 operator under desc="wmne"
+run_solve_inverse(overwrite=False)  # 2026-11-06: fresh 396 x 4 dataset, every run is new
 ```
 
 ## Validation Metrics (Flagship)
@@ -2226,7 +2125,7 @@ oversight:
   `ave`/`gold`'s own clock (`phase_data` is built with `tmin=0`) -
   `noise_sweep_comparison.py` re-derives `qrp_idx`/`pp_idx` itself rather
   than reading them off `stc.times`.
-- STCs are saved under `noisesweep_subject` ("10-noisesweep-v2"), not `sub`
+- STCs are saved under `noisesweep_subject` ("10-noisesweep-v4"), not `sub`
   ("10") - reusing `sub` would silently collide with the flagship's own
   `desc=method` STC files at the same path, since `solve_inverse.py` already
   writes there.
@@ -2279,7 +2178,7 @@ from scripts.utils import check_files
 # data manager
 dm = SimfManager("simf.config.yml")
 sub = "10"
-noisesweep_subject = f"{sub}-noisesweep-v2"   # distinct bids subject - see noise_sweep_simulation.py
+noisesweep_subject = f"{sub}-noisesweep-v4"   # distinct bids subject - see noise_sweep_simulation.py
 
 methods = ["wcset", "cset", "sloreta", "dspm", "wmne"]
 n_jobs = 25   # compute resource setting, not a modeling choice - see prose above
@@ -2360,7 +2259,7 @@ def postprocess_save(ctx):
 
 def run_noise_sweep_reconstruction(overwrite=False):
   # always the full sweep - QUICK_TEST lives in noise_sweep_comparison.py now
-  findex = Path("../results/simf/intermediate/noise-sweep_index_v2.tsv")
+  findex = Path("../results/simf/intermediate/noise-sweep_index_v4.tsv")
   df_sweep = pd.read_csv(findex, sep="\t")
 
   simulator_dir = dm.roots["sim"]/f"sub-{noisesweep_subject}"/"simulator"
@@ -2378,7 +2277,7 @@ def run_noise_sweep_reconstruction(overwrite=False):
   for _, row in df_sweep.iterrows():
     run = int(row["run"])
     foutputs = {m: dm.get_path(noisesweep_subject, "stc", task="spk", run=run, desc=m) for m in methods}
-    needed = {m: p for m, p in foutputs.items() if overwrite or not check_files([p])}
+    needed = {m: p for m, p in foutputs.items() if overwrite or not check_files([p], silent=True)}
     if not needed:
       continue
     tasks.append(InverseSimTask(
@@ -2405,7 +2304,7 @@ def run_noise_sweep_reconstruction(overwrite=False):
     tasks, preprocess_qrp_pp, make_reconstruct(fwd, eig), postprocess_save, n_jobs=n_jobs, n_threads_per_job=1,
   )
 
-run_noise_sweep_reconstruction(overwrite=True)  # must force-regen: switched from half- to quarter-rising-phase (ratio=0.25, "qrp" - was "hrp"/ratio=0.5); old STCs used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; wcset's harm was mistakenly set to 0.5, now fixed to the intended harm=5 (depth=0.2 unaffected, unchanged from the prior run); wMNE (formerly desc="mne") now solved with its own depth=0.8 operator under desc="wmne"
+run_noise_sweep_reconstruction(overwrite=False)  # 2026-11-09: fresh 396 x 9 x 4 dataset (10-noisesweep-v4), every run is new; resumable
 ```
 
 Computes the same 3 scalar metrics as before (`correlation` at
@@ -2426,13 +2325,13 @@ computed once, outside the pipeline, same as before (run-independent).
 - `QUICK_TEST`: now lives here rather than in the reconstruction cell - it
   only selects which subset of *already-solved* runs to score, from the same
   full index. When `True`, subsamples `n_quick_per_level` runs per SNR level
-  instead of scoring all 1,350 runs x 6 methods. `suffix` keeps the
+  instead of scoring all 3,564 runs x 5 methods. `suffix` keeps the
   quick-test output (`results/simf/noise_sweep_test`) from
   colliding with the real, full-sweep one. `QUICK_TEST = False` here: this
   is the full scoring pass.
 - `n_quick_per_level = 30`: sample size per SNR level under `QUICK_TEST` -
   large enough to sanity-check the pipeline runs correctly end-to-end,
-  small enough to finish fast (150 runs total vs. 1,350).
+  small enough to finish fast (270 runs total vs. 3,564).
 - Only runs whose STCs are already fully written for every method are
   included (same partial-availability check as `comparison.py`) - lets this
   cell be (re)run against a partial `noise_sweep_reconstruction.py` pass
@@ -2448,6 +2347,7 @@ computed once, outside the pipeline, same as before (run-independent).
 # | output: false
 
 import ast
+import shutil
 from pathlib import Path
 
 import mne
@@ -2466,7 +2366,7 @@ from scripts.utils import check_files
 # data manager
 dm = SimfManager("simf.config.yml")
 sub = "10"
-noisesweep_subject = f"{sub}-noisesweep-v2"
+noisesweep_subject = f"{sub}-noisesweep-v4"
 
 methods = ["wcset", "cset", "sloreta", "dspm", "wmne"]
 
@@ -2530,6 +2430,12 @@ def run_noise_sweep_comparison(overwrite=QUICK_TEST):
     print("Already exists, skipping.")
     return
 
+  # Back up the previous 396 x 9 x 1 suite (and its cached stats) once, before
+  # it is overwritten below - see the 2026-11-09 design note
+  fbackup = Path("../results/simf_backup_2026-11-09_noise396x1/noise_sweep")
+  if not QUICK_TEST and fmetrics.exists() and not fbackup.exists():
+    shutil.copytree(fmetrics, fbackup)
+
   # 0. Subject-level data (run-independent) - inversion-time forward, used
   # only for dipole_positions here (no solving happens in this cell anymore)
   fwd = dm.load(sub, "fwd", desc="inv")
@@ -2542,7 +2448,7 @@ def run_noise_sweep_comparison(overwrite=QUICK_TEST):
   # convenience copy rather than the raw per-subject simulation_index.tsv) -
   # always the full sweep's index; QUICK_TEST subsamples it below rather
   # than pointing at a separate dataset
-  findex = Path("../results/simf/intermediate/noise-sweep_index_v2.tsv")
+  findex = Path("../results/simf/intermediate/noise-sweep_index_v4.tsv")
   df_sweep = pd.read_csv(findex, sep="\t")
 
   if QUICK_TEST:
@@ -2562,6 +2468,9 @@ def run_noise_sweep_comparison(overwrite=QUICK_TEST):
   # no pairing key at all.
   df_sweep["region"] = df_sweep["source_index_list"].apply(lambda s: ast.literal_eval(s)[0])
   run2region = dict(zip(df_sweep["run"], df_sweep["region"]))
+  # repetition within (region, snr), registered as `rep` so the suite records
+  # it; downstream stats average a region's runs (pairing_col="region")
+  run2rep = dict(zip(df_sweep["run"], df_sweep["repetition"]))
 
   # only runs whose STCs are already fully written for every method - lets
   # this cell be (re)run against a partial noise_sweep_reconstruction.py
@@ -2611,16 +2520,17 @@ def run_noise_sweep_comparison(overwrite=QUICK_TEST):
   for task, run_rows in zip(tasks, results):
     snr = run2snr[task.run]
     region = run2region[task.run]
+    rep = int(run2rep[task.run])
     for row in run_rows:
       method = row["method"]
-      metrics.register("correlation", row["correlation_qrp"], Method=method, snr=snr, region=region, phase="qrp")
-      metrics.register("correlation", row["correlation_pp"], Method=method, snr=snr, region=region, phase="pp")
-      metrics.register("localization_error", row["localization_error"], Method=method, snr=snr, region=region, phase="qrp")
+      metrics.register("correlation", row["correlation_qrp"], Method=method, snr=snr, region=region, rep=rep, phase="qrp")
+      metrics.register("correlation", row["correlation_pp"], Method=method, snr=snr, region=region, rep=rep, phase="pp")
+      metrics.register("localization_error", row["localization_error"], Method=method, snr=snr, region=region, rep=rep, phase="qrp")
 
   metrics.metadata["units"] = {"correlation": "r", "localization_error": "mm"}
   metrics.save(fmetrics, overwrite=overwrite)
 
-run_noise_sweep_comparison(overwrite=True)  # must force-regen: switched from half- to quarter-rising-phase (ratio=0.25, "qrp" - was "hrp"/ratio=0.5); now registers a `region` coordinate per entry (was previously absent) and collapses correlation_qrp/correlation_pp/localization_error_qrp into correlation/localization_error + a `phase` coord, so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region and filter by phase
+run_noise_sweep_comparison(overwrite=True)  # rewrites results/simf/noise_sweep (previous 396 x 9 x 1 suite backed up in results/simf_backup_2026-11-09_noise396x1, 50 x 9 x 3 in results/simf_backup_2026-11-06_100x8)
 ```
 
 ## Experiment 2: Connectome Degradation (Rewiring)
@@ -2721,10 +2631,22 @@ against this machine's free space, and it protects the actually slow step
   experiment. `localization_error` costs nothing extra beyond
   `correlation` since `InverseSimTask` already loads `simulator`/`src`
   for free.
-- Probe-set runs selected exactly like `surrogate_reconstruction.py`
-  (100 regions x `n_reps_per_region=8` reps - the flagship dataset's full
-  repetition count, not a subset - from the flagship's own
-  `simulation_index.tsv`; no new subject, no new simulation).
+- Probe-set runs: the 396 probe-set regions x all
+  `n_reps_per_region = 4` of the flagship's runs each (1,584 runs, 17,424
+  run-levels), from the flagship's own `simulation_index.tsv`; no new
+  simulation. ⚠ **Revised 2026-11-09 from the first 2 runs per region**
+  (792 runs, set by budget): each region is now summarized by the same
+  4-run mean as in the flagship and the surrogate experiment. Localization
+  errors are bimodal, so 2-run and 4-run region means give different paired
+  differences on the same runs (see the noise sweep's 2026-11-09 note). The
+  change is made for that comparability, not because of the degradation
+  results. Earlier suites: 396 x 2 in
+  `results/simf_backup_2026-11-09_degradation396x2/degradation`, 100 regions
+  x 8 runs in `results/simf_backup_2026-11-06_100x8/degradation`.
+- **Cost**: the 396 x 2 run took 113 min (`results/simf/degradation_rerun.log`,
+  ~9.4 min per level at `n_jobs_solve = 25`, connectome cache already
+  built), so ~3.8 h with 4 runs. No extra disk: solutions are not saved and
+  the Stage 1 cache is reused.
 - **Output**: one `MetricSuite`
   (`results/simf/degradation`), matching
   `surrogate_comparison.py`'s per-condition file convention (`coord=
@@ -2734,6 +2656,7 @@ against this machine's free space, and it protects the actually slow step
 # | output: false
 
 import ast
+import shutil
 from pathlib import Path
 
 import mne
@@ -2756,7 +2679,7 @@ sub = "10"
 operator = "permutation"   # deletion/addition dropped - see prose above
 
 percentages = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
-n_reps_per_region = 8   # full flagship repetition count, not a subset
+n_reps_per_region = 4   # all 4 flagship runs per region, as the flagship and surrogates - see prose above
 n_jobs_cache = 4
 
 n_jobs_solve = 25   # Stage 2: reconstruct+score, parallelized across probe-set runs
@@ -2805,6 +2728,12 @@ def run_degradation_reconstruction(overwrite=False):
   if check_files([fmetrics/"meta.json"]) and not overwrite:
     print("Already exists, skipping.")
     return
+
+  # Back up the previous 396 x 2 suite (and its cached stats) once, before it
+  # is overwritten at the end - see the 2026-11-09 note in the prose above
+  fbackup = Path("../results/simf_backup_2026-11-09_degradation396x2/degradation")
+  if fmetrics.exists() and not fbackup.exists():
+    shutil.copytree(fmetrics, fbackup)
 
   # 0. Subject-level data (run-independent)
   fwd = dm.load(sub, "fwd", desc="inv")
@@ -2867,7 +2796,8 @@ def run_degradation_reconstruction(overwrite=False):
   ]
   print(f"{len(cache_tasks)} connectomes to cache: {[t.label for t in cache_tasks]}")
 
-  cache_paths = cache_cst_batch(cache_tasks, corrupt, cache_dir, n_jobs=n_jobs_cache, n_threads_per_job=2, overwrite=overwrite)
+  # overwrite=False: the cache depends only on the connectome, the calibration and seed=0, not on the runs
+  cache_paths = cache_cst_batch(cache_tasks, corrupt, cache_dir, n_jobs=n_jobs_cache, n_threads_per_job=2, overwrite=False)
 
   # 3. Probe-set runs (same selection as surrogate_reconstruction.py)
   probe_set = pd.read_csv("../results/simf/intermediate/probe-set.csv")
@@ -2876,6 +2806,7 @@ def run_degradation_reconstruction(overwrite=False):
   probe_runs = index[
     index["region"].isin(probe_set["region"]) & (index["repetition"] <= n_reps_per_region)
   ]["run"].tolist()
+  assert len(probe_runs) == len(probe_set) * n_reps_per_region == 1584, len(probe_runs)
   # region lookup for registration below - lets stat.wilcoxon()/
   # stat.cluster_permutation() pair methods by region (the correct repeated-
   # measures unit here - reps of the same region are correlated draws, not
@@ -2983,8 +2914,8 @@ def run_degradation_reconstruction(overwrite=False):
 
     for row in [row for row in rows if row["method"] not in REFERENCE_METHODS] + reference_rows:
       region = run2region[row["run"]]
-      metrics.register("correlation", row["correlation_pp"], Method=row["method"], percentage=pct, region=region, phase="pp")
-      metrics.register("localization_error", row["localization_error_qrp"], Method=row["method"], percentage=pct, region=region, phase="qrp")
+      metrics.register("correlation", row["correlation_pp"], Method=row["method"], percentage=pct, region=region, run=row["run"], phase="pp")
+      metrics.register("localization_error", row["localization_error_qrp"], Method=row["method"], percentage=pct, region=region, run=row["run"], phase="qrp")
 
     print(f"{pct}% done ({len(inverse_tasks)} runs x 2 methods).")
 
@@ -2992,7 +2923,7 @@ def run_degradation_reconstruction(overwrite=False):
   metrics.save(fmetrics, overwrite=overwrite)
   check_against_flagship(metrics, {"percentage": 0})
 
-run_degradation_reconstruction(overwrite=True)  # must force-regen: correlation now scored at pp (localization stays at qrp), and sLORETA/dSPM now solved in the run at each run's own qrp/pp (were copied from the flagship at the median qrp time); wCSET now uses the SNR-adaptive lambda2 (was a fixed 0.1); switched from half- to quarter-rising-phase (ratio=0.25, "qrp" - was "hrp"/ratio=0.5); permutation-only now (deletion/addition dropped), correlation_pp/ap_qrp/ap_pp dropped, correlation_qrp/localization_error_qrp renamed to correlation/localization_error (+ phase="qrp" coord), and now registers a `region` coordinate per entry (was previously absent), so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region
+run_degradation_reconstruction(overwrite=True)  # 2026-11-09: all 4 runs per region of the 396 x 4 flagship (previous 396 x 2 suite in results/simf_backup_2026-11-09_degradation396x2)
 ```
 
 ## Experiment 3: Surrogate-Connectome Reconstruction & Validation
@@ -3055,9 +2986,12 @@ combined suite.
   above - `atlas-a2a`/`atlas-a2a-bin` dropped in favor of the single
   `beltrami` surrogate (no binary variant for it - see that cell's prose
   for why).
-- `n_reps_per_region = 8` (changed from 5 - now the full flagship
-  repetition count, not a subset - same change already made to
-  `degradation_reconstruction.py`).
+- `n_reps_per_region = 4`: all 4 flagship runs of each of the 396
+  probe-set regions (1,584 runs), since the surrogate claims are
+  non-inferiority claims that need the flagship's power (see
+  `notebooks/power_analysis.ipynb`); the true connectome then reproduces the
+  flagship run for run. The 100 regions x 8 runs version (2026-10-27) is in
+  `results/simf_backup_2026-11-06_100x8/surrogates`.
 - CSET's `depth = 0.2`, `lambda2 = 0.1` (per explicit instruction,
   superseding this file's earlier `depth=0.8`/`lambda2=1.0` - itself raised
   from `0.1`, see `solve_inverse.py`'s prose above for the
@@ -3133,7 +3067,7 @@ dm = SimfManager("simf.config.yml")
 sub = "10"
 
 surrogates = ["beltrami", "fused", "fused-bin", "geom-atlas", "geom-atlas-bin"]
-n_reps_per_region = 8   # full flagship repetition count, not a subset
+n_reps_per_region = 4   # all 4 flagship runs per region (396 x 4 = 1,584 runs)
 
 n_jobs_solve = 25   # reconstruct+score, parallelized across probe-set runs
 
@@ -3203,6 +3137,7 @@ def run_surrogate_reconstruction(overwrite=False):
   probe_runs = index[
     index["region"].isin(probe_set["region"]) & (index["repetition"] <= n_reps_per_region)
   ]["run"].tolist()
+  assert len(probe_runs) == len(probe_set) * n_reps_per_region == 1584, len(probe_runs)
   # region lookup for registration below - same rationale as
   # degradation_reconstruction.py.
   run2region = dict(zip(index["run"], index["region"]))
@@ -3323,7 +3258,7 @@ def run_surrogate_reconstruction(overwrite=False):
       check_against_flagship(metrics, {})
     print(f"[{surrogate}] done ({len(inverse_tasks)} runs x 2 methods).")
 
-run_surrogate_reconstruction(overwrite=True)  # must force-regen: the true connectome ("original") and sLORETA/dSPM are now solved in the run at each run's own qrp/pp (were copied from the flagship at the median qrp/pp times); wCSET now uses the SNR-adaptive lambda2 (was a fixed 0.1); beltrami's wCSET switched from depth=0.2/harm=30/"lowpass" to the GBF paper's depth=0/"logpass"/cutoff=150 mechanism (every other surrogate's depth=0.2/harm=5/"lowpass" is unaffected); switched from half- to quarter-rising-phase (ratio=0.25, "qrp" - was "hrp"/ratio=0.5); old metrics used cset depth=0.8/lambda2=1.0, now depth=0.2/lambda2=0.1; ap_qrp/ap_pp dropped; correlation_qrp/correlation_pp/localization_error_qrp renamed to correlation/localization_error (+ phase= coord); now registers `Surrogate=`/`region=` coordinates per entry (were previously absent/implicit in the filename), so index.qmd's stat.wilcoxon()/stat.cluster_permutation() can pair methods by region and select surrogates by filter instead of by file
+run_surrogate_reconstruction(overwrite=True)  # 2026-11-08: rerun on the 396 x 4 flagship (all runs per region)
 ```
 
 # Suite Assembly

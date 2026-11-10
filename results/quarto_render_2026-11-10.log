@@ -1,0 +1,82 @@
+[1m[34mRendering qmd embeds [index.qmd][39m[22m
+[1m[34mRendering output notebook [index.qmd][39m[22m
+[1m[34mRendering HTML preview [index.qmd][39m[22m
+[1mpandoc [22m
+  to: html
+  output-file: /home/nino/Manuscripts/wCSET/index.html
+  standalone: true
+  section-divs: true
+  html-math-method: mathjax
+  wrap: none
+  default-image-extension: png
+  number-sections: true
+  toc: true
+  variables: {}
+  
+[1mmetadata[22m
+  document-css: false
+  link-citations: true
+  date-format: long
+  lang: en
+  manuscript:
+    article: index.qmd
+    manuscript-url: https://github.com/NinoHerve/wCSET
+    notebooks:
+      - notebook: index.qmd
+        title: Article Notebook
+    mecaFile: index-meca.zip
+  notebook-preview-options:
+    back: true
+  theme: cosmo
+  title-block-style: manuscript
+  lightbox: auto
+  comments:
+    hypothesis: true
+  title: 'Beyond Localization: Reconstructing Co-Activation Patterns with Connectome-Informed EEG Imaging'
+  author:
+    - name: Nino Herve
+      affiliation: Université de Lausanne (UNIL)
+      email: herve.nino@gmail.com
+      orcid: https://orcid.org/0009-0005-8917-9776
+      roles: software, conceptualization, methodology, formal-analysis, investigation
+    - name: Nicolas Roehri
+      affiliation: University Hospital and Faculty of Medicine of Geneva
+      email: nicolas.roehri@unige.ch
+      orcid: https://orcid.org/0000-0002-6948-1055
+      roles: methodology, investigation, data-curation
+    - name: Yasser Alemán-Goméz
+      affiliation: Centre Hospitalier Universitaire Vaudoise
+      email: Yasser.Aleman-Gomez@chuv.ch
+      orcid: https://orcid.org/0000-0001-6067-8639
+      roles: methodology
+    - name: Maria Dimou
+      affiliation: University Hospital and Faculty of Medicine of Geneva
+      email: maria.dimou@unige.ch
+    - name: Serge Vuillemoz
+      affiliation: University Hospital and Faculty of Medicine of Geneva
+      email: serge.vulliemoz@hug.ch
+      orcid: null
+      roles: resources
+    - name: Patric Hagmann
+      affiliation: Centre Hospitalier Universitaire Vaudoise
+      email: patric.hagmann@chuv.ch
+      orcid: null
+      roles: supervision
+  abstract: Most EEG source imaging methods assume brain activity arises from independent, focal sources and are validated mainly on their ability to localize a single generator, overlooking the brain's network structure and the co-activation of regions along it. We introduce weighted Connectome Spectrum Electromagnetic Tomography (wCSET), which replaces its predecessor CSET's L1 sparsity prior with a smooth, exponentially weighted L2 prior over the connectome-harmonic spectrum. We validate wCSET, CSET, three standard connectivity-agnostic methods, and a geometry-based alternative (GBF) across three complementary studies that probe source reconstruction beyond localization. The first simulates activity propagating across a structural connectome, providing an exact network-level ground truth. The second uses a clinical cohort of 26 seizure-free patients with epilepsy, with the resected volume as ground truth. The third uses simultaneous scalp and intracranial EEG recordings, a rare direct electrophysiological benchmark. In simulation, wCSET localized a source's onset comparably to the standard methods, though less precisely than dSPM, but substantially outperformed them at reconstructing the distributed co-activation patterns that follow as activity spreads, an advantage robust to moderate noise and to considerable connectome corruption. In the resection cohort, wCSET's localization did not differ significantly from any other method. Against intracranial recordings, wCSET's signed spatial correlation exceeded that of the standard methods and CSET in one of the two patients with cortical sources, and did not differ from them in the other. Connectome surrogates that require no diffusion MRI performed as well as the individual connectome, and a purely geometric alternative matched wCSET in patients but localized less accurately in simulation. Together, these results establish wCSET as a principled step beyond localization-only source imaging, and introduce a validation framework for evaluating such methods against a source's full co-activation pattern rather than its location alone.
+  keywords:
+    - Source Imaging
+    - Source Reconstruction
+    - Connectomics
+    - Brain Graph Signal Processing
+  bibliography:
+    - references.bib
+  csl: chicago-author-date-et-al.csl
+  google-scholar: true
+  toc-location: left
+  clear-hidden-classes: none
+  remove-hidden: all
+  unroll-markdown-cells: true
+  
+Output created: _manuscript/index.html
+
+exit 0
